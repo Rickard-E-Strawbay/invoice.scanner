@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            overflow: hidden;
+        }
+        .header {
+            background-color: #10b981;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .content h2 {
+            color: #333;
+            margin-top: 0;
+        }
+        .content p {
+            margin: 15px 0;
+            color: #555;
+        }
+        .success-badge {
+            text-align: center;
+            font-size: 48px;
+            margin: 20px 0;
+        }
+        .company-info {
+            background-color: #ecfdf5;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .company-info p {
+            margin: 8px 0;
+            color: #047857;
+        }
+        .features {
+            background-color: #f9fafb;
+            border-left: 4px solid #e5e7eb;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .feature-item {
+            margin: 12px 0;
+            padding-left: 20px;
+            position: relative;
+            font-size: 14px;
+            color: #555;
+        }
+        .feature-item:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #10b981;
+            font-weight: bold;
+        }
+        .cta-button {
+            display: inline-block;
+            background-color: #5b7cff;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            margin: 20px 0;
+            transition: background-color 0.3s;
+        }
+        .cta-button:hover {
+            background-color: #4a6be6;
+        }
+        .footer {
+            background-color: #f9f9f9;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+            border-top: 1px solid #eee;
+        }
+        .footer p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Your Account is Approved ✓</h1>
+        </div>
+        <div class="content">
+            <div class="success-badge">🎉</div>
+            
+            <h2>Hello {{ name }},</h2>
+            <p>Congratulations! Your account has been reviewed and approved by your company administrator. You now have full access to Strawbay Invoice Scanner.</p>
+            
+            <div class="company-info">
+                <p><strong>Company:</strong> {{ company_name }}</p>
+                <p><strong>Your Role:</strong> {{ role_name }}</p>
+            </div>
+
+            <h3 style="margin-top: 25px; color: #333;">You Can Now:</h3>
+            <div class="features">
+                <div class="feature-item">Log in to Strawbay Invoice Scanner</div>
+                <div class="feature-item">Scan and upload invoices</div>
+                <div class="feature-item">Organize and manage your documents</div>
+                <div class="feature-item">Access company features and reports</div>
+                <div class="feature-item">Collaborate with your team</div>
+            </div>
+
+            <p style="text-align: center;">
+                <a href="{{ app_url }}/login" class="cta-button">Log In Now</a>
+            </p>
+
+            <p>If you have any questions or need help getting started, don't hesitate to reach out to our support team or your company administrator.</p>
+
+            <p>Happy scanning!<br><strong>The Strawbay Team</strong></p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2025 Strawbay. All rights reserved.</p>
+            <p>This email was sent to {{ email }}</p>
+        </div>
+    </div>
+</body>
+</html>

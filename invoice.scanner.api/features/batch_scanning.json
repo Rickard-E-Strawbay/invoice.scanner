@@ -1,0 +1,8 @@
+{
+  "feature_key": "batch_scanning",
+  "feature_name": "Batch Scanning",
+  "feature_short_description": "Scan and process multiple invoices in batch mode for improved efficiency",
+  "feature_description": "## Batch Scanning\n\nBatch Scanning allows you to process multiple invoices simultaneously, significantly improving efficiency when handling large volumes of documents.\n\n### Capabilities\n- Multi-file upload and processing\n- Parallel document processing\n- Bulk data extraction\n- Batch status tracking\n- Progress notifications\n\n### Workflow\n1. Upload multiple documents (ZIP, folder, or individual files)\n2. System automatically processes all invoices in parallel\n3. Monitor processing progress in real-time\n4. Download results when complete\n\n### Benefits\n- Process 100+ invoices in minutes\n- Reduce manual handling time\n- Consistent data extraction\n- Ideal for month-end closes or vendor onboarding",
+  "feature_category": "Processing",
+  "included_in_plans": [50, 40, 30]
+}

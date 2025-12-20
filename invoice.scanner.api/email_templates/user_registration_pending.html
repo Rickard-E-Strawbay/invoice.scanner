@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, 'Helvetica Neue', Helvetica, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            overflow: hidden;
+        }
+        .header {
+            background-color: #8b5cf6;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .content h2 {
+            color: #333;
+            margin-top: 0;
+        }
+        .content p {
+            margin: 15px 0;
+            color: #555;
+        }
+        .company-info {
+            background-color: #f3f4f6;
+            border-left: 4px solid #8b5cf6;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .company-info p {
+            margin: 8px 0;
+        }
+        .admin-card {
+            background-color: #fef3c7;
+            border-left: 4px solid #8b5cf6;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .admin-card strong {
+            color: #7c2d12;
+            display: block;
+            margin-bottom: 8px;
+        }
+        .admin-info {
+            background-color: #ffffff;
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 8px;
+        }
+        .admin-info p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .timeline {
+            background-color: #f9fafb;
+            border-left: 4px solid #e5e7eb;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .timeline-item {
+            margin: 12px 0;
+            padding-left: 20px;
+            position: relative;
+            font-size: 14px;
+        }
+        .timeline-item:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #8b5cf6;
+            font-weight: bold;
+        }
+        .footer {
+            background-color: #f9f9f9;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+            border-top: 1px solid #eee;
+        }
+        .footer p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Account Registration Pending Review</h1>
+        </div>
+        <div class="content">
+            <h2>Hello {{ name }},</h2>
+            <p>Welcome to Strawbay Invoice Scanner! Your account registration request has been received and is now pending review by your company administrator.</p>
+            
+            <div class="company-info">
+                <p><strong>Company:</strong> {{ company_name }}</p>
+            </div>
+
+            <h3 style="margin-top: 25px; color: #333;">Your Account is Under Review</h3>
+            <p>Your company administrator will review your account request and approve or decline it. The following person will handle your approval:</p>
+
+            <div class="admin-card">
+                <strong>📋 Company Administrator</strong>
+                <div class="admin-info">
+                    <p><strong>Name:</strong> {{ admin_name }}</p>
+                    <p><strong>Email:</strong> {{ admin_email }}</p>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 25px; color: #333;">What Happens Next?</h3>
+            <div class="timeline">
+                <div class="timeline-item">Your account awaits company admin review</div>
+                <div class="timeline-item">Admin will verify your details and approve your access</div>
+                <div class="timeline-item">You'll receive an approval or status update email</div>
+                <div class="timeline-item">Once approved, you can log in and start using the system</div>
+            </div>
+
+            <p>This usually takes 24-48 hours. If you need to contact your company administrator, you can reach them at {{ admin_email }}.</p>
+
+            <p>Best regards,<br><strong>The Strawbay Team</strong></p>
+        </div>
+        <div class="footer">
+            <p>&copy; 2025 Strawbay. All rights reserved.</p>
+            <p>This email was sent to {{ email }}</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,364 @@
+.settings-header {
+  padding: 1rem 2rem;
+  background-color: #ffffff;
+  border-bottom: 1px solid #e8ecf1;
+}
+
+.settings-header h1 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: #1a1a1a;
+  font-weight: 700;
+}
+
+.settings-header p {
+  margin: 0.5rem 0 0 0;
+  color: #666;
+  font-size: 0.95rem;
+}
+
+/* Use content-header class like in Dashboard */
+
+.settings-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e8ecf1;
+  padding: 0 1.5rem;
+  background-color: #ffffff;
+}
+
+.settings-tab {
+  padding: 1rem 1.5rem;
+  border: none;
+  background: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  position: relative;
+  bottom: -2px;
+}
+
+.settings-tab:hover {
+  color: #1a1a1a;
+  background-color: #f5f7fa;
+}
+
+.settings-tab.active {
+  color: #7265cf;
+  border-bottom-color: #7265cf;
+}
+
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 1.5rem;
+  align-content: start;
+  padding: 1.5rem;
+}
+
+.settings-content > section:nth-child(1) {
+  grid-column: 1;
+  grid-row: 1 / 3;
+}
+
+.settings-content > section:nth-child(2) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.settings-content > section:nth-child(3) {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.settings-section {
+  background-color: #ffffff;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  border: 1px solid #e8ecf1;
+}
+
+.settings-section h2 {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.2rem;
+  color: #1a1a1a;
+  font-weight: 600;
+  border-bottom: 2px solid #7265cf;
+  padding-bottom: 0.75rem;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #1a1a1a;
+}
+
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="password"],
+.form-group select {
+  padding: 0.75rem 1rem;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+  font-family: inherit;
+}
+
+.form-group select {
+  background-color: #ffffff;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 20px;
+  padding-right: 2.5rem;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #7265cf;
+  box-shadow: 0 0 0 3px rgba(91, 124, 255, 0.1);
+}
+
+.form-group select:focus {
+  outline: none;
+  border-color: #7265cf;
+  box-shadow: 0 0 0 3px rgba(91, 124, 255, 0.1);
+}
+
+.form-group input:disabled {
+  background-color: #f5f7fa;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.form-group select:disabled {
+  background-color: #f5f7fa;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.form-group select option:disabled {
+  color: #999;
+}
+
+.password-input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-group input {
+  flex: 1;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 0;
+  color: #666;
+}
+
+.toggle-password:hover {
+  color: #1a1a1a;
+}
+
+.form-group.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.form-group.checkbox input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #7265cf;
+}
+
+.form-group.checkbox label {
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: fit-content;
+}
+
+.btn-primary {
+  background-color: #7265cf;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #4a68dd;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(91, 124, 255, 0.3);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.account-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background-color: #f5f7fa;
+  border-radius: 6px;
+  border-left: 4px solid #7265cf;
+}
+
+.info-label {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.info-value {
+  color: #666;
+}
+
+@media (max-width: 768px) {
+  .settings-content {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-header {
+    padding: 1.5rem;
+  }
+
+  .settings-content {
+    padding: 1rem;
+  }
+
+  .settings-section {
+    padding: 1.5rem;
+  }
+
+  .settings-header h1 {
+    font-size: 1.4rem;
+  }
+}
+/* Billing Information Styles */
+.billing-info-display {
+  background: #f5f7fa;
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.billing-info-display .info-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #e8ecf1;
+}
+
+.billing-info-display .info-item:last-child {
+  border-bottom: none;
+}
+
+.billing-info-display .info-label {
+  font-weight: 600;
+  color: #1a1a1a;
+  font-size: 0.95rem;
+}
+
+.billing-info-display .info-value {
+  color: #666;
+  font-size: 0.95rem;
+}
+
+/* Message Styles */
+.billing-message {
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.billing-message.error {
+  background: #fee;
+  color: #c33;
+  border-left: 4px solid #c33;
+}
+
+.billing-message.success {
+  background: #efe;
+  color: #3a3;
+  border-left: 4px solid #3a3;
+}
+
+.loading-message {
+  color: #666;
+  padding: 1rem;
+  font-size: 0.95rem;
+}
+
+.no-data-message {
+  color: #999;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.error-message {
+  color: #dc3545;
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+}
+
+.form-group input.error {
+  border-color: #dc3545;
+}
+
+.form-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.form-actions .btn {
+  background-color: #f0f0f0;
+  color: #333;
+}

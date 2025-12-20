@@ -1,0 +1,8 @@
+{
+  "feature_key": "auto_export",
+  "feature_name": "Automatic Export",
+  "feature_short_description": "Automatic export of processed invoices to accounting systems and databases",
+  "feature_description": "## Automatic Export\n\nAutomatic Export enables seamless integration with accounting and ERP systems by automatically pushing processed invoice data to external platforms without manual intervention.\n\n### Capabilities\n- One-click integration with major accounting platforms\n- Scheduled automatic exports\n- Real-time data synchronization\n- Format conversion (JSON, XML, CSV)\n- Error logging and retry mechanisms\n\n### Supported Systems\n- QuickBooks Online\n- Xero\n- NetSuite\n- Sage Intacct\n- Custom API endpoints\n\n### Benefits\n- Eliminates manual data entry\n- Reduces processing time\n- Ensures data consistency\n- Enables real-time reporting",
+  "feature_category": "Automation",
+  "included_in_plans": [50, 40]
+}

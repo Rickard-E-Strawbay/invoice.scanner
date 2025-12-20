@@ -1,0 +1,8 @@
+{
+  "feature_key": "api_access",
+  "feature_name": "API Access",
+  "feature_short_description": "Access to REST API for programmatic integration with external systems",
+  "feature_description": "## API Access\n\nAPI Access enables your organization to integrate Invoice Scanner directly with external applications and systems through our comprehensive REST API.\n\n### Capabilities\n- Programmatic invoice submission and retrieval\n- Automated workflow integration\n- Real-time data synchronization\n- Webhook support for event notifications\n- OAuth 2.0 authentication\n\n### Use Cases\n- Connect accounting software (QuickBooks, Xero, etc.)\n- Integrate with ERp systems\n- Build custom automation workflows\n- Enable third-party application integrations\n\n### Documentation\nFull API documentation is available at `/api/docs`",
+  "feature_category": "Integration",
+  "included_in_plans": [50, 40]
+}

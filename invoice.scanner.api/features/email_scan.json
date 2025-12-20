@@ -1,0 +1,8 @@
+{
+  "feature_key": "email_scan",
+  "feature_name": "Email Scanning",
+  "feature_short_description": "Scan and process invoices directly from email attachments",
+  "feature_description": "## Email Scanning\n\nEmail Scanning allows your organization to automatically receive, process, and extract invoice data from incoming emails.\n\n### Capabilities\n- Automatic email-to-invoice processing\n- Support for common attachment formats (PDF, JPEG, PNG)\n- Automatic sender whitelisting and filtering\n- Batch email processing\n- Integration with standard email protocols (IMAP)\n\n### Use Cases\n- Automate supplier invoice receipt workflows\n- Reduce manual data entry\n- Create centralized invoice archive from email\n- Implement vendor email forwarding workflows\n- Enable non-technical users to submit invoices\n\n### Features\n- Multiple email account support\n- Configurable forwarding rules\n- Automatic duplicate detection\n- Email notification on processing completion\n- Email audit trail and history\n\n### Limitations\n- Email attachments limited to 25MB per file\n- Processing queue may have slight delays during peak hours\n- Requires active email account configuration\n\n### Setup\nEmail scanning requires configuration of email accounts with security credentials. Please contact support for assistance with setup.",
+  "feature_category": "Data Collection",
+  "included_in_plans": []
+}

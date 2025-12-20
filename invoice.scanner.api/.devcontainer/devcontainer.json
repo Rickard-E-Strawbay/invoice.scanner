@@ -1,0 +1,24 @@
+{
+    "name": "market.prospector.api",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "context": ".."
+    },
+    "workspaceFolder": "/app",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind,consistency=cached",
+    "runArgs": ["--env-file", "${localWorkspaceFolder}/.env"],
+    "postCreateCommand": "pip install --upgrade pip setuptools wheel && pip install -r requirements.txt",
+    "remoteUser": "vscode",
+    "forwardPorts": [5000],
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "terminal.integrated.shell.linux": "/bin/bash"
+            },
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance"
+            ]
+        }
+    }
+}

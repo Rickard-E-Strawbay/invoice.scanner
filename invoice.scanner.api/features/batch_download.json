@@ -1,0 +1,8 @@
+{
+  "feature_key": "batch_download",
+  "feature_name": "Batch Download",
+  "feature_short_description": "Download multiple processed invoices as a batch for archival and reporting",
+  "feature_description": "## Batch Download\n\nBatch Download enables you to export multiple processed invoices in a single operation, supporting various formats for archival, reporting, and compliance purposes.\n\n### Capabilities\n- Download multiple invoices at once\n- Multiple format support (PDF, CSV, JSON, XML)\n- Customizable export templates\n- Scheduled batch exports\n- Compression support (ZIP)\n\n### Supported Formats\n- **PDF**: Full invoice documents with metadata\n- **CSV**: Tabular format for spreadsheet analysis\n- **JSON**: Structured data for system imports\n- **XML**: For EDI and system integration\n\n### Use Cases\n- Monthly invoice archive creation\n- Compliance and audit reporting\n- Data backup and disaster recovery\n- Vendor analysis and reporting\n- System migration and data transfer",
+  "feature_category": "Export",
+  "included_in_plans": [50, 40, 30]
+}

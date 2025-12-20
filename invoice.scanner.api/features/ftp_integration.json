@@ -1,0 +1,8 @@
+{
+  "feature_key": "ftp_integration",
+  "feature_name": "FTP Integration",
+  "feature_short_description": "Automated file transfer protocol integration for bulk invoice uploads and exports",
+  "feature_description": "## FTP Integration\n\nFTP Integration allows you to automatically upload and download invoices using the File Transfer Protocol, enabling seamless integration with legacy systems and bulk file operations.\n\n### Capabilities\n- Automated FTP server connections\n- Scheduled file uploads and downloads\n- Bulk invoice processing\n- Secure SFTP support\n- Directory monitoring and auto-import\n\n### Use Cases\n- Bulk invoice uploads from external vendors\n- Automated exports to accounting systems\n- Integration with legacy EDI systems\n- Scheduled batch processing\n\n### Setup Requirements\n- FTP/SFTP server credentials\n- Directory path configuration\n- Schedule frequency settings",
+  "feature_category": "Integration",
+  "included_in_plans": [50, 40, 30]
+}

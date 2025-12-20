@@ -1,0 +1,16 @@
+{
+  "name": "React Frontend Dev",
+  "dockerFile": "../Dockerfile",
+  "context": "..",
+  "appPort": [5173],
+  "forwardPorts": [5173],
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
+  ],
+  "extensions": [
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint"
+  ],
+  "postCreateCommand": "npm install"
+}
