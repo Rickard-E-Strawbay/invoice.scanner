@@ -1,96 +1,96 @@
 # Invoice Scanner
 
-En automatiserad fakturascannings- och analyslösning med React frontend och Flask backend.
+An automated invoice scanning and analysis solution with React frontend and Flask backend.
 
-## Funktioner
+## Features
 
-- 📤 **Dra och släpp** filuppladdning för fakturor (PDF, JPG, PNG)
-- 📊 **Dokumenthantering** - Visa, redigera och spåra skannade fakturor
-- 🔐 **Användarautentisering** och företagsroller
-- 💳 **Abonnement och fakturering** för olika plantyper
-- 👨‍💼 **Admin panel** för företagsadministration
-- 📝 **Fakturautomatisering** - Extrahera och analysera fakturordata
+- 📤 **Drag and drop** file upload for invoices (PDF, JPG, PNG)
+- 📊 **Document management** - View, edit, and track scanned invoices
+- 🔐 **User authentication** and company roles
+- 💳 **Subscriptions and billing** for different plan types
+- 👨‍💼 **Admin panel** for company administration
+- 📝 **Invoice automation** - Extract and analyze invoice data
 
-## Starta hela stacken
+## Start the full stack
 
-1. Bygg och starta både backend och frontend:
+1. Build and start both backend and frontend:
 
 ```bash
 cd /Users/rickardelmqvist/Development/invoice.scanner
 docker compose up --build
 ```
 
-2. Frontend nås på:
+2. Frontend is accessible at:
    - http://localhost:5173
 
-3. Backend API nås på:
+3. Backend API is accessible at:
    - http://localhost:8000
 
-## Arkitektur
+## Architecture
 
-- **Frontend**: React med Vite, körs i Docker på port 5173
-- **Backend**: Flask, PostgreSQL, körs i Docker på port 8000
-- **Databas**: PostgreSQL för lagrande av användare, företag, fakturor och dokumentstatus
+- **Frontend**: React with Vite, runs in Docker on port 5173
+- **Backend**: Flask, PostgreSQL, runs in Docker on port 8000
+- **Database**: PostgreSQL for storing users, companies, invoices, and document statuses
 
-## Projektstruktur
+## Project Structure
 
 ```
 invoice.scanner/
 ├── invoice.scanner.api/          # Flask backend
-│   ├── main.py                   # Huvudapplikation
-│   ├── db_config.py              # Databaskonfiguration
-│   ├── db_utils.py               # Databasverktyg
-│   ├── defines.py                # Globala konstanter
-│   ├── documents/                # Dokumentlagring
-│   │   ├── raw/                  # Orörda originalfiler
-│   │   └── processed/            # Bearbetade filer
-│   ├── lib/                      # Bibliotek
-│   │   ├── email_service.py      # Mejlhantering
-│   │   └── llm/                  # LLM-integration
-│   └── requirements.txt          # Python-beroenden
+│   ├── main.py                   # Main application
+│   ├── db_config.py              # Database configuration
+│   ├── db_utils.py               # Database utilities
+│   ├── defines.py                # Global constants
+│   ├── documents/                # Document storage
+│   │   ├── raw/                  # Original unmodified files
+│   │   └── processed/            # Processed files
+│   ├── lib/                      # Libraries
+│   │   ├── email_service.py      # Email handling
+│   │   └── llm/                  # LLM integration
+│   └── requirements.txt          # Python dependencies
 │
 └── invoice.scanner.frontend.react/  # React frontend
     ├── src/
-    │   ├── components/           # React-komponenter
-    │   │   ├── Dashboard.jsx     # Huvudinstrumentpanel
-    │   │   ├── ScanInvoice.jsx   # Filuppladdning
-    │   │   ├── DocumentDetail.jsx # Fakturaredaktör
+    │   ├── components/           # React components
+    │   │   ├── Dashboard.jsx     # Main dashboard
+    │   │   ├── ScanInvoice.jsx   # File upload
+    │   │   ├── DocumentDetail.jsx # Invoice editor
     │   │   ├── Admin.jsx         # Admin panel
     │   │   └── ...
     │   ├── contexts/             # React Context
-    │   └── App.jsx               # Huvudapp
+    │   └── App.jsx               # Main app
     └── package.json
 ```
 
-## API-endpoints
+## API Endpoints
 
-### Dokumenthantering
-- `POST /auth/documents/upload` - Ladda upp nytt dokument
-- `GET /auth/documents` - Hämta alla dokument för företag
-- `PUT /auth/documents/<id>` - Uppdatera fakturadata
+### Document Management
+- `POST /auth/documents/upload` - Upload new document
+- `GET /auth/documents` - Get all documents for company
+- `PUT /auth/documents/<id>` - Update invoice data
 
-## Vanliga kommandon
+## Common Commands
 
 ```bash
-# Starta stacken
+# Start the stack
 docker compose up --build
 
-# Stoppa stacken
+# Stop the stack
 docker compose down
 
-# Se loggar
+# View logs
 docker compose logs -f
 
-# Starta bara backend
+# Start only backend
 docker compose up backend
 
-# Starta bara frontend
+# Start only frontend
 docker compose up frontend
 ```
 
-## Miljövariabler
+## Environment Variables
 
-Backend kräver `.env`-fil i `invoice.scanner.api/.env`:
+Backend requires `.env` file in `invoice.scanner.api/.env`:
 ```
 DATABASE_URL=postgresql://user:password@db:5432/invoice_scanner
 SMTP_SERVER=smtp.gmail.com
@@ -98,7 +98,7 @@ SMTP_PORT=587
 # ...
 ```
 
-## Utveckling
+## Development
 
 ### Backend
 ```bash
@@ -116,4 +116,4 @@ npm run dev
 
 ---
 
-**Senast uppdaterad**: 20 december 2025
+**Last updated**: December 20, 2025

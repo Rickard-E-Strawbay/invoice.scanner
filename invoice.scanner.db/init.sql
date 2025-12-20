@@ -90,13 +90,15 @@ CREATE TABLE IF NOT EXISTS documents(
     uploaded_by UUID REFERENCES users(id),
     raw_format VARCHAR(50),
     raw_filename VARCHAR(255),
+    document_name VARCHAR(255),
     image_filename VARCHAR(255),
     content_type VARCHAR(100),
     status VARCHAR(50) DEFAULT 'uploaded',
     predicted_accuracy DECIMAL(5, 2),
-    training_data BOOLEAN DEFAULT FALSE,
+    is_training BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(company_id, document_name)
 );
 
 CREATE TABLE IF NOT EXISTS document_status(

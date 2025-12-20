@@ -1938,8 +1938,8 @@ def get_documents():
                 cursor.execute(
                     """
                     SELECT id, company_id, uploaded_by, raw_format, raw_filename, 
-                           image_filename, content_type, status, predicted_accuracy, 
-                           training_data, created_at, updated_at
+                           document_name, image_filename, content_type, status, predicted_accuracy, 
+                           is_training, created_at, updated_at
                     FROM documents
                     WHERE company_id = %s
                     ORDER BY created_at DESC
@@ -1988,20 +1988,22 @@ def update_document(doc_id):
         
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                # First, verify the document belongs to the user's company
+                # First, verify the document belongs to the user's company and get current name
                 cursor.execute(
                     """
-                    SELECT id FROM documents
+                    SELECT id, document_name FROM documents
                     WHERE id = %s AND company_id = %s
                     """,
-                    (doc_uuid, company_id)
+                    (str(doc_uuid), str(company_id))
                 )
                 
-                if not cursor.fetchone():
+                existing_doc = cursor.fetchone()
+                if not existing_doc:
                     return jsonify({"error": "Document not found or access denied"}), 404
                 
                 # Extract allowed fields from request data
                 allowed_fields = {
+                    "document_name": data.get("document_name"),
                     "invoice_number": data.get("invoice_number"),
                     "invoice_date": data.get("invoice_date"),
                     "vendor_name": data.get("vendor_name"),
@@ -2012,33 +2014,34 @@ def update_document(doc_id):
                     "reference": data.get("reference"),
                 }
                 
-                # Build training_data JSON
-                training_data = {
-                    "invoice_number": allowed_fields["invoice_number"],
-                    "invoice_date": allowed_fields["invoice_date"],
-                    "vendor_name": allowed_fields["vendor_name"],
-                    "amount": allowed_fields["amount"],
-                    "vat": allowed_fields["vat"],
-                    "total": allowed_fields["total"],
-                    "due_date": allowed_fields["due_date"],
-                    "reference": allowed_fields["reference"],
-                }
+                # Check if document_name is being changed and if it's unique within the company
+                new_document_name = allowed_fields["document_name"]
+                if new_document_name and new_document_name != existing_doc["document_name"]:
+                    # Check for duplicates (ignore NULL values)
+                    cursor.execute(
+                        """
+                        SELECT id FROM documents
+                        WHERE company_id = %s AND document_name = %s AND id != %s
+                        """,
+                        (str(company_id), new_document_name, str(doc_uuid))
+                    )
+                    if cursor.fetchone():
+                        return jsonify({
+                            "error": "A document with this name already exists in your company"
+                        }), 409
                 
-                # Convert to JSON string
-                import json
-                training_data_json = json.dumps(training_data)
-                
-                # Update the document
+                # Update the document with document_name only
+                # TODO: Create separate invoice_data table for extracted data
                 cursor.execute(
                     """
                     UPDATE documents
-                    SET training_data = %s, updated_at = CURRENT_TIMESTAMP
+                    SET document_name = %s, updated_at = CURRENT_TIMESTAMP
                     WHERE id = %s
                     RETURNING id, company_id, uploaded_by, raw_format, raw_filename, 
-                              image_filename, content_type, status, predicted_accuracy, 
-                              training_data, created_at, updated_at
+                              document_name, image_filename, content_type, status, 
+                              predicted_accuracy, is_training, created_at, updated_at
                     """,
-                    (training_data_json, doc_uuid)
+                    (allowed_fields["document_name"], str(doc_uuid))
                 )
                 
                 updated_doc = cursor.fetchone()
@@ -2063,6 +2066,94 @@ def update_document(doc_id):
         print(f"[update_document] Error: {e}")
         return jsonify({"error": "Failed to update document"}), 500
 
+
+# =====================
+# Preview Endpoint
+# =====================
+@blp_auth.route("/documents/<doc_id>/preview", methods=["GET"])
+def get_document_preview(doc_id):
+    """Get preview for a document. Returns file content if status allows preview."""
+    try:
+        # Check authentication
+        if "user_id" not in session:
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        company_id = session.get("company_id")
+        if not company_id:
+            return jsonify({"error": "Company info not found in session"}), 400
+        
+        # Validate UUID format
+        try:
+            doc_uuid = uuid.UUID(doc_id)
+        except ValueError:
+            return jsonify({"error": "Invalid document ID format"}), 400
+        
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                # Get document details
+                cursor.execute(
+                    """
+                    SELECT id, raw_filename, status FROM documents
+                    WHERE id = %s AND company_id = %s
+                    """,
+                    (str(doc_uuid), str(company_id))
+                )
+                
+                doc = cursor.fetchone()
+                if not doc:
+                    return jsonify({"error": "Document not found or access denied"}), 404
+                
+                # Check if status allows preview
+                allowed_statuses = ["uploaded", "preprocessing", "preprocess_error"]
+                if doc["status"] not in allowed_statuses:
+                    return jsonify({
+                        "error": f"Preview not available for status: {doc['status']}"
+                    }), 400
+                
+                # Build file path using document ID
+                from defines import DOCUMENTS_RAW_DIR
+                # Files are stored with their UUID as filename + original extension
+                _, ext = os.path.splitext(doc["raw_filename"])
+                file_path = os.path.join(DOCUMENTS_RAW_DIR, f"{doc['id']}{ext}")
+                
+                # Check if file exists
+                if not os.path.exists(file_path):
+                    return jsonify({"error": "File not found"}), 404
+                
+                # Read and serve the file
+                from flask import send_file
+                
+                # Determine MIME type based on file extension
+                _, ext = os.path.splitext(doc["raw_filename"])
+                mime_type = "application/octet-stream"
+                if ext.lower() in [".pdf"]:
+                    mime_type = "application/pdf"
+                elif ext.lower() in [".jpg", ".jpeg"]:
+                    mime_type = "image/jpeg"
+                elif ext.lower() in [".png"]:
+                    mime_type = "image/png"
+                elif ext.lower() in [".tiff", ".tif"]:
+                    mime_type = "image/tiff"
+                
+                return send_file(
+                    file_path,
+                    mimetype=mime_type,
+                    as_attachment=False
+                )
+        
+        except Exception as e:
+            print(f"Error in get_document_preview: {e}")
+            return jsonify({"error": "Failed to retrieve preview"}), 500
+        finally:
+            conn.close()
+    
+    except Exception as e:
+        print(f"Unexpected error in get_document_preview: {e}")
+        return jsonify({"error": "An unexpected error occurred"}), 500
 
 api.register_blueprint(blp_live)
 api.register_blueprint(blp_auth)

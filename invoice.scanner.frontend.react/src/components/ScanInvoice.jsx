@@ -8,6 +8,7 @@ function ScanInvoice({ onBack }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [documentName, setDocumentName] = useState("");
   
   const [invoiceElements, setInvoiceElements] = useState([
     { label: "Invoice Number", value: "" },
@@ -29,6 +30,10 @@ function ScanInvoice({ onBack }) {
       setError("Invalid file type. Please upload JPG, PNG, or PDF.");
       return;
     }
+
+    // Set document name from filename without extension
+    const fileName = file.name.split('.').slice(0, -1).join('.');
+    setDocumentName(fileName);
 
     // Preview
     const reader = new FileReader();
@@ -111,6 +116,7 @@ function ScanInvoice({ onBack }) {
     setUploadedImage(null);
     setUploadedFile(null);
     setDocumentId(null);
+    setDocumentName("");
     setError(null);
     setInvoiceElements(invoiceElements.map(el => ({ ...el, value: "" })));
   };
@@ -189,7 +195,11 @@ function ScanInvoice({ onBack }) {
       <div className="scan-content">
         <div className="invoice-preview">
           {uploadedImage ? (
-            <img src={uploadedImage} alt="Uploaded invoice" className="preview-image" />
+            uploadedFile?.type === "application/pdf" ? (
+              <iframe src={uploadedImage} title="PDF preview" style={{ width: "100%", height: "100%", border: "none", borderRadius: "4px" }} />
+            ) : (
+              <img src={uploadedImage} alt="Uploaded invoice" className="preview-image" />
+            )
           ) : (
             <div className="preview-placeholder">
               <p>No image uploaded</p>
@@ -200,6 +210,16 @@ function ScanInvoice({ onBack }) {
         <div className="invoice-elements">
           <h2>Invoice Elements</h2>
           <div className="elements-list">
+            <div className="element-item">
+              <label>Document Name</label>
+              <input
+                type="text"
+                value={documentName}
+                onChange={(e) => setDocumentName(e.target.value)}
+                placeholder="Not detected"
+                disabled={!uploadedImage}
+              />
+            </div>
             {invoiceElements.map((element, index) => (
               <div key={index} className="element-item">
                 <label>{element.label}</label>
