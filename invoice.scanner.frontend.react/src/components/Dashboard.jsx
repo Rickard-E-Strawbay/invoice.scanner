@@ -57,6 +57,19 @@ function Dashboard() {
     }
   }, [currentView]);
 
+  // Filter invoices based on active tab
+  const getFilteredInvoices = () => {
+    if (activeTab === "to-do") {
+      return invoices.filter(doc => 
+        ["uploaded", "preprocessing", "preprocess_error", "predicted", "extraction", "manual_review"].includes(doc.status)
+      );
+    } else if (activeTab === "approved") {
+      return invoices.filter(doc => doc.status === "approved");
+    } else {
+      return invoices; // "all" shows everything
+    }
+  };
+
   // Fetch plan name from backend
   useEffect(() => {
     const fetchPlanName = async () => {
@@ -310,12 +323,25 @@ function Dashboard() {
                   <p className="empty-title">No invoices scanned yet</p>
                   <p className="empty-subtitle">Here you can view and manage invoices scanned on your company</p>
                 </div>
+              ) : getFilteredInvoices().length === 0 ? (
+                <div className="empty-state">
+                  <div className="empty-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="12" y1="19" x2="12" y2="5"/>
+                      <line x1="9" y1="10" x2="15" y2="10"/>
+                    </svg>
+                  </div>
+                  <p className="empty-title">No invoices found</p>
+                  <p className="empty-subtitle">No invoices match the current filter</p>
+                </div>
               ) : (
                 <div className="invoices-list">
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ borderBottom: "2px solid #e8ecf1", background: "#f5f7fa" }}>
-                        <th style={{ padding: "1rem", textAlign: "left", fontWeight: "600" }}>File Name</th>
+                        <th style={{ padding: "1rem", textAlign: "left", fontWeight: "600" }}>Document Name</th>
                         <th style={{ padding: "1rem", textAlign: "left", fontWeight: "600" }}>Status</th>
                         <th style={{ padding: "1rem", textAlign: "left", fontWeight: "600" }}>Uploaded</th>
                         <th style={{ padding: "1rem", textAlign: "left", fontWeight: "600" }}>Accuracy</th>
@@ -323,9 +349,9 @@ function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {invoices.map((doc) => (
+                      {getFilteredInvoices().map((doc) => (
                         <tr key={doc.id} style={{ borderBottom: "1px solid #e8ecf1" }}>
-                          <td style={{ padding: "1rem" }}>{doc.raw_filename}</td>
+                          <td style={{ padding: "1rem" }}>{doc.document_name || doc.raw_filename}</td>
                           <td style={{ padding: "1rem" }}>
                             <span style={{
                               padding: "0.25rem 0.75rem",
