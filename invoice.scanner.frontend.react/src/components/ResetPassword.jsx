@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import "./Auth.css";
 import { validatePasswordStrength, getPasswordStrengthLabel, getPasswordStrengthColor } from "../utils/passwordValidator";
+import { API_BASE_URL } from "../utils/api";
 
 function ResetPassword({ token }) {
   const [loading, setLoading] = useState(true);
@@ -22,7 +23,7 @@ function ResetPassword({ token }) {
   const verifyToken = async () => {
     try {
       setValidating(true);
-      const response = await fetch(`http://localhost:8000/auth/verify-reset-token/${token}`, {
+      const response = await fetch(`${API_BASE_URL}/auth/verify-reset-token/${token}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -76,7 +77,7 @@ function ResetPassword({ token }) {
 
     try {
       setSubmitting(true);
-      const response = await fetch(`http://localhost:8000/auth/reset-password/${token}`, {
+      const response = await fetch(`${API_BASE_URL}/auth/reset-password/${token}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

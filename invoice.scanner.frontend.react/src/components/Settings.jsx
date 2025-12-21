@@ -1,6 +1,7 @@
 import React, { useContext, useEffect } from "react";
 import { AuthContext } from "../contexts/AuthContext";
 import "./Settings.css";
+import { API_BASE_URL } from "../utils/api";
 
 function Settings() {
   const { user, isAdmin } = useContext(AuthContext);
@@ -50,7 +51,7 @@ function Settings() {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch("http://localhost:8000/auth/company-info", {
+        const response = await fetch(`${API_BASE_URL}/auth/company-info`, {
           method: "GET",
           credentials: "include",
           headers: {
@@ -83,7 +84,7 @@ function Settings() {
   React.useEffect(() => {
     const fetchPaymentMethods = async () => {
       try {
-        const response = await fetch("http://localhost:8000/auth/payment-methods", {
+        const response = await fetch(`${API_BASE_URL}/auth/payment-methods`, {
           method: "GET",
           credentials: "include",
           headers: {
@@ -109,7 +110,7 @@ function Settings() {
       try {
         setBillingLoading(true);
         setBillingError(null);
-        const response = await fetch("http://localhost:8000/auth/billing-details", {
+        const response = await fetch(`${API_BASE_URL}/auth/billing-details`, {
           method: "GET",
           credentials: "include",
           headers: {
@@ -183,7 +184,7 @@ function Settings() {
       setBillingError(null);
       setBillingSuccess(null);
 
-      const response = await fetch("http://localhost:8000/auth/billing-details", {
+      const response = await fetch(`${API_BASE_URL}/auth/billing-details`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

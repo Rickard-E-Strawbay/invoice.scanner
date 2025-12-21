@@ -27,7 +27,6 @@ from lib.password_validator import validate_password_strength
 
 load_dotenv()
 
-
 # =============
 # Database Helper
 # =============
@@ -104,7 +103,9 @@ def refresh_user_session(user_id):
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(32))
 app.config['SESSION_COOKIE_HTTPONLY'] = True
+# Use Lax for development (same-site redirects), None requires Secure (HTTPS)
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = False
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 CORS(app, supports_credentials=True, origins=[os.getenv('FRONTEND_URL', 'http://localhost:3000')])
 
@@ -1824,27 +1825,53 @@ def change_plan():
 
 # =====================
 # Document Upload Endpoint
-# =====================
+# ========================
+# 
+# Denna endpoint hanterar filuppladdning och triggar
+# async document processing via Celery.
+#
+# FLOW:
+# 1. User uploade fil
+# 2. Vi sparar fil och skapar DB record
+# 3. Vi triggar async processing chain
+# 4. Vi returnerar omedelbar (polling endpoint för status)
 
 @blp_auth.route("/documents/upload", methods=["POST"])
 def upload_document():
-    """Upload a document and create a record in the documents table."""
+    """
+    Upload a document and queue for async processing.
+    
+    Request: POST /documents/upload
+        - file: Binary file (PDF/JPG/PNG)
+        - Authentication: Required (via session)
+    
+    Response: 201 Created
+        {
+            "message": "Document uploaded and queued for processing",
+            "document": {
+                "id": "doc-uuid",
+                "raw_filename": "invoice.pdf",
+                "status": "preprocessing",
+                "created_at": "2024-12-21T..."
+            },
+            "task_id": "celery-task-uuid"  # För polling
+        }
+    """
     try:
         from defines import DOCUMENTS_RAW_DIR
         from werkzeug.utils import secure_filename
         
-        # Check authentication
+        # ========== AUTHENTICATION ==========
         if "user_id" not in session:
             return jsonify({"error": "Not authenticated"}), 401
         
-        # Get user and company info from session
         user_id = session.get("user_id")
         company_id = session.get("company_id")
         
         if not user_id or not company_id:
             return jsonify({"error": "User or company info not found in session"}), 400
         
-        # Check if file is present
+        # ========== FILE VALIDATION ==========
         if "file" not in request.files:
             return jsonify({"error": "No file provided"}), 400
         
@@ -1852,7 +1879,6 @@ def upload_document():
         if file.filename == "":
             return jsonify({"error": "No file selected"}), 400
         
-        # Validate file extension
         allowed_extensions = {"pdf", "jpg", "jpeg", "png"}
         filename = secure_filename(file.filename)
         file_ext = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
@@ -1860,50 +1886,95 @@ def upload_document():
         if file_ext not in allowed_extensions:
             return jsonify({"error": f"File type not allowed. Allowed: {', '.join(allowed_extensions)}"}), 400
         
-        # Generate unique filename
+        # ========== SAVE FILE ==========
         doc_id = str(uuid.uuid4())
         unique_filename = f"{doc_id}.{file_ext}"
         file_path = DOCUMENTS_RAW_DIR / unique_filename
         
-        # Save file to disk
         file.save(str(file_path))
         print(f"[upload_document] File saved: {file_path}")
         
-        # Insert record into documents table
+        # ========== CREATE DATABASE RECORD ==========
         conn = get_db_connection()
         if not conn:
             return jsonify({"error": "Database connection failed"}), 500
         
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                # Convert company_id and user_id to UUID strings if needed
+                # Extract filename without extension for document_name
+                filename_without_ext = filename.rsplit('.', 1)[0] if '.' in filename else filename
+                
+                # Insert document record with status "preprocessing"
+                # (actual processing starts after response)
                 cursor.execute(
                     """
                     INSERT INTO documents 
-                    (id, company_id, uploaded_by, raw_format, raw_filename, status, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    RETURNING id, company_id, uploaded_by, raw_format, raw_filename, status, created_at
+                    (id, company_id, uploaded_by, raw_format, raw_filename, document_name, status, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    RETURNING id, company_id, uploaded_by, raw_format, raw_filename, document_name, status, created_at
                     """,
-                    (doc_id, company_id, user_id, file_ext, filename, "uploaded")
+                    (doc_id, company_id, user_id, file_ext, filename, filename_without_ext, "preprocessing")
                 )
                 
                 document = cursor.fetchone()
                 conn.commit()
-                
                 print(f"[upload_document] Document record created: {doc_id}")
                 
-                return jsonify({
-                    "message": "Document uploaded successfully",
-                    "document": dict(document) if document else {
-                        "id": doc_id,
-                        "raw_filename": filename,
-                        "status": "uploaded"
-                    }
-                }), 201
+                # ========== TRIGGER ASYNC PROCESSING ==========
+                try:
+                    import requests
+                    
+                    # Call processing service via HTTP to trigger task
+                    processing_url = os.environ.get('PROCESSING_SERVICE_URL', 'http://localhost:5002')
+                    
+                    task_id = None
+                    try:
+                        response = requests.post(
+                            f'{processing_url}/api/tasks/orchestrate',
+                            json={
+                                'document_id': str(doc_id),
+                                'company_id': str(company_id)
+                            },
+                            timeout=10
+                        )
+                        
+                        if response.status_code == 202:
+                            task_id = response.json().get('task_id', 'processing-queued')
+                            print(f"[upload_document] Processing task queued: {task_id}")
+                        else:
+                            print(f"[upload_document] Processing service returned {response.status_code}")
+                            task_id = None
+                    except requests.exceptions.RequestException as e:
+                        print(f"[upload_document] Could not reach processing service: {str(e)}")
+                        task_id = None
+                    
+                    return jsonify({
+                        "message": "Document uploaded and queued for processing",
+                        "document": dict(document) if document else {
+                            "id": doc_id,
+                            "raw_filename": filename,
+                            "status": "preprocessing",
+                            "created_at": datetime.utcnow().isoformat()
+                        },
+                        "task_id": task_id
+                    }), 201
+                    
+                except Exception as task_error:
+                    print(f"[upload_document] Warning: Could not trigger processing task: {task_error}")
+                    # Fortfarande returneraSuccess, men processing kanske inte startas
+                    return jsonify({
+                        "message": "Document uploaded (processing may start shortly)",
+                        "document": dict(document) if document else {
+                            "id": doc_id,
+                            "raw_filename": filename,
+                            "status": "preprocessing"
+                        },
+                        "warning": "Processing may be delayed"
+                    }), 201
+                
         except Exception as db_error:
             conn.rollback()
             print(f"[upload_document] Database error: {db_error}")
-            # Try to delete the uploaded file
             try:
                 file_path.unlink()
             except:
@@ -1915,6 +1986,231 @@ def upload_document():
     except Exception as e:
         print(f"[upload_document] Error: {e}")
         return jsonify({"error": "Upload failed"}), 500
+
+
+# Document Processing Status Endpoint
+# ===================================
+# Polling endpoint för att checka processing status
+
+@blp_auth.route("/documents/<doc_id>/status", methods=["GET"])
+def get_document_processing_status(doc_id):
+    """
+    Get current processing status for a document.
+    
+    Used for real-time polling to track document through processing pipeline.
+    
+    Response:
+    {
+        "document_id": "doc-uuid",
+        "status": "ocr_extracting",
+        "status_description": "OCR extraction is in progress",
+        "progress": {
+            "current_step": 3,
+            "total_steps": 6,
+            "percentage": 50
+        },
+        "quality_score": null,  # Set after evaluation
+        "created_at": "...",
+        "last_update": "..."
+    }
+    """
+    try:
+        if "user_id" not in session:
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        company_id = session.get("company_id")
+        
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                # Get document
+                cursor.execute(
+                    """
+                    SELECT d.id, d.status, d.created_at, d.updated_at, d.predicted_accuracy
+                    FROM documents d
+                    WHERE d.id = %s AND d.company_id = %s
+                    """,
+                    (doc_id, company_id)
+                )
+                
+                document = cursor.fetchone()
+                if not document:
+                    return jsonify({"error": "Document not found"}), 404
+                
+                # Get status description
+                cursor.execute(
+                    "SELECT status_name, status_description FROM document_status WHERE status_key = %s",
+                    (document['status'],)
+                )
+                
+                status_info = cursor.fetchone()
+                status_name = status_info['status_name'] if status_info else document['status']
+                status_desc = status_info['status_description'] if status_info else ""
+                
+                # Calculate progress
+                status_steps = {
+                    'preprocessing': 1,
+                    'preprocessed': 1,
+                    'ocr_extracting': 2,
+                    'predicting': 3,
+                    'predicted': 3,
+                    'extraction': 4,
+                    'extraction_error': 4,
+                    'automated_evaluation': 5,
+                    'automated_evaluation_error': 5,
+                    'manual_review': 5,
+                    'approved': 6,
+                    'exported': 6,
+                }
+                
+                current_step = status_steps.get(document['status'], 0)
+                total_steps = 6
+                
+                return jsonify({
+                    "document_id": doc_id,
+                    "status": document['status'],
+                    "status_name": status_name,
+                    "status_description": status_desc,
+                    "progress": {
+                        "current_step": current_step,
+                        "total_steps": total_steps,
+                        "percentage": int((current_step / total_steps) * 100)
+                    },
+                    "quality_score": float(document['predicted_accuracy']) if document['predicted_accuracy'] else None,
+                    "created_at": document['created_at'].isoformat() if document['created_at'] else None,
+                    "last_update": document['updated_at'].isoformat() if document['updated_at'] else None
+                }), 200
+                
+        finally:
+            conn.close()
+    
+    except Exception as e:
+        print(f"[get_document_processing_status] Error: {e}")
+        return jsonify({"error": "Failed to fetch status"}), 500
+
+
+@blp_auth.route("/documents/<doc_id>/restart", methods=["POST"])
+def restart_document(doc_id):
+    """
+    Restart document processing from the beginning.
+    
+    Request: POST /documents/<doc_id>/restart
+        - Authentication: Required (via session)
+    
+    Response: 200 OK
+        {
+            "message": "Document processing restarted",
+            "document": {
+                "id": "doc-uuid",
+                "status": "preprocessing",
+                "created_at": "2024-12-21T..."
+            },
+            "task_id": "celery-task-uuid"
+        }
+    """
+    try:
+        # Check authentication
+        if "user_id" not in session:
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        company_id = session.get("company_id")
+        if not company_id:
+            return jsonify({"error": "Company info not found in session"}), 400
+        
+        # Validate UUID format
+        try:
+            doc_uuid = uuid.UUID(doc_id)
+        except ValueError:
+            return jsonify({"error": "Invalid document ID format"}), 400
+        
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                # Verify document belongs to user's company
+                cursor.execute(
+                    """
+                    SELECT id, raw_filename, status FROM documents
+                    WHERE id = %s AND company_id = %s
+                    """,
+                    (str(doc_uuid), str(company_id))
+                )
+                
+                document = cursor.fetchone()
+                if not document:
+                    return jsonify({"error": "Document not found or access denied"}), 404
+                
+                # Reset document status to preprocessing
+                cursor.execute(
+                    """
+                    UPDATE documents
+                    SET status = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                    RETURNING id, raw_filename, status, created_at, updated_at
+                    """,
+                    ("preprocessing", str(doc_uuid))
+                )
+                
+                updated_doc = cursor.fetchone()
+                conn.commit()
+                print(f"[restart_document] Document {doc_id} status reset to preprocessing")
+                
+                # ========== TRIGGER ASYNC PROCESSING ==========
+                try:
+                    import requests
+                    
+                    # Call processing service via HTTP to trigger task
+                    processing_url = os.environ.get('PROCESSING_SERVICE_URL', 'http://localhost:5002')
+                    
+                    response = requests.post(
+                        f'{processing_url}/api/tasks/orchestrate',
+                        json={
+                            'document_id': str(doc_uuid),
+                            'company_id': str(company_id)
+                        },
+                        timeout=10
+                    )
+                    
+                    task_id = response.json().get('task_id', 'processing-queued')
+                    print(f"[restart_document] Processing task queued: {task_id}")
+                    
+                    return jsonify({
+                        "message": "Document processing restarted",
+                        "document": {
+                            "id": updated_doc["id"],
+                            "status": updated_doc["status"],
+                            "created_at": updated_doc["created_at"].isoformat() if updated_doc["created_at"] else None
+                        },
+                        "task_id": task_id
+                    }), 200
+                    
+                except Exception as e:
+                    # Log error but still return success since status is reset
+                    print(f"[restart_document] Warning: Failed to queue processing task: {str(e)}")
+                    return jsonify({
+                        "message": "Document status reset, processing will begin shortly",
+                        "document": {
+                            "id": updated_doc["id"],
+                            "status": updated_doc["status"],
+                            "created_at": updated_doc["created_at"].isoformat() if updated_doc["created_at"] else None
+                        }
+                    }), 200
+                    
+        except Exception as e:
+            conn.rollback()
+            print(f"[restart_document] Error: {e}")
+            return jsonify({"error": f"Failed to restart document: {str(e)}"}), 500
+        finally:
+            conn.close()
+    
+    except Exception as e:
+        print(f"[restart_document] Unexpected error: {e}")
+        return jsonify({"error": "An unexpected error occurred"}), 500
 
 
 @blp_auth.route("/documents", methods=["GET"])

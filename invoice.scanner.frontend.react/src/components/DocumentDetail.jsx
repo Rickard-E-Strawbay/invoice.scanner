@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { API_BASE_URL } from "../utils/api";
 
 function DocumentDetail({ document, onClose, onSave }) {
   const [invoiceData, setInvoiceData] = useState({
@@ -60,7 +61,7 @@ function DocumentDetail({ document, onClose, onSave }) {
       const allowedStatuses = ["uploaded", "preprocessing", "preprocess_error"];
       if (allowedStatuses.includes(document.status)) {
         setPreviewLoading(true);
-        fetch(`http://localhost:8000/auth/documents/${document.id}/preview`, {
+        fetch(`${API_BASE_URL}/auth/documents/${document.id}/preview`, {
           credentials: "include",
         })
           .then(res => {
@@ -118,7 +119,7 @@ function DocumentDetail({ document, onClose, onSave }) {
 
     try {
       // Only send document_name for now (invoice data will be stored separately)
-      const response = await fetch(`http://localhost:8000/auth/documents/${document.id}`, {
+      const response = await fetch(`${API_BASE_URL}/auth/documents/${document.id}`, {
         method: "PUT",
         credentials: "include",
         headers: {
