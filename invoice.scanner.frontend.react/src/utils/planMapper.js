@@ -1,4 +1,6 @@
 // Plan mapping utility - fetches and caches plan data from backend
+import { API_BASE_URL } from './api';
+
 let plansCache = null;
 let cacheTimestamp = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
@@ -10,7 +12,7 @@ export const getPlanMap = async () => {
   }
 
   try {
-    const response = await fetch("http://localhost:8000/auth/plans", {
+    const response = await fetch(`${API_BASE_URL}/auth/plans`, {
       credentials: "include",
     });
 

@@ -3,6 +3,7 @@ import "./Auth.css";
 import { AuthContext } from "../contexts/AuthContext";
 import TermsOfService from "./TermsOfService";
 import { validatePasswordStrength, getPasswordStrengthLabel, getPasswordStrengthColor } from "../utils/passwordValidator";
+import { apiGet, apiPost } from "../utils/api";
 
 function Auth() {
   const [mode, setMode] = useState("login"); // "login", "signup", or "forgot-password"
@@ -35,13 +36,9 @@ function Auth() {
     }
 
     try {
-      const apiUrl = `http://localhost:8000/auth/search-companies?q=${encodeURIComponent(value)}`;
-      console.log("Searching companies with:", apiUrl);
-      const res = await fetch(apiUrl, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include"
-      });
+      const endpoint = `/auth/search-companies?q=${encodeURIComponent(value)}`;
+      console.log("Searching companies with:", endpoint);
+      const res = await apiGet(endpoint);
       const data = await res.json();
       console.log("Search results:", data);
       setCompanySuggestions(data.companies || []);
@@ -96,12 +93,7 @@ function Auth() {
 
     try {
       if (mode === "login") {
-        const res = await fetch("http://localhost:8000/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ email, password }),
-        });
+        const res = await apiPost("/auth/login", { email, password });
 
         if (!res.ok) {
           const data = await res.json();
@@ -113,11 +105,7 @@ function Auth() {
         setEmail("");
         setPassword("");
       } else if (mode === "forgot-password") {
-        const res = await fetch("http://localhost:8000/auth/request-password-reset", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
-        });
+        const res = await apiPost("/auth/request-password-reset", { email });
 
         if (!res.ok) {
           const data = await res.json();
@@ -127,18 +115,13 @@ function Auth() {
         setForgotPasswordSuccess(true);
         setEmail("");
       } else {
-        const res = await fetch("http://localhost:8000/auth/signup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ 
-            email, 
-            password,
-            company_name: companyName,
-            organization_id: organizationId,
-            terms_accepted: termsAccepted,
-            terms_version: tosVersion
-          }),
+        const res = await apiPost("/auth/signup", {
+          email,
+          password,
+          company_name: companyName,
+          organization_id: organizationId,
+          terms_accepted: termsAccepted,
+          terms_version: tosVersion
         });
 
         if (!res.ok) {

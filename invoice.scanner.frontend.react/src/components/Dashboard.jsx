@@ -7,28 +7,41 @@ import Admin from "./Admin";
 import PlansAndBilling from "./PlansAndBilling";
 import DocumentDetail from "./DocumentDetail";
 import "./Dashboard.css";
+import { API_BASE_URL } from "../utils/api";
 
 function Dashboard() {
   const { user, logout } = useContext(AuthContext);
   const [planName, setPlanName] = useState("Unknown");
   const [activeTab, setActiveTab] = useState("to-do");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [invoices, setInvoices] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentsError, setDocumentsError] = useState(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [currentView, setCurrentView] = useState("overview");
   const [selectedDocument, setSelectedDocument] = useState(null);
+  const [restartingDocumentId, setRestartingDocumentId] = useState(null);
+  const [restartError, setRestartError] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState("desc");
 
   const handleLogout = async () => {
     await logout();
   };
 
   // Fetch documents from backend
-  const fetchDocuments = async () => {
+  const fetchDocuments = async (isPolling = false) => {
     try {
-      setDocumentsLoading(true);
+      // Only show loading spinner on initial fetch, not during polling
+      if (!isPolling) {
+        setDocumentsLoading(true);
+      }
       setDocumentsError(null);
-      const response = await fetch("http://localhost:8000/auth/documents", {
+      const response = await fetch(`${API_BASE_URL}/auth/documents`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -41,12 +54,61 @@ function Dashboard() {
       }
 
       const data = await response.json();
-      setInvoices(data.documents || []);
+      const newDocuments = data.documents || [];
+      
+      // Smart update: only update documents that have changed
+      setInvoices(prevInvoices => {
+        return newDocuments.map(newDoc => {
+          const oldDoc = prevInvoices.find(d => d.id === newDoc.id);
+          
+          // If status changed, mark as "just updated" for visual feedback
+          if (oldDoc && oldDoc.status !== newDoc.status) {
+            return { ...newDoc, _justUpdated: true };
+          }
+          
+          // Return unchanged documents as-is to avoid re-renders
+          return oldDoc && JSON.stringify(oldDoc) === JSON.stringify(newDoc) ? oldDoc : newDoc;
+        });
+      });
     } catch (err) {
       console.error("Error fetching documents:", err);
       setDocumentsError(err.message);
     } finally {
-      setDocumentsLoading(false);
+      if (!isPolling) {
+        setDocumentsLoading(false);
+      }
+    }
+  };
+
+  // Restart document processing
+  const handleRestart = async (docId) => {
+    try {
+      setRestartingDocumentId(docId);
+      setRestartError(null);
+      
+      const response = await fetch(`${API_BASE_URL}/auth/documents/${docId}/restart`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to restart document");
+      }
+
+      const data = await response.json();
+      console.log("Document restart initiated:", data);
+      
+      // Fetch fresh documents to show updated status
+      await fetchDocuments();
+    } catch (err) {
+      console.error("Error restarting document:", err);
+      setRestartError(err.message);
+    } finally {
+      setRestartingDocumentId(null);
     }
   };
 
@@ -54,21 +116,147 @@ function Dashboard() {
   useEffect(() => {
     if (currentView === "scanned-invoices") {
       fetchDocuments();
+
+      // Set up polling to update status every 4 seconds while in the scanned-invoices view
+      // Only fetches changes, not re-renders everything
+      const pollInterval = setInterval(() => {
+        fetchDocuments(true); // Pass true to indicate this is a polling update
+      }, 4000);
+
+      return () => clearInterval(pollInterval);
     }
   }, [currentView]);
 
-  // Filter invoices based on active tab
+  // Filter invoices based on active tab and search query
   const getFilteredInvoices = () => {
+    let filtered = invoices;
+    
+    // First filter by tab
     if (activeTab === "to-do") {
-      return invoices.filter(doc => 
-        ["uploaded", "preprocessing", "preprocess_error", "predicted", "extraction", "manual_review"].includes(doc.status)
+      // Show all documents that are being processed or need action
+      filtered = filtered.filter(doc => 
+        [
+          "uploaded", 
+          "preprocessing", 
+          "preprocessed",
+          "ocr_extracting",
+          "predicting",
+          "extraction", 
+          "automated_evaluation",
+          "predicted",
+          "manual_review",
+          "preprocess_error",
+          "ocr_error",
+          "predict_error",
+          "extraction_error",
+          "automated_evaluation_error"
+        ].includes(doc.status)
       );
     } else if (activeTab === "approved") {
-      return invoices.filter(doc => doc.status === "approved");
-    } else {
-      return invoices; // "all" shows everything
+      filtered = filtered.filter(doc => doc.status === "approved" || doc.status === "completed");
     }
+    
+    // Then filter by search query on Document Name
+    if (searchQuery.trim()) {
+      const lowerQuery = searchQuery.toLowerCase();
+      filtered = filtered.filter(doc => 
+        (doc.document_name || doc.raw_filename || "").toLowerCase().includes(lowerQuery)
+      );
+    }
+    
+    // Finally filter by date range
+    if (startDate || endDate) {
+      filtered = filtered.filter(doc => {
+        if (!doc.created_at) return false;
+        
+        const docDate = new Date(doc.created_at).toISOString().split('T')[0]; // Get date part only
+        
+        if (startDate && docDate < startDate) return false;
+        if (endDate && docDate > endDate) return false;
+        
+        return true;
+      });
+    }
+    
+    return filtered;
   };
+
+  // Get paginated and sorted invoices
+  const getPaginatedInvoices = () => {
+    let filtered = getFilteredInvoices();
+    
+    // Sort
+    filtered.sort((a, b) => {
+      let aVal = a[sortBy];
+      let bVal = b[sortBy];
+      
+      // Handle null/undefined values
+      if (aVal == null) aVal = "";
+      if (bVal == null) bVal = "";
+      
+      // Handle date sorting
+      if (sortBy === "created_at") {
+        aVal = new Date(aVal).getTime();
+        bVal = new Date(bVal).getTime();
+      }
+      
+      // Case-insensitive string comparison
+      if (typeof aVal === "string") {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+      
+      if (aVal < bVal) return sortOrder === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+    
+    // Paginate
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filtered.slice(startIndex, endIndex);
+  };
+
+  // Count documents by category
+  const getTabCounts = () => {
+    const todoCount = invoices.filter(doc => 
+      [
+        "uploaded", 
+        "preprocessing", 
+        "preprocessed",
+        "ocr_extracting",
+        "predicting",
+        "extraction", 
+        "automated_evaluation",
+        "predicted",
+        "manual_review",
+        "preprocess_error",
+        "ocr_error",
+        "predict_error",
+        "extraction_error",
+        "automated_evaluation_error"
+      ].includes(doc.status)
+    ).length;
+    
+    const approvedCount = invoices.filter(doc => 
+      doc.status === "approved" || doc.status === "completed"
+    ).length;
+    
+    const allCount = invoices.length;
+    
+    return { todoCount, approvedCount, allCount };
+  };
+
+  // Get total pages
+  const getTotalPages = () => {
+    const filtered = getFilteredInvoices();
+    return Math.ceil(filtered.length / itemsPerPage);
+  };
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, startDate, endDate, itemsPerPage]);
 
   // Fetch plan name from backend
   useEffect(() => {
@@ -80,6 +268,25 @@ function Dashboard() {
     };
     fetchPlanName();
   }, [user?.price_plan_key]);
+
+  // Helper to handle column sorting
+  const handleSort = (column) => {
+    if (sortBy === column) {
+      // Toggle sort order if same column
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      // Sort ascending on new column
+      setSortBy(column);
+      setSortOrder("asc");
+    }
+    setCurrentPage(1);
+  };
+
+  // Helper to render sort indicator
+  const getSortIndicator = (column) => {
+    if (sortBy !== column) return " ↕";
+    return sortOrder === "asc" ? " ↑" : " ↓";
+  };
 
   // Get initials from user name
   const getInitials = () => {
@@ -99,6 +306,78 @@ function Dashboard() {
   // Get plan name from state (fetched from backend)
   const getPlanNameFromState = () => {
     return planName;
+  };
+
+  // Helper function to get status colors
+  const getStatusColor = (status) => {
+    const statusColors = {
+      // Processing stages
+      "uploaded": { background: "#fef3c7", color: "#92400e" },
+      "preprocessing": { background: "#dbeafe", color: "#1e40af" },
+      "preprocessed": { background: "#dbeafe", color: "#1e40af" },
+      "ocr_extracting": { background: "#dbeafe", color: "#1e40af" },
+      "predicting": { background: "#dbeafe", color: "#1e40af" },
+      "extraction": { background: "#dbeafe", color: "#1e40af" },
+      "automated_evaluation": { background: "#dbeafe", color: "#1e40af" },
+      "predicted": { background: "#dbeafe", color: "#1e40af" },
+      
+      // Error states
+      "preprocess_error": { background: "#fee2e2", color: "#991b1b" },
+      "ocr_error": { background: "#fee2e2", color: "#991b1b" },
+      "predict_error": { background: "#fee2e2", color: "#991b1b" },
+      "extraction_error": { background: "#fee2e2", color: "#991b1b" },
+      "automated_evaluation_error": { background: "#fee2e2", color: "#991b1b" },
+      "error": { background: "#fee2e2", color: "#991b1b" },
+      
+      // Manual review
+      "manual_review": { background: "#fef08a", color: "#854d0e" },
+      
+      // Complete states
+      "completed": { background: "#d1fae5", color: "#065f46" },
+      "approved": { background: "#d1fae5", color: "#065f46" }
+    };
+
+    return statusColors[status] || { background: "#f3f4f6", color: "#374151" };
+  };
+
+  // Helper function to get status icons
+  const getStatusIcon = (status) => {
+    // All processing/automated states should show spinner
+    const processingStates = [
+      "preprocessing", 
+      "preprocessed",
+      "ocr_extracting", 
+      "predicting",
+      "extraction", 
+      "automated_evaluation"
+    ];
+
+    if (processingStates.includes(status)) {
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{
+          animation: "spin 1s linear infinite",
+          display: "inline-block"
+        }}>
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 6v6"/>
+        </svg>
+      );
+    }
+
+    const iconMap = {
+      "uploaded": "📤",
+      "predicted": "✓",
+      "approved": "✓",
+      "manual_review": "⚠",
+      "error": "✗",
+      "preprocess_error": "✗",
+      "ocr_error": "✗",
+      "predict_error": "✗",
+      "extraction_error": "✗",
+      "automated_evaluation_error": "✗"
+    };
+
+    return iconMap[status] || "";
   };
 
   return (
@@ -271,25 +550,30 @@ function Dashboard() {
                 className={`tab ${activeTab === "to-do" ? "active" : ""}`}
                 onClick={() => setActiveTab("to-do")}
               >
-                To Do
+                To Do ({getTabCounts().todoCount})
               </button>
               <button
                 className={`tab ${activeTab === "approved" ? "active" : ""}`}
                 onClick={() => setActiveTab("approved")}
               >
-                Approved
+                Approved ({getTabCounts().approvedCount})
               </button>
               <button
                 className={`tab ${activeTab === "all" ? "active" : ""}`}
                 onClick={() => setActiveTab("all")}
               >
-                All Invoices
+                All Invoices ({getTabCounts().allCount})
               </button>
             </div>
 
             <div className="search-section">
               <div className="search-box">
-                <input type="text" placeholder="Search Invoice..." />
+                <input 
+                  type="text" 
+                  placeholder="Search by Document Name..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
                 <span className="search-icon">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="11" cy="11" r="8"/>
@@ -297,8 +581,35 @@ function Dashboard() {
                   </svg>
                 </span>
               </div>
-              <input type="date" defaultValue="2024-12-01" className="date-input" />
-              <button className="filter-btn">Filter</button>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <input 
+                  type="date" 
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  title="Start date"
+                  className="date-input" 
+                />
+                <span style={{ color: "#999", fontSize: "0.9rem" }}>—</span>
+                <input 
+                  type="date" 
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  title="End date"
+                  className="date-input" 
+                />
+                {(startDate || endDate) && (
+                  <button 
+                    className="filter-btn"
+                    onClick={() => {
+                      setStartDate("");
+                      setEndDate("");
+                    }}
+                    title="Clear date filters"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="invoices-section">
@@ -341,26 +652,122 @@ function Dashboard() {
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ borderBottom: "2px solid #e8ecf1", background: "#f5f7fa" }}>
-                        <th style={{ padding: "1rem", textAlign: "left", fontWeight: "600" }}>Document Name</th>
-                        <th style={{ padding: "1rem", textAlign: "left", fontWeight: "600" }}>Status</th>
-                        <th style={{ padding: "1rem", textAlign: "left", fontWeight: "600" }}>Uploaded</th>
-                        <th style={{ padding: "1rem", textAlign: "left", fontWeight: "600" }}>Accuracy</th>
+                        <th 
+                          onClick={() => handleSort("document_name")}
+                          style={{ 
+                            padding: "1rem", 
+                            textAlign: "left", 
+                            fontWeight: "600", 
+                            width: "160px",
+                            cursor: "pointer",
+                            userSelect: "none",
+                            transition: "background 0.2s"
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "#eff0f5"}
+                          onMouseLeave={(e) => e.currentTarget.style.background = "#f5f7fa"}
+                          title="Click to sort by document name"
+                        >
+                          Document Name{getSortIndicator("document_name")}
+                        </th>
+                        <th 
+                          onClick={() => handleSort("status")}
+                          style={{ 
+                            padding: "1rem", 
+                            textAlign: "left", 
+                            fontWeight: "600", 
+                            width: "180px",
+                            cursor: "pointer",
+                            userSelect: "none",
+                            transition: "background 0.2s"
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "#eff0f5"}
+                          onMouseLeave={(e) => e.currentTarget.style.background = "#f5f7fa"}
+                          title="Click to sort by status"
+                        >
+                          Status{getSortIndicator("status")}
+                        </th>
+                        <th 
+                          onClick={() => handleSort("created_at")}
+                          style={{ 
+                            padding: "1rem", 
+                            textAlign: "left", 
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            userSelect: "none",
+                            transition: "background 0.2s"
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "#eff0f5"}
+                          onMouseLeave={(e) => e.currentTarget.style.background = "#f5f7fa"}
+                          title="Click to sort by upload date"
+                        >
+                          Uploaded{getSortIndicator("created_at")}
+                        </th>
+                        <th 
+                          onClick={() => handleSort("predicted_accuracy")}
+                          style={{ 
+                            padding: "1rem", 
+                            textAlign: "left", 
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            userSelect: "none",
+                            transition: "background 0.2s"
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "#eff0f5"}
+                          onMouseLeave={(e) => e.currentTarget.style.background = "#f5f7fa"}
+                          title="Click to sort by accuracy"
+                        >
+                          Accuracy{getSortIndicator("predicted_accuracy")}
+                        </th>
                         <th style={{ padding: "1rem", textAlign: "left", fontWeight: "600" }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {getFilteredInvoices().map((doc) => (
-                        <tr key={doc.id} style={{ borderBottom: "1px solid #e8ecf1" }}>
-                          <td style={{ padding: "1rem" }}>{doc.document_name || doc.raw_filename}</td>
-                          <td style={{ padding: "1rem" }}>
+                      {getPaginatedInvoices().map((doc) => (
+                        <tr key={doc.id} style={{ 
+                          borderBottom: "1px solid #e8ecf1"
+                        }}>
+                          <td style={{ 
+                            padding: "1rem", 
+                            width: "160px",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap"
+                          }}>
+                            <a 
+                              onClick={() => setSelectedDocument(doc)}
+                              style={{
+                                color: "#7265cf",
+                                cursor: "pointer",
+                                textDecoration: "none",
+                                borderBottom: "1px solid transparent",
+                                transition: "all 0.2s"
+                              }}
+                              onMouseEnter={(e) => {
+                                e.target.style.textDecoration = "underline";
+                                e.target.style.color = "#5a4db8";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.textDecoration = "none";
+                                e.target.style.color = "#7265cf";
+                              }}
+                              title={doc.document_name || doc.raw_filename}
+                            >
+                              {doc.document_name || doc.raw_filename}
+                            </a>
+                          </td>
+                          <td style={{ padding: "1rem", width: "180px" }}>
                             <span style={{
                               padding: "0.25rem 0.75rem",
                               borderRadius: "4px",
-                              background: doc.status === "uploaded" ? "#fef3c7" : "#d1fae5",
-                              color: doc.status === "uploaded" ? "#92400e" : "#065f46",
+                              background: getStatusColor(doc.status).background,
+                              color: getStatusColor(doc.status).color,
                               fontSize: "0.85rem",
-                              fontWeight: "500"
+                              fontWeight: "500",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.5rem"
                             }}>
+                              {getStatusIcon(doc.status)}
                               {doc.status}
                             </span>
                           </td>
@@ -371,29 +778,238 @@ function Dashboard() {
                             {doc.predicted_accuracy ? `${doc.predicted_accuracy}%` : "-"}
                           </td>
                           <td style={{ padding: "1rem" }}>
-                            <button
-                              onClick={() => setSelectedDocument(doc)}
-                              style={{
-                                padding: "0.5rem 1rem",
-                                background: "#7265cf",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "4px",
-                                cursor: "pointer",
-                                fontSize: "0.9rem",
-                                fontWeight: "500",
-                                transition: "background 0.2s"
-                              }}
-                              onMouseEnter={(e) => e.target.style.background = "#5a4db8"}
-                              onMouseLeave={(e) => e.target.style.background = "#7265cf"}
-                            >
-                              Edit
-                            </button>
+                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                              <button
+                                onClick={() => handleRestart(doc.id)}
+                                disabled={restartingDocumentId === doc.id || ["preprocessing", "preprocessed", "ocr_extracting", "predicting", "extraction", "automated_evaluation"].includes(doc.status)}
+                                title={restartingDocumentId === doc.id ? "Restarting..." : ["preprocessing", "preprocessed", "ocr_extracting", "predicting", "extraction", "automated_evaluation"].includes(doc.status) ? "Cannot restart while processing" : "Restart document"}
+                                style={{
+                                  padding: "0.4rem",
+                                  background: "transparent",
+                                  border: "none",
+                                  cursor: (restartingDocumentId === doc.id || ["preprocessing", "preprocessed", "ocr_extracting", "predicting", "extraction", "automated_evaluation"].includes(doc.status)) ? "not-allowed" : "pointer",
+                                  opacity: (restartingDocumentId === doc.id || ["preprocessing", "preprocessed", "ocr_extracting", "predicting", "extraction", "automated_evaluation"].includes(doc.status)) ? 0.5 : 1,
+                                  transition: "opacity 0.2s, transform 0.1s",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center"
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (restartingDocumentId !== doc.id && !["preprocessing", "preprocessed", "ocr_extracting", "predicting", "extraction", "automated_evaluation"].includes(doc.status)) {
+                                    e.currentTarget.style.opacity = "0.7";
+                                    const svg = e.currentTarget.querySelector("svg");
+                                    if (svg) {
+                                      svg.style.animation = "spin 1s linear infinite";
+                                    }
+                                  }
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (restartingDocumentId !== doc.id && !["preprocessing", "preprocessed", "ocr_extracting", "predicting", "extraction", "automated_evaluation"].includes(doc.status)) {
+                                    e.currentTarget.style.opacity = "1";
+                                    const svg = e.currentTarget.querySelector("svg");
+                                    if (svg) {
+                                      svg.style.animation = "none";
+                                    }
+                                  }
+                                }}
+                                onMouseDown={(e) => {
+                                  if (restartingDocumentId !== doc.id && !["preprocessing", "preprocessed", "ocr_extracting", "predicting", "extraction", "automated_evaluation"].includes(doc.status)) {
+                                    e.currentTarget.style.transform = "scale(0.95)";
+                                  }
+                                }}
+                                onMouseUp={(e) => {
+                                  if (restartingDocumentId !== doc.id && !["preprocessing", "preprocessed", "ocr_extracting", "predicting", "extraction", "automated_evaluation"].includes(doc.status)) {
+                                    e.currentTarget.style.transform = "scale(1)";
+                                  }
+                                }}
+                              >
+                                <svg 
+                                  width="18" 
+                                  height="18" 
+                                  viewBox="0 0 24 24" 
+                                  fill="none" 
+                                  stroke="#666" 
+                                  strokeWidth="2"
+                                  style={{
+                                    animation: restartingDocumentId === doc.id ? "spin 1s linear infinite" : "none",
+                                    display: "inline-block"
+                                  }}
+                                >
+                                  <path d="M21.5 2v6h-6M2.5 22v-6h6"/>
+                                  <path d="M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                                </svg>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+
+                  <div style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "1.5rem",
+                    borderTop: "1px solid #e8ecf1",
+                    backgroundColor: "#fafbfc"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <label style={{ fontSize: "0.9rem", color: "#666" }}>Items per page:</label>
+                      <select 
+                        value={itemsPerPage}
+                        onChange={(e) => setItemsPerPage(parseInt(e.target.value))}
+                        style={{
+                          padding: "0.5rem 0.75rem",
+                          border: "1px solid #ddd",
+                          borderRadius: "4px",
+                          fontSize: "0.9rem",
+                          cursor: "pointer",
+                          backgroundColor: "white"
+                        }}
+                      >
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value={250}>250</option>
+                      </select>
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <button 
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                        title="First page"
+                        style={{
+                          padding: "0.4rem",
+                          background: "transparent",
+                          border: "1px solid #ddd",
+                          borderRadius: "4px",
+                          cursor: currentPage === 1 ? "not-allowed" : "pointer",
+                          opacity: currentPage === 1 ? 0.5 : 1,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          transition: "all 0.2s"
+                        }}
+                        onMouseEnter={(e) => {
+                          if (currentPage !== 1) {
+                            e.currentTarget.style.background = "#f0f0f0";
+                            e.currentTarget.style.borderColor = "#bbb";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                          e.currentTarget.style.borderColor = "#ddd";
+                        }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="19 12 12 19 5 12 12 5 19 12"></polyline>
+                          <line x1="12" y1="19" x2="12" y2="5"></line>
+                        </svg>
+                      </button>
+                      
+                      <button 
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                        title="Previous page"
+                        style={{
+                          padding: "0.4rem",
+                          background: "transparent",
+                          border: "1px solid #ddd",
+                          borderRadius: "4px",
+                          cursor: currentPage === 1 ? "not-allowed" : "pointer",
+                          opacity: currentPage === 1 ? 0.5 : 1,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          transition: "all 0.2s"
+                        }}
+                        onMouseEnter={(e) => {
+                          if (currentPage !== 1) {
+                            e.currentTarget.style.background = "#f0f0f0";
+                            e.currentTarget.style.borderColor = "#bbb";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                          e.currentTarget.style.borderColor = "#ddd";
+                        }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                      </button>
+
+                      <span style={{ fontSize: "0.9rem", color: "#666", whiteSpace: "nowrap", minWidth: "120px", textAlign: "center" }}>
+                        Page {currentPage} of {getTotalPages() || 1}
+                      </span>
+
+                      <button 
+                        onClick={() => setCurrentPage(prev => Math.min(getTotalPages(), prev + 1))}
+                        disabled={currentPage === getTotalPages()}
+                        title="Next page"
+                        style={{
+                          padding: "0.4rem",
+                          background: "transparent",
+                          border: "1px solid #ddd",
+                          borderRadius: "4px",
+                          cursor: currentPage === getTotalPages() ? "not-allowed" : "pointer",
+                          opacity: currentPage === getTotalPages() ? 0.5 : 1,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          transition: "all 0.2s"
+                        }}
+                        onMouseEnter={(e) => {
+                          if (currentPage !== getTotalPages()) {
+                            e.currentTarget.style.background = "#f0f0f0";
+                            e.currentTarget.style.borderColor = "#bbb";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                          e.currentTarget.style.borderColor = "#ddd";
+                        }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="9 18 15 12 9 6"></polyline>
+                        </svg>
+                      </button>
+
+                      <button 
+                        onClick={() => setCurrentPage(getTotalPages())}
+                        disabled={currentPage === getTotalPages()}
+                        title="Last page"
+                        style={{
+                          padding: "0.4rem",
+                          background: "transparent",
+                          border: "1px solid #ddd",
+                          borderRadius: "4px",
+                          cursor: currentPage === getTotalPages() ? "not-allowed" : "pointer",
+                          opacity: currentPage === getTotalPages() ? 0.5 : 1,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          transition: "all 0.2s"
+                        }}
+                        onMouseEnter={(e) => {
+                          if (currentPage !== getTotalPages()) {
+                            e.currentTarget.style.background = "#f0f0f0";
+                            e.currentTarget.style.borderColor = "#bbb";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                          e.currentTarget.style.borderColor = "#ddd";
+                        }}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="5 12 12 5 19 12 12 19 5 12"></polyline>
+                          <line x1="12" y1="5" x2="12" y2="19"></line>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
               {selectedDocument && (

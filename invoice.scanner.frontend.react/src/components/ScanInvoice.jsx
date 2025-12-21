@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./ScanInvoice.css";
+import { API_BASE_URL } from "../utils/api";
 
 function ScanInvoice({ onBack }) {
   const [uploadedImage, setUploadedImage] = useState(null);
@@ -54,7 +55,7 @@ function ScanInvoice({ onBack }) {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("http://localhost:8000/auth/documents/upload", {
+      const response = await fetch(`${API_BASE_URL}/auth/documents/upload`, {
         method: "POST",
         credentials: "include",
         body: formData,

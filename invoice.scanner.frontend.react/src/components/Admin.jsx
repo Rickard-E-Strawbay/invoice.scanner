@@ -2,6 +2,7 @@ import React, { useContext, useState, useEffect } from "react";
 import { AuthContext } from "../contexts/AuthContext";
 import { getPlanName, clearPlanCache } from "../utils/planMapper";
 import "./Dashboard.css";
+import { API_BASE_URL } from "../utils/api";
 
 function Admin() {
   const { user, isAdmin } = useContext(AuthContext);
@@ -77,7 +78,7 @@ function Admin() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("http://localhost:8000/auth/admin/companies", {
+      const response = await fetch(`${API_BASE_URL}/auth/admin/companies`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -94,7 +95,7 @@ function Admin() {
       
       // Also fetch and cache plan names to avoid async rendering
       try {
-        const plansResponse = await fetch("http://localhost:8000/auth/plans", {
+        const plansResponse = await fetch(`${API_BASE_URL}/auth/plans`, {
           credentials: "include",
         });
         if (plansResponse.ok) {
@@ -119,7 +120,7 @@ function Admin() {
   const fetchRoles = async () => {
     try {
       setRolesLoading(true);
-      const response = await fetch("http://localhost:8000/auth/roles", {
+      const response = await fetch(`${API_BASE_URL}/auth/roles`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -144,7 +145,7 @@ function Admin() {
     try {
       setUsersLoading(true);
       setUsersError(null);
-      const response = await fetch("http://localhost:8000/auth/admin/users", {
+      const response = await fetch(`${API_BASE_URL}/auth/admin/users`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -254,8 +255,8 @@ function Admin() {
       setFormLoading(true);
       const method = editingCompanyId ? "PUT" : "POST";
       const url = editingCompanyId 
-        ? `http://localhost:8000/auth/admin/companies/${editingCompanyId}`
-        : "http://localhost:8000/auth/admin/companies";
+        ? `${API_BASE_URL}/auth/admin/companies/${editingCompanyId}`
+        : `${API_BASE_URL}/auth/admin/companies`;
 
       const response = await fetch(url, {
         method: method,
@@ -347,7 +348,7 @@ function Admin() {
 
   const handleToggleCompanyStatus = async (companyId, currentStatus) => {
     try {
-      const response = await fetch(`http://localhost:8000/auth/admin/companies/${companyId}`, {
+      const response = await fetch(`${API_BASE_URL}/auth/admin/companies/${companyId}`, {
         method: "PUT",
         credentials: "include",
         headers: {
@@ -374,7 +375,7 @@ function Admin() {
 
   const handleToggleUserStatus = async (userId, currentStatus) => {
     try {
-      const response = await fetch(`http://localhost:8000/auth/admin/users/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/auth/admin/users/${userId}`, {
         method: "PUT",
         credentials: "include",
         headers: {
@@ -420,8 +421,8 @@ function Admin() {
       setUserFormLoading(true);
       const method = editingUserId ? "PUT" : "POST";
       const url = editingUserId 
-        ? `http://localhost:8000/auth/admin/users/${editingUserId}`
-        : "http://localhost:8000/auth/admin/users";
+        ? `${API_BASE_URL}/auth/admin/users/${editingUserId}`
+        : `${API_BASE_URL}/auth/admin/users`;
 
       const response = await fetch(url, {
         method: method,
@@ -498,7 +499,7 @@ function Admin() {
     if (!userToDelete) return;
 
     try {
-      const response = await fetch(`http://localhost:8000/auth/admin/users/${userToDelete.id}`, {
+      const response = await fetch(`${API_BASE_URL}/auth/admin/users/${userToDelete.id}`, {
         method: "DELETE",
         credentials: "include",
         headers: {
@@ -529,7 +530,7 @@ function Admin() {
 
   const handleSendPasswordReset = async (userId, userEmail) => {
     try {
-      const response = await fetch(`http://localhost:8000/auth/admin/users/${userId}/send-password-reset`, {
+      const response = await fetch(`${API_BASE_URL}/auth/admin/users/${userId}/send-password-reset`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -569,7 +570,7 @@ function Admin() {
     if (!companyToDelete) return;
 
     try {
-      const response = await fetch(`http://localhost:8000/auth/admin/companies/${companyToDelete.id}`, {
+      const response = await fetch(`${API_BASE_URL}/auth/admin/companies/${companyToDelete.id}`, {
         method: "DELETE",
         credentials: "include",
         headers: {

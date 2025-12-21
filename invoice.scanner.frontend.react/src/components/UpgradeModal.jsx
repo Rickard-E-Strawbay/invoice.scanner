@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useContext } from "react";
 import { AuthContext } from "../contexts/AuthContext";
+import { API_BASE_URL } from "../utils/api";
 
 function UpgradeModal({ plan, currentPlan, onClose }) {
   const { user, checkAuth } = useContext(AuthContext);
@@ -28,7 +29,7 @@ function UpgradeModal({ plan, currentPlan, onClose }) {
 
   const fetchPaymentMethods = async () => {
     try {
-      const response = await fetch("http://localhost:8000/auth/payment-methods", {
+      const response = await fetch(`${API_BASE_URL}/auth/payment-methods`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -47,7 +48,7 @@ function UpgradeModal({ plan, currentPlan, onClose }) {
 
   const fetchBillingDetails = async () => {
     try {
-      const response = await fetch("http://localhost:8000/auth/billing-details?_t=" + Date.now(), {
+      const response = await fetch(`${API_BASE_URL}/auth/billing-details?_t=${Date.now()}`, {
         method: "GET",
         headers: { 
           "Content-Type": "application/json",
@@ -99,7 +100,7 @@ function UpgradeModal({ plan, currentPlan, onClose }) {
 
     setFormLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/auth/billing-details", {
+      const response = await fetch(`${API_BASE_URL}/auth/billing-details`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -125,7 +126,7 @@ function UpgradeModal({ plan, currentPlan, onClose }) {
   const handleUpgrade = async () => {
     setStep("processing");
     try {
-      const response = await fetch("http://localhost:8000/auth/change-plan", {
+      const response = await fetch(`${API_BASE_URL}/auth/change-plan`, {
         method: "POST",
         credentials: "include",
         headers: {

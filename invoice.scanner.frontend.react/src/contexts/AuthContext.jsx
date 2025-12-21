@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect } from "react";
+import { apiGet, apiPost } from "../utils/api";
 
 export const AuthContext = createContext();
 
@@ -13,12 +14,15 @@ export function AuthProvider({ children }) {
 
   const checkAuth = async () => {
     try {
-      const res = await fetch("http://localhost:8000/auth/me", {
-        credentials: "include",
-      });
+      const res = await apiGet("/auth/me");
       if (res.ok) {
-        const data = await res.json();
-        setUser(data);
+        try {
+          const data = await res.json();
+          setUser(data);
+        } catch (jsonErr) {
+          console.error("Failed to parse JSON response:", jsonErr);
+          console.error("Response text:", await res.clone().text());
+        }
       }
     } catch (err) {
       console.error("Auth check failed:", err);
@@ -37,10 +41,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try {
-      await fetch("http://localhost:8000/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      });
+      await apiPost("/auth/logout");
     } catch (err) {
       console.error("Logout failed:", err);
     } finally {

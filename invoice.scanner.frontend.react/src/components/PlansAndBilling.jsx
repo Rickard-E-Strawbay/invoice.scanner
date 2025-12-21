@@ -3,6 +3,7 @@ import { AuthContext } from "../contexts/AuthContext";
 import FeatureModal from "./FeatureModal";
 import UpgradeModal from "./UpgradeModal";
 import "./Dashboard.css";
+import { API_BASE_URL } from "../utils/api";
 
 function PlansAndBilling({ onNavigate }) {
   const { user, isAdmin } = useContext(AuthContext);
@@ -31,7 +32,7 @@ function PlansAndBilling({ onNavigate }) {
 
   const fetchFeatures = async () => {
     try {
-      const response = await fetch("http://localhost:8000/auth/features", {
+      const response = await fetch(`${API_BASE_URL}/auth/features`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -49,7 +50,7 @@ function PlansAndBilling({ onNavigate }) {
   const fetchBillingData = async () => {
     try {
       setBillingLoading(true);
-      const response = await fetch("http://localhost:8000/auth/billing-details", {
+      const response = await fetch(`${API_BASE_URL}/auth/billing-details`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -73,7 +74,7 @@ function PlansAndBilling({ onNavigate }) {
   const fetchPlans = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:8000/auth/plans", {
+      const response = await fetch(`${API_BASE_URL}/auth/plans`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

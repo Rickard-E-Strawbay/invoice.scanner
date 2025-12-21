@@ -29,5 +29,5 @@ USER vscode
 # Expose port 5000
 EXPOSE 5000
 
-# Run the Flask app med debugpy och vänta på klient
-CMD ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "main.py", "--host", "0.0.0.0", "--port", "8000"]
+# Run the Flask app
+CMD ["python", "main.py"]

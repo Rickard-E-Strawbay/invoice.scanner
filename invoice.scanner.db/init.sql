@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS documents(
 );
 
 CREATE TABLE IF NOT EXISTS document_status(
-    id INT PRIMARY KEY DEFAULT AUTO_INCREMENT,
+    id SERIAL PRIMARY KEY,
     sequence INT UNIQUE NOT NULL,
     status_key VARCHAR(50) UNIQUE NOT NULL,
     status_name VARCHAR(100) NOT NULL,
@@ -138,9 +138,9 @@ INSERT INTO price_plans
 (price_plan_key, plan_name, plan_description, price_per_month, features) VALUES
 ( 1000,'Admin', 'Unlimited', 0, '{}'),
 ( 40,'Enterprise', 'Up to 20k invoices per month (€13c/invoice)', 1400, '{"api_access": true, "ftp_integration": true, "auto_export": true,"email_scan": false, "batch_scanning": true, "batch_download": true}'),
-( 40,'Large', 'Up to 5k invoices per month (€18c/invoice)', 909, '{"api_access": true, "ftp_integration": true, "auto_export": true,"email_scan": false, "batch_scanning": true, "batch_download": true}'),
-( 30,'Medium', 'Up to 1k invoices per month (€28c/invoice)', 272, '{"api_access": false, "ftp_integration": true, "auto_export": false,"email_scan": false, "batch_scanning": true, "batch_download": true}'),
-( 30,'Basic', 'Up to 100 invoices per month (€36c/invoice)', 36, '{"api_access": false, "ftp_integration": false, "auto_export": false,"email_scan": false, "batch_scanning": false, "batch_download": false}'),
+( 30,'Large', 'Up to 5k invoices per month (€18c/invoice)', 909, '{"api_access": true, "ftp_integration": true, "auto_export": true,"email_scan": false, "batch_scanning": true, "batch_download": true}'),
+( 20,'Medium', 'Up to 1k invoices per month (€28c/invoice)', 272, '{"api_access": false, "ftp_integration": true, "auto_export": false,"email_scan": false, "batch_scanning": true, "batch_download": true}'),
+( 15,'Basic', 'Up to 100 invoices per month (€36c/invoice)', 36, '{"api_access": false, "ftp_integration": false, "auto_export": false,"email_scan": false, "batch_scanning": false, "batch_download": false}'),
 ( 10,'Starter', 'Up to 10 invoices per month', 0, '{}');
 
 INSERT INTO user_roles (role_name, role_key, role_description) VALUES
@@ -154,14 +154,13 @@ INSERT INTO users_company (company_email, company_name, organization_id, company
 ('info@strawbay.se', 'Strawbay AB', '559421-9601', TRUE, 1000);
 
 -- Insert sample user
-INSERT INTO users (email, password_hash, name, role_key, company_id, terms_accepted,price_plan_key, user_enabled, terms_version) 
+INSERT INTO users (email, password_hash, name, role_key, company_id, terms_accepted, user_enabled, terms_version) 
 SELECT 
     'rickard@strawbay.io', 
     'scrypt:32768:8:1$volUxXkGjGMmZaHy$ef9cfe94c1a1d84dbce69dfa5839570d23827daf5e46b67ffc81bf07ca5aca4da82f03144755b47fa73cff99d8b8cadcb6315a58bdc7d98026d123c2fd12d139',
     'Rickard Elmqvist', 
     1000,
     id,
-    1000,
     TRUE,
     TRUE,
     '1.0'

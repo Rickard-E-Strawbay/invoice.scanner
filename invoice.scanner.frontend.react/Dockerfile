@@ -1,20 +1,17 @@
-# 1. Basimage med Node
-FROM node:20
+FROM node:20-alpine
 
-# 2. Sätt arbetskatalog
 WORKDIR /app
 
-# 3. Kopiera package.json och package-lock.json
-COPY package*.json ./
+COPY package.json ./
 
-# 4. Rensa och installera om (för ARM64-kompatibilitet)
-RUN rm -rf node_modules package-lock.json && npm install
+# Install with all optional dependencies explicitly included
+RUN npm install --legacy-peer-deps && \
+    npm install -D @rollup/rollup-linux-arm64-musl
 
-# 5. Kopiera all frontend-kod
 COPY . .
 
-# 6. Exponera port för Vite dev-server
+EXPOSE 3000
 EXPOSE 5173
 
-# 7. Starta Vite dev-server med Node-debug
-CMD ["npm", "run", "dev", "--", "--host", "--port", "3000"]
+# Run Vite development server with HMR enabled
+CMD ["npm", "run", "dev"]
