@@ -205,11 +205,162 @@ Push to branch (main/test)
 
 ---
 
-## NÄSTA STEG
-1. **Ge projekt-ID:** Vad är GCP test & prod project IDs?
-2. **Ge region:** Europe-west1 eller annan?
-3. **Domain:** Har du domain eller använder GCP-genererade URLs?
-4. **Börja FASE 0:** Vi kan starta med GCP API-aktivering
+## GCP PROJEKT KONFIGURATION
+
+**GCP Project IDs:**
+- ✅ Test: `strawbayscannertest`
+- ✅ Prod: `strawbayscannerprod`
+
+**Region:**
+- ✅ `europe-west1` (Belgien)
+
+**URLs:**
+- ✅ GCP-genererade URLs (ex: `api-xxxxx.run.app`)
+
+## GCP SECRETS STRATEGI (GODKÄND)
+
+**GitHub Secrets (Option A - Två separata):**
+- `GCP_SA_KEY_TEST` → Service Account JSON från TEST-projekt
+- `GCP_SA_KEY_PROD` → Service Account JSON från PROD-projekt
+
+**Varför två:** CI/CD pipeline kan automatiskt välja rätt secret baserat på miljö (test branch → TEST secret, main branch → PROD secret)
+
+**Säkerhet:**
+- ✅ Aldrig lagra secrets i kod
+- ✅ GitHub Secrets är encrypted
+- ✅ Loggar visar inte secret-värden
+- ✅ Endast Actions kan läsa secrets under körning
+
+---
+
+## GCP SETUP STATUS - FASE 0: ✅ 100% KLART
+
+**APIs Aktiverade: ✅ KLART**
+- ✅ TEST-projekt: Alla 5 APIs enabled
+- ✅ PROD-projekt: Alla 5 APIs enabled
+
+**Service Accounts: ✅ KLART**
+- ✅ TEST-projekt: `github-deployer` skapad (Editor role)
+- ✅ PROD-projekt: `github-deployer` skapad (Editor role)
+
+**JSON-Nycklar: ✅ KLART**
+- ✅ TEST-projekt: JSON-nyckel nedladdad
+- ✅ PROD-projekt: JSON-nyckel nedladdad
+
+**GitHub Secrets: ✅ KLART**
+- ✅ `GCP_SA_KEY_TEST` → Ligger i GitHub
+- ✅ `GCP_SA_KEY_PROD` → Ligger i GitHub
+
+**Progress FASE 0:**
+- ✅ [x] APIs aktiverade (test + prod)
+- ✅ [x] Service Accounts skapade (test + prod)
+- ✅ [x] JSON-nycklar exporterade (test + prod)
+- ✅ [x] GitHub Secrets konfigurerad (Option A)
+
+---
+
+## IMPLEMENTATION CHECKLISTA - UPPDATERAD
+
+### FASE 0: Setup ✅ KLART (100%)
+- ✅ GCP Project IDs dokumenterade
+- ✅ Aktivera APIs: Cloud Run, Cloud SQL, Artifact Registry, Secret Manager, Cloud Tasks
+- ✅ Service Accounts skapade (test + prod)
+- ✅ GitHub Secrets konfigurerad: `GCP_SA_KEY_TEST` + `GCP_SA_KEY_PROD`
+
+### FASE 1: GCP Secret Manager (0% done)
+- [ ] Skapa secrets i GCP Secret Manager (test project):
+  - `db_password`, `db_user`, `api_key`, `gmail_password`, etc.
+- [ ] Samma secrets i prod project
+- [ ] Testa läsning från GitHub Actions
+
+### FASE 2: Cloud SQL Setup (0% done)
+- [ ] Skapa PostgreSQL instans (test)
+  - Name: `invoice-scanner-test`
+  - Network: Private IP
+- [ ] Skapa PostgreSQL instans (prod)
+  - Name: `invoice-scanner-prod`
+  - Backup enabled
+- [ ] Kör init.sql på båda
+- [ ] Verifiera anslutning från Cloud Run
+
+### FASE 3: Docker Images (0% done)
+- [ ] Dockerfile API: Ready för Cloud Run
+- [ ] Dockerfile Frontend: Ready för Cloud Run
+- [ ] Dockerfile Worker: Ready för Cloud Tasks
+- [ ] Build & push till Artifact Registry (test först)
+
+### FASE 4: GitHub Actions Workflows (0% done)
+- [ ] `.github/workflows/build.yml` - Build & push images
+- [ ] `.github/workflows/test-deploy.yml` - Deploy to TEST
+- [ ] `.github/workflows/prod-deploy.yml` - Deploy to PROD with manual approval
+- [ ] Testa alla workflows
+
+### FASE 5: Cloud Run Deployment (0% done)
+- [ ] Deploy API service (test)
+  - Environment variables från Secret Manager
+  - Cloud SQL proxy
+- [ ] Deploy Frontend service (test)
+  - Build from Docker image
+- [ ] Setup Cloud Storage bucket (documents)
+- [ ] Samma setup för prod
+
+### FASE 6: Cloud Tasks Setup (0% done)
+- [ ] Konfigurera Cloud Tasks queue för workers
+- [ ] Cloud Pub/Sub topics för events
+- [ ] Worker-container ready för on-demand execution
+
+### FASE 7: Testing & Verification (0% done)
+- [ ] Test pipeline från GitHub push
+- [ ] Manual approval flow testat
+- [ ] Smoke tests på Cloud Run services
+- [ ] Database connectivity verified
+- [ ] Secrets läses korrekt
+
+### FASE 8: Monitoring & Alerts (0% done)
+- [ ] Google Cloud Logging configured
+- [ ] Error alerts setup
+- [ ] Performance monitoring
+- [ ] Backup verification (prod)
+
+---
+
+### TEST-Projektet (`strawbayscannertest`)
+
+**Aktiverade APIs:**
+- ✅ Cloud Run Admin API
+- ✅ Cloud SQL Admin API
+- ✅ Artifact Registry API
+- ✅ Secret Manager API
+- ✅ Cloud Tasks API
+
+**Service Accounts:**
+- ✅ `github-deployer` (Editor role) - Behöver JSON-nyckel
+
+**Kommande:**
+- ⏳ JSON-nyckel exporterad
+- ⏳ Cloud SQL PostgreSQL instans
+- ⏳ Cloud Storage bucket
+- ⏳ Secret Manager secrets
+
+---
+
+### PROD-Projektet (`strawbayscannerprod`)
+
+**Aktiverade APIs:**
+- ✅ Cloud Run Admin API
+- ✅ Cloud SQL Admin API
+- ✅ Artifact Registry API
+- ✅ Secret Manager API
+- ✅ Cloud Tasks API
+
+**Service Accounts:**
+- ✅ `github-deployer` (Editor role) - Behöver JSON-nyckel
+
+**Kommande:**
+- ⏳ JSON-nyckel exporterad
+- ⏳ Cloud SQL PostgreSQL instans (med backup)
+- ⏳ Cloud Storage bucket
+- ⏳ Secret Manager secrets
 
 ---
 
