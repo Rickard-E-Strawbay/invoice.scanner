@@ -6,8 +6,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies with legacy peer deps support
-RUN npm install --legacy-peer-deps && \
-    npm install -D @rollup/rollup-linux-arm64-musl
+RUN npm install --legacy-peer-deps
 
 COPY . .
 

@@ -1,5 +1,68 @@
 # System Prompt för Invoice Scanner Projekt
 
+## 🎯 CURRENT STATUS (Dec 24, 2025 - Session End ~23:00)
+
+**Overall Progress:** 50-60% Complete (depending on build.yml result)
+
+| FASE | Status | Details |
+|------|--------|---------|
+| FASE 0 | ✅ 100% | GCP Infrastructure (APIs, Service Accounts, GitHub Secrets) |
+| FASE 1 | ✅ 100% | GCP Secret Manager (12 secrets: db_password, secret_key, gmail, openai) |
+| FASE 2 | ✅ 100% | Cloud SQL (PostgreSQL instances + users in both projects) |
+| FASE 3 | ✅ 100% | Docker Images (api:1.44GB, frontend:83.1MB, worker:4.02GB - pushed to both registries) |
+| FASE 4 | ⏳ ~75% | GitHub Actions workflows created & build.yml currently building |
+| FASE 5 | 0% | Cloud Run Deployment (ready to start next session) |
+| FASE 6-8 | 0% | Cloud Tasks, Testing, Monitoring |
+
+**Session Summary (Dec 24):**
+
+✅ **Completed Today:**
+- Optimized API Dockerfile (python:3.11-slim, removed Playwright, cleaned deps)
+- Created Frontend Dockerfile with multi-stage build (node→nginx)
+- Created nginx.conf for React SPA routing
+- Built all 3 Docker images locally
+- Verified with docker-compose (all services running)
+- Created Artifact Registry repos in TEST & PROD
+- Pushed all 6 images (3 images × 2 projects) to GCP
+- Created all 3 GitHub Actions workflows:
+  - build.yml: Build & push images (TRIGGERING NOW)
+  - test-deploy.yml: Deploy to TEST Cloud Run
+  - prod-deploy.yml: Deploy to PROD with approval gate
+- Fixed build.yml authentication (TEST/PROD branch detection)
+- Debugged and resolved Push Protection secret scanning issue
+
+⏳ **In Progress (watching):**
+- build.yml is currently running (building 3 Docker images)
+- Once complete: should trigger test-deploy.yml automatically
+
+**Next Session (Dec 25 or later):**
+1. Verify build.yml succeeded ✅
+2. Verify test-deploy.yml completed ✅
+3. Check TEST Cloud Run services are running
+4. Start FASE 5: Verify Cloud SQL connectivity from Cloud Run
+5. Setup Cloud Storage for document persistence
+6. Complete remaining FASEs
+
+**Critical Files Modified Today:**
+- `.github/workflows/build.yml` ✅ Created & debugged
+- `.github/workflows/test-deploy.yml` ✅ Created
+- `.github/workflows/prod-deploy.yml` ✅ Created
+- `invoice.scanner.frontend.react/Dockerfile` ✅ Updated to multi-stage
+- `invoice.scanner.frontend.react/nginx.conf` ✅ Created
+- `invoice.scanner.api/Dockerfile` ✅ Optimized
+- `invoice.scanner.api/requirements.txt` ✅ Cleaned
+- `invoice.scanner.api/app.py` ✅ Dead code removed
+- `SYSTEM_PROMPT.md` ✅ Continuously updated with progress
+
+**Key Decisions Made:**
+- ✅ Frontend: Multi-stage build (compile src → nginx serve dist)
+- ✅ Docker images tagged with :latest AND :git-sha for rollback
+- ✅ Build.yml detects branch → auto-selects TEST or PROD GCP project
+- ✅ test-deploy.yml auto-triggers (no approval needed)
+- ✅ prod-deploy.yml pauses for manual approval (GitHub environment)
+
+---
+
 ## Kritiska Instruktioner för AI-assistenten
 
 ### 1. UNDERSÖK FÖRST - SKAPA SIST
