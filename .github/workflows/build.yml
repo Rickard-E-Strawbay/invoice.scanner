@@ -24,18 +24,24 @@ jobs:
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "ENVIRONMENT=prod" >> $GITHUB_ENV
             echo "PROJECT_ID=strawbayscannerprod" >> $GITHUB_ENV
-            echo "GCP_SA_KEY=${{ secrets.GCP_SA_KEY_PROD }}" >> $GITHUB_ENV
           else
             echo "ENVIRONMENT=test" >> $GITHUB_ENV
             echo "PROJECT_ID=strawbayscannertest" >> $GITHUB_ENV
-            echo "GCP_SA_KEY=${{ secrets.GCP_SA_KEY_TEST }}" >> $GITHUB_ENV
           fi
 
-      # Authenticate to Google Cloud
-      - name: Authenticate to Google Cloud
+      # Authenticate to Google Cloud (PROD)
+      - name: Authenticate to Google Cloud (PROD)
+        if: github.ref == 'refs/heads/main'
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ env.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      # Authenticate to Google Cloud (TEST)
+      - name: Authenticate to Google Cloud (TEST)
+        if: github.ref != 'refs/heads/main'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_TEST }}
 
       # Setup Google Cloud SDK
       - name: Set up Cloud SDK
