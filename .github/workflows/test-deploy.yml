@@ -47,19 +47,7 @@ jobs:
             --cpu=1 \
             --timeout=1800 \
             --max-instances=10 \
-            --set-env-vars="\
-DATABASE_HOST=invoice-scanner-test.c.strawbayscannertest.cloudsql.googleapis.com,\
-DATABASE_NAME=invoice_scanner,\
-DATABASE_USER=scanner_test,\
-DATABASE_PASSWORD=${{ env.DB_PASSWORD }},\
-DATABASE_PORT=5432,\
-FLASK_SECRET_KEY=${{ env.SECRET_KEY }},\
-FLASK_ENV=test,\
-EMAIL_SENDER=${{ env.GMAIL_SENDER }},\
-EMAIL_PASSWORD=${{ env.GMAIL_PASSWORD }},\
-OPENAI_API_KEY=${{ env.OPENAI_API_KEY }},\
-GCP_PROJECT=strawbayscannertest,\
-GCP_REGION=europe-west1"
+            --set-env-vars DATABASE_HOST=invoice-scanner-test.c.strawbayscannertest.cloudsql.googleapis.com,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_test,DATABASE_PASSWORD=${{ env.DB_PASSWORD }},DATABASE_PORT=5432,FLASK_SECRET_KEY=${{ env.SECRET_KEY }},FLASK_ENV=test,EMAIL_SENDER=${{ env.GMAIL_SENDER }},EMAIL_PASSWORD=${{ env.GMAIL_PASSWORD }},OPENAI_API_KEY=${{ env.OPENAI_API_KEY }},GCP_PROJECT=strawbayscannertest,GCP_REGION=europe-west1
 
       # Deploy Frontend to Cloud Run
       - name: Deploy Frontend to Cloud Run
@@ -74,9 +62,7 @@ GCP_REGION=europe-west1"
             --cpu=1 \
             --timeout=3600 \
             --max-instances=10 \
-            --set-env-vars="\
-API_URL=https://invoice-scanner-api-test.run.app,\
-ENVIRONMENT=test"
+            --set-env-vars API_URL=https://invoice-scanner-api-test.run.app,ENVIRONMENT=test
 
       # Get the deployed URLs
       - name: Get service URLs
