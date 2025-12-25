@@ -1,8 +1,8 @@
 # System Prompt för Invoice Scanner Projekt
 
-## 🎯 CURRENT STATUS (Dec 25, 2025 - ~21:00)
+## 🎯 CURRENT STATUS (Dec 25, 2025 - ~19:15)
 
-**Overall Progress:** 60% Complete
+**Overall Progress:** 75% Complete
 
 | FASE | Status | Details |
 |------|--------|---------|
@@ -10,64 +10,38 @@
 | FASE 1 | ✅ 100% | GCP Secret Manager (12 secrets: db_password, secret_key, gmail, openai) |
 | FASE 2 | ✅ 100% | Cloud SQL (PostgreSQL instances + users in both projects) |
 | FASE 3 | ✅ 100% | Docker Images (api, frontend, worker - pushed to both registries) |
-| FASE 4 | ⏳ 90% | GitHub Actions: Restructured for PR-based workflow |
+| FASE 4 | ✅ 100% | GitHub Actions: Single unified pipeline.yml with conditional jobs |
+| FASE 4B | ✅ 100% | Local Docker-Compose: Tested and verified, port standardization |
 | FASE 5 | 0% | Cloud Run Deployment (ready after first PR merge) |
 | FASE 6-8 | 0% | Cloud Tasks, Testing, Monitoring |
 
-**Session Dec 25 - CI/CD Restructure:**
+**Session Dec 25 - Local Verification + Port Standardization:**
 
 ✅ **Completed:**
-1. Identified `workflow_run` with `branches` filter is not supported on GitHub Actions
-2. Replaced with simplified push-trigger architecture
-3. Renamed old workflows to .bak (build.yml.bak, test-deploy.yml.bak, prod-deploy.yml.bak)
-4. Created 3 new workflows with PR-based safety
+1. Standardized environment variables: DATABASE_* convention everywhere
+2. docker-compose.yml updated to use DATABASE_HOST, DATABASE_PORT, etc.
+3. db_config.py made flexible (supports both DATABASE_* and DB_* for backwards compat)
+4. Verified all services start locally (API, Frontend, Workers, Redis, DB)
+5. API /health endpoint working (returns HTTP 200)
+6. **Port Standardization:** Frontend now uses port 8080 (same as Cloud Run)
+   - Before: docker-compose 3000→3000, Cloud Run 8080
+   - After: Both use 8080 for consistency
+   - Dockerfile/start.sh already configured for 8080
 
-**New CI/CD Architecture (Dec 25):**
-
-Three workflows working together:
-- `build.yml` - Triggers on push to re_deploy_start or main
-- `test-deploy.yml` - Triggers on push to re_deploy_start (after PR merge)
-- `prod-deploy.yml` - Triggers on push to main + requires GitHub environment approval
-
-**What You Need To Do NEXT:**
-
-1. **Setup GitHub Branch Protection Rules** (in GitHub UI):
-   ```
-   For re_deploy_start:
-   - Require pull request before merging
-   - Require 1 approval
-   - Dismiss stale PR approvals when new commits pushed
-   
-   For main:
-   - Require pull request before merging
-   - Require 1-2 approvals
-   - Require status checks (build.yml) pass before merge
-   - Dismiss stale PR approvals when new commits pushed
-   ```
-
-2. **Test the workflow:**
-   - Create test PR on re_deploy_start
-   - Get approval
-   - Merge PR
-   - Watch: build.yml → test-deploy.yml runs automatically
-   - Verify TEST services deployed to Cloud Run
-
-3. **After TEST works:**
-   - Create PR main ← re_deploy_start
-   - Get approval
-   - Merge to main
-   - build.yml runs
-   - prod-deploy.yml requires manual approval in GitHub
-   - Click "Approve" in GitHub environment
-   - prod-deploy.yml completes
+**Local Testing Results:**
+- ✅ Docker-compose up: 13/13 containers running
+- ✅ Database: Healthy (PostgreSQL)
+- ✅ Redis: Healthy
+- ✅ API: Running on 5001, /health endpoint responds with 200
+- ✅ Frontend: Running on 8080 (now matches Cloud Run)
+- ✅ All Celery workers: Healthy
+- ✅ Flower monitoring: Running on 5555
 
 **Git Status:**
 - Branch: `re_deploy_start`
-- Old workflows backed up as .yml.bak files
-- New workflows created and ready
-- Ready to push and test
-4. Then can verify TEST services running in Cloud Run
-5. Finally FASE 5: Production deployment
+- Modified: docker-compose.yml (port 3000→8080 for frontend)
+- Modified: SYSTEM_PROMPT.md (this document)
+- Ready to commit
 
 ---
 
@@ -199,9 +173,9 @@ När du gör ändringar, förklara:
 
 ---
 
-## CI/CD PIPELINE - DETALJERAD DEFINITION (v2 - Dec 25)
+## CI/CD PIPELINE - DETALJERAD DEFINITION (v3 - UNIFIED - Dec 25)
 
-### UPPDATERAD Branch-strategi (PR-baserad säkerhet)
+### Branch-strategi (PR-baserad säkerhet)
 
 ```
 1. Developer creates feature branch
@@ -215,41 +189,63 @@ När du gör ändringar, förklara:
    └─ Developer merges to re_deploy_start
 
 4. After merge to re_deploy_start:
-   └─ build.yml triggers automatically (push event)
+   └─ pipeline.yml:build triggers automatically (push event)
+   └─ Auto-detects branch = re_deploy_start
    └─ Builds images, pushes to TEST Artifact Registry
-   └─ test-deploy.yml triggers automatically (push event)
+   └─ pipeline.yml:deploy-test triggers automatically (after build)
    └─ Deploys to TEST Cloud Run
    └─ Smoke tests run
    └─ ✅ TEST environment live
 
 5. For PROD: Developer creates PR main ← re_deploy_start
    └─ GitHub: Requires 1-2 approvals
-   └─ GitHub: Requires build.yml status check = success
    └─ GitHub: PR must be reviewed
 
 6. Reviewer approves PROD PR
    └─ Developer merges to main
 
 7. After merge to main:
-   └─ build.yml triggers automatically (push event)
+   └─ pipeline.yml:build triggers automatically (push event)
+   └─ Auto-detects branch = main
    └─ Builds images, pushes to PROD Artifact Registry
-   └─ prod-deploy.yml triggers automatically (push event)
+   └─ pipeline.yml:deploy-prod job appears (waiting)
    └─ ⚠️ MANUAL APPROVAL GATE (GitHub environment: "production")
-   └─ Admin/Reviewer must click "Approve" in GitHub UI
+   └─ Admin/Reviewer clicks "Approve" in GitHub UI
+   └─ pipeline.yml:deploy-prod resumes (24h timeout)
    └─ Deploys to PROD Cloud Run
    └─ Smoke tests run
    └─ ✅ PROD environment live
 ```
 
-### GitHub Actions Workflows (3 st - UPDATED v2)
+### GitHub Actions Workflows (1 file, 3 conditional jobs - FINAL)
 
-#### 1️⃣ build.yml - Build & Push Docker Images
-**Triggers:** Push to `re_deploy_start` OR `main` (AFTER PR merge)
+**File:** `.github/workflows/pipeline.yml`
+
+**Structure:**
+```yaml
+on:
+  push:
+    branches: [re_deploy_start, main]
+
+jobs:
+  build: ...              # Always runs (detects branch)
+  deploy-test: ...        # Runs only on re_deploy_start (needs: build)
+  deploy-prod: ...        # Runs only on main (needs: build, environment: production)
+```
+
+#### 1️⃣ build job - Build & Push Docker Images (UNIFIED)
+**Triggers:** Push to `re_deploy_start` OR `main`
 
 **Auto-detects branch and uses correct GCP project:**
 ```yaml
-if main → use GCP_SA_KEY_PROD, push to strawbayscannerprod registry
-if re_deploy_start → use GCP_SA_KEY_TEST, push to strawbayscannertest registry
+Branch detection logic (in first step):
+  if github.ref == 'refs/heads/main' 
+    → use GCP_SA_KEY_PROD 
+    → push to strawbayscannerprod registry
+  
+  else (re_deploy_start)
+    → use GCP_SA_KEY_TEST 
+    → push to strawbayscannertest registry
 ```
 
 **Docker images som byggs:**
@@ -261,30 +257,38 @@ if re_deploy_start → use GCP_SA_KEY_TEST, push to strawbayscannertest registry
 - TEST-projekt: `europe-west1-docker.pkg.dev/strawbayscannertest/invoice-scanner/`
 - PROD-projekt: `europe-west1-docker.pkg.dev/strawbayscannerprod/invoice-scanner/`
 
-**Steg i build.yml:**
+**Steps i build job:**
 ```yaml
 1. Checkout code
-2. Detect branch → determine GCP project + registry
+2. Detect branch → determine GCP project + registry + SA key
 3. Authenticate to Google Cloud (GCP_SA_KEY_TEST or GCP_SA_KEY_PROD)
 4. Configure Docker authentication to Artifact Registry
 5. Build API image:     docker build → tag latest + sha → push
 6. Build Frontend image: docker build → tag latest + sha → push
 7. Build Worker image:   docker build → tag latest + sha → push (if exists)
-8. Summary: Show which environment was deployed to
+8. Build summary: Show which environment + registry used
 ```
 
-#### 2️⃣ test-deploy.yml - Deploy to TEST
-**Triggers:** Push to `re_deploy_start` (after PR merge)
+**Outputs from build:**
+- `registry` - Which Artifact Registry used
+- `environment` - "test" or "prod"
+- `gcp_project` - Project ID used
+
+#### 2️⃣ deploy-test job - Deploy to TEST (Conditional on re_deploy_start)
+**Triggers:** After pipeline.yml:build completes, ONLY if on `re_deploy_start`
+**Condition:** `if: github.ref == 'refs/heads/re_deploy_start'`
 **Environment:** GitHub environment "test" (no approval required)
+**Dependencies:** `needs: build`
 
 **What it does:**
-1. Triggers after build.yml completes (same branch push)
-2. Authenticates to GCP TEST project
-3. Fetches 5 secrets from GCP Secret Manager (test project)
-4. Deploys invoice-scanner-api-test to Cloud Run
-5. Deploys invoice-scanner-frontend-test to Cloud Run
-6. Runs smoke tests (curl /health endpoint)
-7. Outputs service URLs
+1. Waits for build job to complete
+2. Only runs if branch is re_deploy_start
+3. Authenticates to GCP TEST project
+4. Fetches 5 secrets from GCP Secret Manager (test project)
+5. Deploys invoice-scanner-api-test to Cloud Run
+6. Deploys invoice-scanner-frontend-test to Cloud Run
+7. Runs smoke tests (curl /health endpoint)
+8. Outputs service URLs
 
 **Configuration:**
 - Memory: API 512Mi, Frontend 256Mi
@@ -292,98 +296,31 @@ if re_deploy_start → use GCP_SA_KEY_TEST, push to strawbayscannertest registry
 - Max instances: 10 each
 - Environment variables: Auto-injected from GCP secrets
 
-#### 3️⃣ prod-deploy.yml - Deploy to PROD (with manual approval)
-**Triggers:** Push to `main` (after PR merge)
-**Environment:** GitHub environment "production" (requires approval)
+#### 3️⃣ deploy-prod job - Deploy to PROD (Conditional on main, with manual approval)
+**Triggers:** After pipeline.yml:build completes, ONLY if on `main`
+**Condition:** `if: github.ref == 'refs/heads/main'`
+**Environment:** GitHub environment "production" (REQUIRES manual approval)
+**Dependencies:** `needs: build`
 
 **What it does:**
-1. Triggers after build.yml completes (main branch push)
-2. ⚠️ WAITS for manual approval in GitHub (24h timeout)
-3. After approval: Authenticates to GCP PROD project
-4. Fetches 5 secrets from GCP Secret Manager (prod project)
-5. Deploys invoice-scanner-api-prod to Cloud Run
-6. Deploys invoice-scanner-frontend-prod to Cloud Run
-7. Runs smoke tests
-8. Outputs service URLs
+1. Waits for build job to complete
+2. Only runs if branch is main
+3. ⚠️ PAUSES and waits for manual approval (24h timeout)
+4. After approval: Authenticates to GCP PROD project
+5. Fetches 5 secrets from GCP Secret Manager (prod project)
+6. Deploys invoice-scanner-api-prod to Cloud Run
+7. Deploys invoice-scanner-frontend-prod to Cloud Run
+8. Runs smoke tests
+9. Outputs service URLs
 
 **Configuration:**
 - Memory: API 512Mi, Frontend 256Mi
 - CPU: 1 for each
-- Min instances: 1 each (always running)
-- Max instances: 20 each
-- Environment variables: Auto-injected from GCP secrets (prod)
+- Min instances: 1 each (always running - cheaper idle state)
+- Max instances: 20 each (auto-scale under load)
+- Environment variables: Auto-injected from GCP secrets (prod variants)
 
-### Arkitektur-diagram (UPDATED)
-- Cloud Run services:
-  - `invoice-scanner-api-prod`
-  - `invoice-scanner-frontend-prod`
-
-**Environment variables från GCP Secret Manager (prod secrets):**
-```
-DATABASE_HOST=invoice-scanner-prod.c.strawbayscannerprod.cloudsql.googleapis.com
-DATABASE_NAME=invoice_scanner
-DATABASE_USER=scanner_prod
-DATABASE_PASSWORD=(från db_password_prod)
-DATABASE_PORT=5432
-
-FLASK_SECRET_KEY=(från secret_key_prod)
-FLASK_ENV=production
-
-EMAIL_SENDER=(från gmail_sender)
-EMAIL_PASSWORD=(från gmail_password)
-
-OPENAI_API_KEY=(från openai_api_key)
-
-GCP_PROJECT=strawbayscannerprod
-GCP_REGION=europe-west1
-```
-
-**Steg i prod-deploy.yml:**
-```yaml
-1. Require manual approval (GitHub Actions environment)
-2. Checkout code
-3. Setup Google Cloud SDK
-4. Authenticate with GCP_SA_KEY_PROD
-5. Fetch 6 secrets från GCP Secret Manager (prod project)
-6. Deploy API Cloud Run service:
-   - Image: europe-west1-docker.pkg.dev/strawbayscannerprod/invoice-scanner/api:latest
-   - Environment variables (från steg 5)
-   - Memory: 512MB
-   - Concurrency: 80
-   - Timeout: 1800 seconds
-7. Deploy Frontend Cloud Run service:
-   - Image: europe-west1-docker.pkg.dev/strawbayscannerprod/invoice-scanner/frontend:latest
-   - Memory: 256MB
-   - Concurrency: 100
-8. Run smoke tests (curl to API health check)
-9. Verify database connectivity
-10. Output: PROD URLs (api-prod-xxxxx.run.app, frontend-prod-xxxxx.run.app)
-```
-
-### Docker Image Strategy
-
-**Samma images, olika runtime environment:**
-```
-Build-tid (build.yml):
-  ├─ api:latest (Python:3.11-slim + Flask)
-  ├─ frontend:latest (Node:20-alpine + Vite build output)
-  └─ worker:latest (Python:3.11-bullseye + OCR deps)
-  
-  └─ Tag och push till BÅDE TEST och PROD Artifact Registry
-
-Runtime (test-deploy.yml / prod-deploy.yml):
-  ├─ Samma api:latest image
-  │  └─ Konfigureras via environment variables
-  │     └─ DATABASE_HOST -> appoints till test eller prod Cloud SQL
-  │     └─ FLASK_SECRET_KEY -> test eller prod secret
-  │     └─ GCP_PROJECT -> strawbayscannertest eller strawbayscannerprod
-  │
-  └─ Samma frontend:latest image
-     └─ API_URL environment variable pekar till test eller prod API
-```
-
-### Arkitektur-diagram
-
+### Arkitektur-diagram (UPDATED - UNIFIED)
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                         GitHub                                   │
@@ -392,11 +329,13 @@ Runtime (test-deploy.yml / prod-deploy.yml):
                      │                       │
                      │ Push to main          │ Push to re_deploy_start
                      │                       │
-         ┌───────────▼─────────┐   ┌────────▼──────────┐
-         │   build.yml         │   │   build.yml       │
-         │ (GCP_SA_KEY_PROD)   │   │ (GCP_SA_KEY_TEST) │
-         │ Build & Push Images │   │ Build & Push Img  │
-         └──────────┬──────────┘   └────────┬──────────┘
+         ┌───────────▼─────────┐   ┌────────▼──────────────┐
+         │   pipeline.yml      │   │   pipeline.yml        │
+         │   :build job        │   │   :build job          │
+         │ (GCP_SA_KEY_PROD)   │   │ (GCP_SA_KEY_TEST)     │
+         │ Build & Push Images │   │ Build & Push Images   │
+         │ to PROD registry    │   │ to TEST registry      │
+         └──────────┬──────────┘   └────────┬──────────────┘
                     │                       │
          ┌──────────▼──────────┐   ┌────────▼──────────────┐
          │  Artifact Registry  │   │ Artifact Registry    │
@@ -404,41 +343,35 @@ Runtime (test-deploy.yml / prod-deploy.yml):
          │  (eu-west1 repo)    │   │  (eu-west1 repo)     │
          └──────────┬──────────┘   └────────┬──────────────┘
                     │                       │
-                    │                       │
-                    │                  ┌────▼────────────────┐
-                    │                  │  test-deploy.yml    │
-                    │                  │ (GCP_SA_KEY_TEST)   │
-                    │                  │ Fetch secrets_test  │
-                    │                  │ Deploy to TEST      │
-                    │                  └────┬────────────────┘
-                    │                       │
-                    │                  ┌────▼──────────────┐
-                    │                  │  TEST Cloud Run   │
-                    │                  │  - api-test       │
-                    │                  │  - frontend-test  │
-                    │                  │ Smoke tests OK    │
-                    │                  └───────────────────┘
-                    │                       │
-                    │ Manual Approval       │
-                    │ (GitHub Environments) │
-                    │  - Wait for approval  │
-                    │  - 24h timeout        │
-                    │ <CLICK "APPROVE">     │
-                    │                       │
-         ┌──────────▼──────────┐           │
-         │  prod-deploy.yml    │◄──────────┘
-         │ (GCP_SA_KEY_PROD)   │
-         │ Fetch secrets_prod  │
-         │ Deploy to PROD      │
-         └──────────┬──────────┘
-                    │
-         ┌──────────▼──────────┐
+         ┌──────────▼────────────┐   ┌─────▼──────────────┐
+         │  pipeline.yml         │   │  pipeline.yml      │
+         │  :deploy-prod job     │   │  :deploy-test job  │
+         │ (requires approval!)  │   │ (auto-run)         │
+         │                       │   │                    │
+         │ ⚠️ MANUAL APPROVAL    │   │ Fetch secrets_test │
+         │ GATE (24h timeout)    │   │ Deploy to TEST     │
+         │ <CLICK "APPROVE">     │   └─────┬──────────────┘
+         │                       │         │
+         │ After approval:       │    ┌────▼──────────────┐
+         │ Fetch secrets_prod    │    │  TEST Cloud Run   │
+         │ Deploy to PROD        │    │  - api-test       │
+         └──────────┬────────────┘    │  - frontend-test  │
+                    │                 │ Smoke tests OK    │
+         ┌──────────▼──────────┐      └───────────────────┘
          │  PROD Cloud Run     │
          │  - api-prod         │
          │  - frontend-prod    │
          │ Smoke tests OK      │
          └─────────────────────┘
 ```
+
+**Key points:**
+- ✅ Single `pipeline.yml` file (not 3 separate files)
+- ✅ All jobs in one place
+- ✅ Branch detection in first step of build job
+- ✅ deploy-test runs ONLY if branch is re_deploy_start
+- ✅ deploy-prod runs ONLY if branch is main (with approval)
+- ✅ Clean, maintainable, no duplication
 
 ### Secret Manager Mapping
 
@@ -484,7 +417,7 @@ production
 └─ Timeout: 24 hours
 ```
 
-**I prod-deploy.yml:**
+**I pipeline.yml (deploy-prod job):**
 ```yaml
 environment:
   name: production
@@ -493,7 +426,7 @@ environment:
 
 ---
 
-### Complete CI/CD Flow Exempel
+### Complete CI/CD Flow Exempel (UNIFIED PIPELINE)
 
 **Scenario: Utvecklare pushar feature**
 
@@ -501,18 +434,21 @@ environment:
 1. Utvecklare: git push origin my-feature
 2. GitHub: Öppnar PR mot re_deploy_start
 3. GitHub: CI-checks kör linting, tester, etc
-4. Utvecklare: Merge PR
+4. Utvecklare/Reviewer: Merge PR
 5. GitHub: Detekterar push till re_deploy_start
-6. build.yml: 
+6. pipeline.yml:build: 
+   - Detekterar branch = re_deploy_start
    - Använder GCP_SA_KEY_TEST
    - Bygger api:latest, frontend:latest, worker:latest
    - Pushar till strawbayscannertest Artifact Registry
-7. test-deploy.yml (auto-trigger efter build):
+7. pipeline.yml:deploy-test (auto-trigger efter build):
+   - Villkor: if: github.ref == 'refs/heads/re_deploy_start'
+   - Kör automatiskt (no approval needed)
    - Använder GCP_SA_KEY_TEST
-   - Hämtar 6 secrets från TEST Secret Manager
+   - Hämtar 5 secrets från TEST Secret Manager
    - Deployar till Cloud Run services
    - Kör smoke tests
-8. Utvecklare testas på: api-test-xxxxx.run.app
+8. Utvecklare testar på: api-test-xxxxx.run.app
 ```
 
 **Scenario: Merge till main (PROD deployment)**
@@ -520,16 +456,20 @@ environment:
 ```
 1. PR merged in GitHub → main
 2. GitHub: Detekterar push till main
-3. build.yml: 
+3. pipeline.yml:build: 
+   - Detekterar branch = main
    - Använder GCP_SA_KEY_PROD
    - Bygger och pushar till strawbayscannerprod Artifact Registry
-4. prod-deploy.yml-job: PAUSES och väntar på approval
+4. pipeline.yml:deploy-prod-job: PAUSES och väntar på approval
+   - Villkor: if: github.ref == 'refs/heads/main' + environment: production
    - GitHub visar: "This job requires manual approval"
    - Timeout: 24 timmar
-5. Rickard klickar "Approve" i GitHub Actions UI
-6. prod-deploy.yml (resumed):
+5. Rickard loggar in i GitHub Actions UI
+   - Ser deploy-prod job i Pending state
+   - Klickar "Review deployments" → "production" → "Approve and deploy"
+6. pipeline.yml:deploy-prod (resumed):
    - Använder GCP_SA_KEY_PROD
-   - Hämtar 6 secrets från PROD Secret Manager
+   - Hämtar 5 secrets från PROD Secret Manager
    - Deployar till Cloud Run (prod services)
    - Kör smoke tests
 7. Live på: api-prod-xxxxx.run.app
@@ -589,35 +529,27 @@ PROD-projekt (`strawbayscannerprod`):
 
 ### FASE 4: GitHub Actions Workflows ✅ 100% KLART
 
-**build.yml** (Build & Push)
-- Triggers: push to `re_deploy_start` or `main`
-- Detects branch → chooses TEST or PROD GCP project
-- Builds 3 Docker images (API, Frontend, Worker)
-- Tags with `:latest` AND `:github.sha` (for rollback)
-- Pushes to correct Artifact Registry
-- Uses secrets: `GCP_SA_KEY_TEST` or `GCP_SA_KEY_PROD`
+**Single Unified Pipeline:** `.github/workflows/pipeline.yml`
+- ✅ build job - Detects branch, builds 3 images, pushes to correct registry
+- ✅ deploy-test job - Conditional on re_deploy_start, no approval needed
+- ✅ deploy-prod job - Conditional on main, requires `environment: production` approval
+- ✅ All 3 jobs in one file for maintainability
+- ✅ Branch detection logic in build job first step
+- ✅ Jobs properly chain with `needs: build` dependency
+- ✅ Uses secrets: `GCP_SA_KEY_TEST` or `GCP_SA_KEY_PROD` (auto-selected)
 
-**test-deploy.yml** (Deploy to TEST)
-- Triggers: automatically after build.yml (on re_deploy_start branch)
-- Waits for manual approval: NO
-- Project: strawbayscannertest
-- Fetches 5 secrets from Secret Manager (test variants)
-- Deploys API Cloud Run: 512Mi RAM, 1 CPU, max 10 instances
-- Deploys Frontend Cloud Run: 256Mi RAM, 1 CPU, max 10 instances
-- Runs smoke tests (health checks)
-- Outputs: Service URLs for testing
+**Cleanup completed:**
+- ✅ Removed old build.yml, test-deploy.yml, prod-deploy.yml
+- ✅ Removed .bak backup files
+- ✅ Workflows directory now contains ONLY pipeline.yml
+- ✅ Committed and pushed to origin/re_deploy_start
 
-**prod-deploy.yml** (Deploy to PROD with approval)
-- Triggers: automatically after build.yml (on main branch)
-- **Waits for manual approval: YES** (24h timeout)
-- Project: strawbayscannerprod
-- Fetches 5 secrets from Secret Manager (prod variants)
-- Deploys API Cloud Run: 512Mi RAM, 1 CPU, min 1 instance, max 20 instances
-- Deploys Frontend Cloud Run: 256Mi RAM, 1 CPU, min 1 instance, max 20 instances
-- Runs smoke tests (health checks)
-- Outputs: Service URLs (production live!)
+**Status:** All 3 conditional jobs ready to execute on branch push
 
-**Status:** All 3 workflows created and ready to test
+**What's needed:**
+- ⏳ User creates PR on re_deploy_start to test
+- ⏳ First merge to re_deploy_start (pipeline.yml:build + pipeline.yml:deploy-test run)
+- ⏳ First merge to main (pipeline.yml:build + pipeline.yml:deploy-prod with approval)
 
 ### FASE 5: Cloud Run Deployment (0% done)
 - [ ] Deploy API service (test)
@@ -779,11 +711,12 @@ PostgreSQL Instans:
 - [ ] Dockerfile Worker: Ready för Cloud Tasks
 - [ ] Build & push till Artifact Registry (test först)
 
-### FASE 4: GitHub Actions Workflows (0% done)
-- [ ] `.github/workflows/build.yml` - Build & push images
-- [ ] `.github/workflows/test-deploy.yml` - Deploy to TEST
-- [ ] `.github/workflows/prod-deploy.yml` - Deploy to PROD with manual approval
-- [ ] Testa alla workflows
+### FASE 4: GitHub Actions Workflows (100% KLART)
+- ✅ `.github/workflows/pipeline.yml` - Single file with build + conditional deploys
+- ✅ build job - Auto-detects branch, builds 3 images, pushes to correct registry
+- ✅ deploy-test job - Runs on re_deploy_start (no approval)
+- ✅ deploy-prod job - Runs on main (requires approval)
+- ✅ All jobs in one unified file
 
 ### FASE 5: Cloud Run Deployment (0% done)
 - [ ] Deploy API service (test)
