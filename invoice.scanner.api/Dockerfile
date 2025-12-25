@@ -18,8 +18,9 @@ COPY . /app
 
 
 
-# Expose port 5000
-EXPOSE 5000
+# Expose port 8080 (Cloud Run expects this by default)
+EXPOSE 8080
 
-# Run the Flask app
-CMD ["python", "main.py"]
+# Run the Flask app - Cloud Run provides PORT env var (defaults to 8080)
+# App must listen on this port
+CMD ["python", "-u", "main.py"]
