@@ -132,19 +132,19 @@ blp_auth = Blueprint("auth", "auth", url_prefix="/auth", description="Authentica
 @app.route("/")
 def home():
     """Basic health check route."""
-    return jsonify({"message": "na"})
+    return jsonify({"message": "Invoice Scanner API is running"})
 
 @app.route("/health")
 def health():
-    """Health check endpoint for Cloud Run."""
+    """Health check endpoint for Cloud Run and load balancers."""
     try:
-        # Try to connect to database to ensure it's working
-        conn = get_db_connection()
-        if conn:
-            conn.close()
-            return jsonify({"status": "healthy", "database": "ok"}), 200
-        else:
-            return jsonify({"status": "unhealthy", "database": "connection failed"}), 503
+        # Minimal health check - just verify the app is responding
+        # Don't require DB to be up (DB connections are lazy-loaded on demand)
+        return jsonify({
+            "status": "healthy",
+            "service": "invoice-scanner-api",
+            "version": "1.0"
+        }), 200
     except Exception as e:
         print(f"[health] Health check failed: {e}")
         return jsonify({"status": "unhealthy", "error": str(e)}), 503

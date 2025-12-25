@@ -4,12 +4,15 @@ Database configuration for Invoice Scanner API
 import os
 from urllib.parse import quote_plus
 
-# Database connection settings
-DB_HOST = os.getenv('DB_HOST', 'db')
-DB_PORT = os.getenv('DB_PORT', '5432')
-DB_USER = os.getenv('DB_USER', 'scanner')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'scanner')
-DB_NAME = os.getenv('DB_NAME', 'invoice_scanner')
+# Database connection settings - support both naming conventions
+# Cloud Run uses DATABASE_* prefix, local dev uses DB_* prefix
+DB_HOST = os.getenv('DATABASE_HOST') or os.getenv('DB_HOST', 'db')
+DB_PORT = os.getenv('DATABASE_PORT') or os.getenv('DB_PORT', '5432')
+DB_USER = os.getenv('DATABASE_USER') or os.getenv('DB_USER', 'scanner')
+DB_PASSWORD = os.getenv('DATABASE_PASSWORD') or os.getenv('DB_PASSWORD', 'scanner')
+DB_NAME = os.getenv('DATABASE_NAME') or os.getenv('DB_NAME', 'invoice_scanner')
+
+print(f"[db_config] Connecting to {DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
 
 # SQLAlchemy connection string
 DATABASE_URL = f"postgresql://{DB_USER}:{quote_plus(DB_PASSWORD)}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
