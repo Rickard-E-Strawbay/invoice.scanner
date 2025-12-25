@@ -51,7 +51,13 @@ jobs:
             --timeout=1800 \
             --max-instances=20 \
             --min-instances=1 \
-            --set-env-vars DATABASE_HOST=invoice-scanner-prod.c.strawbayscannerprod.cloudsql.googleapis.com,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=${{ env.DB_PASSWORD }},DATABASE_PORT=5432,FLASK_SECRET_KEY=${{ env.SECRET_KEY }},FLASK_ENV=production,EMAIL_SENDER=${{ env.GMAIL_SENDER }},EMAIL_PASSWORD=${{ env.GMAIL_PASSWORD }},OPENAI_API_KEY=${{ env.OPENAI_API_KEY }},GCP_PROJECT=strawbayscannerprod,GCP_REGION=europe-west1
+            --set-env-vars "DATABASE_HOST=invoice-scanner-prod.c.strawbayscannerprod.cloudsql.googleapis.com,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_PORT=5432,FLASK_SECRET_KEY=$SECRET_KEY,FLASK_ENV=production,EMAIL_SENDER=$GMAIL_SENDER,EMAIL_PASSWORD=$GMAIL_PASSWORD,OPENAI_API_KEY=$OPENAI_API_KEY,GCP_PROJECT=strawbayscannerprod,GCP_REGION=europe-west1"
+        env:
+          DB_PASSWORD: ${{ env.DB_PASSWORD }}
+          SECRET_KEY: ${{ env.SECRET_KEY }}
+          GMAIL_SENDER: ${{ env.GMAIL_SENDER }}
+          GMAIL_PASSWORD: ${{ env.GMAIL_PASSWORD }}
+          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
 
       # Deploy Frontend to Cloud Run (PROD)
       - name: Deploy Frontend to Cloud Run (PROD)
