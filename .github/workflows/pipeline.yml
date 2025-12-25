@@ -131,6 +131,14 @@ jobs:
           GMAIL_PASSWORD: ${{ env.GMAIL_PASSWORD }}
           OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
 
+      - name: Grant public access to API
+        run: |
+          gcloud run services add-iam-policy-binding invoice-scanner-api-test \
+            --region=europe-west1 \
+            --project=strawbayscannertest \
+            --member=allUsers \
+            --role=roles/run.invoker
+
       - name: Deploy Frontend to Cloud Run
         run: |
           gcloud run deploy invoice-scanner-frontend-test \
@@ -144,6 +152,14 @@ jobs:
             --timeout=3600 \
             --max-instances=10 \
             --set-env-vars "API_URL=https://invoice-scanner-api-test.run.app,ENVIRONMENT=test"
+
+      - name: Grant public access to Frontend
+        run: |
+          gcloud run services add-iam-policy-binding invoice-scanner-frontend-test \
+            --region=europe-west1 \
+            --project=strawbayscannertest \
+            --member=allUsers \
+            --role=roles/run.invoker
 
       - name: Get service URLs
         run: |
@@ -246,6 +262,14 @@ jobs:
           GMAIL_PASSWORD: ${{ env.GMAIL_PASSWORD }}
           OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
 
+      - name: Grant public access to API
+        run: |
+          gcloud run services add-iam-policy-binding invoice-scanner-api-prod \
+            --region=europe-west1 \
+            --project=strawbayscannerprod \
+            --member=allUsers \
+            --role=roles/run.invoker
+
       - name: Deploy Frontend to Cloud Run
         run: |
           gcloud run deploy invoice-scanner-frontend-prod \
@@ -260,6 +284,14 @@ jobs:
             --max-instances=20 \
             --min-instances=1 \
             --set-env-vars "API_URL=https://invoice-scanner-api-prod.run.app,ENVIRONMENT=production"
+
+      - name: Grant public access to Frontend
+        run: |
+          gcloud run services add-iam-policy-binding invoice-scanner-frontend-prod \
+            --region=europe-west1 \
+            --project=strawbayscannerprod \
+            --member=allUsers \
+            --role=roles/run.invoker
 
       - name: Get service URLs
         run: |
