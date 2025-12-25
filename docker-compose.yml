@@ -63,15 +63,15 @@ services:
       - PYTHONUNBUFFERED=1
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://scanner:scanner@db:5432/invoice_scanner
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USER=scanner
-      - DB_PASSWORD=scanner
-      - DB_NAME=invoice_scanner
+      - DATABASE_HOST=db
+      - DATABASE_PORT=5432
+      - DATABASE_USER=scanner
+      - DATABASE_PASSWORD=scanner
+      - DATABASE_NAME=invoice_scanner
       - DOCUMENTS_RAW_DIR=/app/documents/raw
       - DOCUMENTS_PROCESSED_DIR=/app/documents/processed
       - FLASK_ENV=development
-      - FRONTEND_URL=http://localhost:3000
+      - FRONTEND_URL=http://localhost:8080
       - PROCESSING_SERVICE_URL=http://processing_http:5002
       # LLM API Keys (from .env or environment)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -108,11 +108,11 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DATABASE_URL=postgresql://scanner:scanner@db:5432/invoice_scanner
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USER=scanner
-      - DB_PASSWORD=scanner
-      - DB_NAME=invoice_scanner
+      - DATABASE_HOST=db
+      - DATABASE_PORT=5432
+      - DATABASE_USER=scanner
+      - DATABASE_PASSWORD=scanner
+      - DATABASE_NAME=invoice_scanner
       - DOCUMENTS_RAW_DIR=/app/documents/raw
       - DOCUMENTS_PROCESSED_DIR=/app/documents/processed
       # LLM Configuration
@@ -249,7 +249,7 @@ services:
       context: ./invoice.scanner.frontend.react
     container_name: invoice.scanner.frontend
     ports:
-      - "3000:3000"
+      - "8080:8080"
       - "5173:5173"
     environment:
       - VITE_API_URL=http://localhost:5001
