@@ -134,6 +134,21 @@ def home():
     """Basic health check route."""
     return jsonify({"message": "na"})
 
+@app.route("/health")
+def health():
+    """Health check endpoint for Cloud Run."""
+    try:
+        # Try to connect to database to ensure it's working
+        conn = get_db_connection()
+        if conn:
+            conn.close()
+            return jsonify({"status": "healthy", "database": "ok"}), 200
+        else:
+            return jsonify({"status": "unhealthy", "database": "connection failed"}), 503
+    except Exception as e:
+        print(f"[health] Health check failed: {e}")
+        return jsonify({"status": "unhealthy", "error": str(e)}), 503
+
 @blp_live.route("/x")
 def x():
     return jsonify({"status": "done"})
@@ -2461,7 +2476,19 @@ if __name__ == "__main__" or __name__ == "main":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=5000)
+    # Cloud Run sets PORT environment variable, default to 8080 for Cloud Run compatibility
+    # If PORT env var is set, use it; otherwise use --port arg or default 5000 for local dev
+    default_port = int(os.environ.get("PORT", 5000))
+    parser.add_argument("--port", type=int, default=default_port)
     args = parser.parse_args()
-    app.run(host=args.host, port=args.port, debug=True)
+    
+    # Determine debug mode: True for local dev, False for production
+    is_production = os.environ.get("FLASK_ENV") == "production"
+    debug_mode = not is_production
+    
+    print(f"[main] Starting Flask app on {args.host}:{args.port}")
+    print(f"[main] PORT env var: {os.environ.get('PORT', 'not set')}")
+    print(f"[main] FLASK_ENV: {os.environ.get('FLASK_ENV', 'not set')}")
+    print(f"[main] Debug mode: {debug_mode}")
+    app.run(host=args.host, port=args.port, debug=debug_mode)
 
