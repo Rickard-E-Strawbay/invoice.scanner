@@ -1,65 +1,55 @@
 # System Prompt för Invoice Scanner Projekt
 
-## 🎯 CURRENT STATUS (Dec 24, 2025 - Session End ~23:00)
+## 🎯 CURRENT STATUS (Dec 24, 2025 - Session End ~23:30)
 
-**Overall Progress:** 50-60% Complete (depending on build.yml result)
+**Overall Progress:** 55-60% Complete
 
 | FASE | Status | Details |
 |------|--------|---------|
 | FASE 0 | ✅ 100% | GCP Infrastructure (APIs, Service Accounts, GitHub Secrets) |
 | FASE 1 | ✅ 100% | GCP Secret Manager (12 secrets: db_password, secret_key, gmail, openai) |
 | FASE 2 | ✅ 100% | Cloud SQL (PostgreSQL instances + users in both projects) |
-| FASE 3 | ✅ 100% | Docker Images (api:1.44GB, frontend:83.1MB, worker:4.02GB - pushed to both registries) |
-| FASE 4 | ⏳ ~75% | GitHub Actions workflows created & build.yml currently building |
-| FASE 5 | 0% | Cloud Run Deployment (ready to start next session) |
+| FASE 3 | ✅ 100% | Docker Images (api, frontend, worker - pushed to both registries) |
+| FASE 4 | ⏳ 80% | GitHub Actions: build.yml ✅ SUCCESS, test-deploy.yml ❌ FAILING |
+| FASE 5 | 0% | Cloud Run Deployment (blocked by test-deploy.yml failure) |
 | FASE 6-8 | 0% | Cloud Tasks, Testing, Monitoring |
 
-**Session Summary (Dec 24):**
+**Last Session Summary (Dec 24):**
 
-✅ **Completed Today:**
-- Optimized API Dockerfile (python:3.11-slim, removed Playwright, cleaned deps)
-- Created Frontend Dockerfile with multi-stage build (node→nginx)
-- Created nginx.conf for React SPA routing
-- Built all 3 Docker images locally
-- Verified with docker-compose (all services running)
-- Created Artifact Registry repos in TEST & PROD
-- Pushed all 6 images (3 images × 2 projects) to GCP
-- Created all 3 GitHub Actions workflows:
-  - build.yml: Build & push images (TRIGGERING NOW)
-  - test-deploy.yml: Deploy to TEST Cloud Run
-  - prod-deploy.yml: Deploy to PROD with approval gate
-- Fixed build.yml authentication (TEST/PROD branch detection)
-- Debugged and resolved Push Protection secret scanning issue
+✅ **What Worked:**
+- build.yml builds all 3 Docker images successfully
+- Images push to Artifact Registry correctly
+- Fixed: Removed ARM64-specific npm dependency from Frontend Dockerfile
+- build.yml now fully functional and green ✅
 
-⏳ **In Progress (watching):**
-- build.yml is currently running (building 3 Docker images)
-- Once complete: should trigger test-deploy.yml automatically
+❌ **Current Issue:**
+- test-deploy.yml triggered but FAILING
+- Need to check GitHub Actions logs for specific error
+- Likely issue: Database connectivity, Cloud SQL Proxy, or GCP authentication
 
-**Next Session (Dec 25 or later):**
-1. Verify build.yml succeeded ✅
-2. Verify test-deploy.yml completed ✅
-3. Check TEST Cloud Run services are running
-4. Start FASE 5: Verify Cloud SQL connectivity from Cloud Run
-5. Setup Cloud Storage for document persistence
-6. Complete remaining FASEs
+**Next Session - IMMEDIATE ACTIONS:**
+1. Go to GitHub Actions → test-deploy workflow
+2. Check which step is failing (likely "Deploy API to Cloud Run" or "Fetch secrets")
+3. Common failure points:
+   - Cloud SQL connectivity from Cloud Run
+   - Secret Manager access permissions
+   - Cloud Run service creation permissions
+   - Database initialization
 
-**Critical Files Modified Today:**
-- `.github/workflows/build.yml` ✅ Created & debugged
-- `.github/workflows/test-deploy.yml` ✅ Created
-- `.github/workflows/prod-deploy.yml` ✅ Created
-- `invoice.scanner.frontend.react/Dockerfile` ✅ Updated to multi-stage
-- `invoice.scanner.frontend.react/nginx.conf` ✅ Created
-- `invoice.scanner.api/Dockerfile` ✅ Optimized
-- `invoice.scanner.api/requirements.txt` ✅ Cleaned
-- `invoice.scanner.api/app.py` ✅ Dead code removed
-- `SYSTEM_PROMPT.md` ✅ Continuously updated with progress
+**Files Fixed This Session:**
+- `invoice.scanner.frontend.react/Dockerfile` - Removed `npm install -D @rollup/rollup-linux-arm64-musl` (was causing build failure on x64 GitHub Actions runner)
 
-**Key Decisions Made:**
-- ✅ Frontend: Multi-stage build (compile src → nginx serve dist)
-- ✅ Docker images tagged with :latest AND :git-sha for rollback
-- ✅ Build.yml detects branch → auto-selects TEST or PROD GCP project
-- ✅ test-deploy.yml auto-triggers (no approval needed)
-- ✅ prod-deploy.yml pauses for manual approval (GitHub environment)
+**Git Status:**
+- Branch: `re_deploy_start`
+- Last commit: "Fix: Remove ARM64-specific rollup dependency from Frontend Dockerfile"
+- All changes pushed ✅
+
+**What's Next:**
+1. Debug test-deploy.yml failure (check GCP logs)
+2. Likely need to enable Cloud SQL Proxy or verify permissions
+3. Once test-deploy.yml green → test-deploy.yml will auto-trigger
+4. Then can verify TEST services running in Cloud Run
+5. Finally FASE 5: Production deployment
 
 ---
 

@@ -73,7 +73,7 @@ jobs:
             --timeout=3600 \
             --max-instances=20 \
             --min-instances=1 \
-            --set-env-vars API_URL=https://invoice-scanner-api-prod.run.app,ENVIRONMENT=production
+            --set-env-vars "API_URL=https://invoice-scanner-api-prod.run.app,ENVIRONMENT=production"
 
       # Get the deployed URLs
       - name: Get service URLs
