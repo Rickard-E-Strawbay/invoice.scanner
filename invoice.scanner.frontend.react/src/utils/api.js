@@ -2,7 +2,7 @@
  * API utility for centralized API URL management
  */
 
-// Determine API URL - try env var first, then fallback to localhost
+// Determine API URL - try env var first, then fallback to derived URL
 export const API_BASE_URL = (() => {
   // Check environment variable (set at build time or in docker-compose)
   const envUrl = import.meta.env.VITE_API_URL;
@@ -11,14 +11,25 @@ export const API_BASE_URL = (() => {
     return envUrl;
   }
   
-  // Fallback for local development (not in Docker)
+  // Smart fallback: derive from current hostname
   const hostname = window.location.hostname || 'localhost';
   const protocol = window.location.protocol;
   
-  // Use localhost:5001 only when running locally
-  const fallbackUrl = `${protocol}//localhost:5001`;
+  // If running on Cloud Run, API is on same domain but different port
+  // If running locally, use localhost:5001
+  let fallbackUrl;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    // Local development
+    fallbackUrl = `${protocol}//localhost:5001`;
+  } else {
+    // Cloud Run or other server - API is on same base domain
+    // Replace "frontend" with "api" in the hostname
+    const apiHostname = hostname.replace('frontend-test', 'api-test').replace('frontend-prod', 'api-prod').replace('frontend', 'api');
+    fallbackUrl = `${protocol}//${apiHostname}`;
+  }
+  
   console.log(`✅ Using fallback API URL: ${fallbackUrl}`);
-  console.log(`   (Current location: ${hostname})`);
+  console.log(`   (Current hostname: ${hostname})`);
   
   return fallbackUrl;
 })();
