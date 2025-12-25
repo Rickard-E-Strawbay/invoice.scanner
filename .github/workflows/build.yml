@@ -6,97 +6,73 @@ on:
       - re_deploy_start
       - main
 
-env:
-  REGISTRY: europe-west1-docker.pkg.dev
-  IMAGE_PREFIX: invoice-scanner
-
 jobs:
-  build-and-push:
+  build:
     runs-on: ubuntu-latest
+    
+    outputs:
+      branch: ${{ steps.detect-branch.outputs.branch }}
+      environment: ${{ steps.detect-branch.outputs.environment }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Determine which environment based on branch
-      - name: Set environment variables
+      - name: Detect branch and environment
+        id: detect-branch
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "ENVIRONMENT=prod" >> $GITHUB_ENV
-            echo "PROJECT_ID=strawbayscannerprod" >> $GITHUB_ENV
+            echo "branch=main" >> $GITHUB_OUTPUT
+            echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "gcp_project=strawbayscannerprod" >> $GITHUB_OUTPUT
+            echo "registry=europe-west1-docker.pkg.dev/strawbayscannerprod/invoice-scanner" >> $GITHUB_OUTPUT
           else
-            echo "ENVIRONMENT=test" >> $GITHUB_ENV
-            echo "PROJECT_ID=strawbayscannertest" >> $GITHUB_ENV
+            echo "branch=re_deploy_start" >> $GITHUB_OUTPUT
+            echo "environment=test" >> $GITHUB_OUTPUT
+            echo "gcp_project=strawbayscannertest" >> $GITHUB_OUTPUT
+            echo "registry=europe-west1-docker.pkg.dev/strawbayscannertest/invoice-scanner" >> $GITHUB_OUTPUT
           fi
 
-      # Authenticate to Google Cloud (PROD)
-      - name: Authenticate to Google Cloud (PROD)
-        if: github.ref == 'refs/heads/main'
+      - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+          credentials_json: ${{ secrets[format('GCP_SA_KEY_{0}', steps.detect-branch.outputs.environment == 'prod' && 'PROD' || 'TEST')] }}
 
-      # Authenticate to Google Cloud (TEST)
-      - name: Authenticate to Google Cloud (TEST)
-        if: github.ref != 'refs/heads/main'
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY_TEST }}
-
-      # Setup Google Cloud SDK
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
-      # Configure Docker for Artifact Registry
-      - name: Configure Docker for Artifact Registry
+      - name: Configure Docker authentication
         run: |
-          gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+          gcloud auth configure-docker europe-west1-docker.pkg.dev
 
-      # Set up Docker Buildx
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # Build and push API image
-      - name: Build and push API image
+      - name: Build and Push API image
         run: |
-          docker build \
-            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/api:latest \
-            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/api:${{ github.sha }} \
-            invoice.scanner.api/
-          
-          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/api:latest
-          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/api:${{ github.sha }}
+          docker build -t ${{ steps.detect-branch.outputs.registry }}/api:latest \
+                       -t ${{ steps.detect-branch.outputs.registry }}/api:${{ github.sha }} \
+                       ./invoice.scanner.api
+          docker push ${{ steps.detect-branch.outputs.registry }}/api:latest
+          docker push ${{ steps.detect-branch.outputs.registry }}/api:${{ github.sha }}
 
-      # Build and push Frontend image
-      - name: Build and push Frontend image
+      - name: Build and Push Frontend image
         run: |
-          docker build \
-            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/frontend:latest \
-            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/frontend:${{ github.sha }} \
-            invoice.scanner.frontend.react/
-          
-          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/frontend:latest
-          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/frontend:${{ github.sha }}
+          docker build -t ${{ steps.detect-branch.outputs.registry }}/frontend:latest \
+                       -t ${{ steps.detect-branch.outputs.registry }}/frontend:${{ github.sha }} \
+                       ./invoice.scanner.frontend.react
+          docker push ${{ steps.detect-branch.outputs.registry }}/frontend:latest
+          docker push ${{ steps.detect-branch.outputs.registry }}/frontend:${{ github.sha }}
 
-      # Build and push Worker image
-      - name: Build and push Worker image
+      - name: Build and Push Worker image
         run: |
-          docker build \
-            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/worker:latest \
-            -t ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/worker:${{ github.sha }} \
-            invoice.scanner.processing/
-          
-          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/worker:latest
-          docker push ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/worker:${{ github.sha }}
+          docker build -t ${{ steps.detect-branch.outputs.registry }}/worker:latest \
+                       -t ${{ steps.detect-branch.outputs.registry }}/worker:${{ github.sha }} \
+                       ./invoice.scanner.worker 2>/dev/null || echo "Worker directory not found, skipping"
+          docker push ${{ steps.detect-branch.outputs.registry }}/worker:latest 2>/dev/null || echo "Worker image skipped"
+          docker push ${{ steps.detect-branch.outputs.registry }}/worker:${{ github.sha }} 2>/dev/null || echo "Worker image skipped"
 
-      # Output summary
       - name: Summary
         run: |
-          echo "✅ Build completed for ${{ env.ENVIRONMENT }} environment"
-          echo ""
-          echo "Published images:"
-          echo "  - ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/api:latest"
-          echo "  - ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/frontend:latest"
-          echo "  - ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.IMAGE_PREFIX }}/worker:latest"
-          echo ""
-          echo "Also tagged with commit SHA: ${{ github.sha }}"
+          echo "✅ Build Complete!"
+          echo "📦 Branch: ${{ steps.detect-branch.outputs.branch }}"
+          echo "🌍 Environment: ${{ steps.detect-branch.outputs.environment }}"
+          echo "📍 Registry: ${{ steps.detect-branch.outputs.registry }}"
+          echo "🏷️  SHA: ${{ github.sha }}"

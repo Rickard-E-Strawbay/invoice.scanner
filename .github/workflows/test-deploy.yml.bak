@@ -1,27 +1,30 @@
 name: Deploy to TEST
 
 on:
-  push:
-    branches:
-      - re_deploy_start
+  workflow_run:
+    workflows: [Build Docker Images]
+    types: [completed]
 
 jobs:
   deploy-test:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 're_deploy_start' }}
     runs-on: ubuntu-latest
-    environment: test
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Authenticate to Google Cloud (TEST project)
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_TEST }}
 
+      # Setup Google Cloud SDK
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
+      # Fetch secrets from GCP Secret Manager
       - name: Fetch secrets from GCP Secret Manager
         run: |
           echo "DB_PASSWORD=$(gcloud secrets versions access latest --secret=db_password_test --project=strawbayscannertest)" >> $GITHUB_ENV
@@ -30,6 +33,7 @@ jobs:
           echo "GMAIL_PASSWORD=$(gcloud secrets versions access latest --secret=gmail_password --project=strawbayscannertest)" >> $GITHUB_ENV
           echo "OPENAI_API_KEY=$(gcloud secrets versions access latest --secret=openai_api_key --project=strawbayscannertest)" >> $GITHUB_ENV
 
+      # Deploy API to Cloud Run
       - name: Deploy API to Cloud Run
         run: |
           gcloud run deploy invoice-scanner-api-test \
@@ -50,6 +54,7 @@ jobs:
           GMAIL_PASSWORD: ${{ env.GMAIL_PASSWORD }}
           OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
 
+      # Deploy Frontend to Cloud Run
       - name: Deploy Frontend to Cloud Run
         run: |
           gcloud run deploy invoice-scanner-frontend-test \
@@ -64,6 +69,7 @@ jobs:
             --max-instances=10 \
             --set-env-vars "API_URL=https://invoice-scanner-api-test.run.app,ENVIRONMENT=test"
 
+      # Get the deployed URLs
       - name: Get service URLs
         run: |
           API_URL=$(gcloud run services describe invoice-scanner-api-test \
@@ -81,27 +87,31 @@ jobs:
           echo "API_URL=$API_URL" >> $GITHUB_ENV
           echo "FRONTEND_URL=$FRONTEND_URL" >> $GITHUB_ENV
 
+      # Run smoke tests
       - name: Run smoke tests
         run: |
           echo "Testing API health endpoint..."
-          API_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.API_URL }}/health || echo "000")
+          API_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.API_URL }}/health)
           
           if [ "$API_HEALTH" == "200" ]; then
             echo "✅ API health check passed (HTTP $API_HEALTH)"
           else
-            echo "⚠️  API health check returned (HTTP $API_HEALTH) - may still be initializing"
+            echo "❌ API health check failed (HTTP $API_HEALTH)"
+            exit 1
           fi
           
           echo ""
           echo "Testing Frontend..."
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.FRONTEND_URL }} || echo "000")
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.FRONTEND_URL }})
           
           if [ "$FRONTEND_STATUS" == "200" ]; then
             echo "✅ Frontend is responding (HTTP $FRONTEND_STATUS)"
           else
-            echo "⚠️  Frontend check returned (HTTP $FRONTEND_STATUS) - may still be initializing"
+            echo "❌ Frontend check failed (HTTP $FRONTEND_STATUS)"
+            exit 1
           fi
 
+      # Summary
       - name: Deployment Summary
         run: |
           echo "✅ TEST Deployment Complete!"

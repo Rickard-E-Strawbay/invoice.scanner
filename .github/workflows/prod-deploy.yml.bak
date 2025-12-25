@@ -1,27 +1,33 @@
 name: Deploy to PROD
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: [Build Docker Images]
+    types: [completed]
 
 jobs:
   deploy-prod:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
     runs-on: ubuntu-latest
-    environment: production
+    environment:
+      name: production
+      url: https://invoice-scanner-api-prod.run.app
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Authenticate to Google Cloud (PROD project)
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
+      # Setup Google Cloud SDK
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
+      # Fetch secrets from GCP Secret Manager (PROD)
       - name: Fetch secrets from GCP Secret Manager
         run: |
           echo "DB_PASSWORD=$(gcloud secrets versions access latest --secret=db_password_prod --project=strawbayscannerprod)" >> $GITHUB_ENV
@@ -30,7 +36,8 @@ jobs:
           echo "GMAIL_PASSWORD=$(gcloud secrets versions access latest --secret=gmail_password --project=strawbayscannerprod)" >> $GITHUB_ENV
           echo "OPENAI_API_KEY=$(gcloud secrets versions access latest --secret=openai_api_key --project=strawbayscannerprod)" >> $GITHUB_ENV
 
-      - name: Deploy API to Cloud Run
+      # Deploy API to Cloud Run (PROD)
+      - name: Deploy API to Cloud Run (PROD)
         run: |
           gcloud run deploy invoice-scanner-api-prod \
             --image=europe-west1-docker.pkg.dev/strawbayscannerprod/invoice-scanner/api:latest \
@@ -51,7 +58,8 @@ jobs:
           GMAIL_PASSWORD: ${{ env.GMAIL_PASSWORD }}
           OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
 
-      - name: Deploy Frontend to Cloud Run
+      # Deploy Frontend to Cloud Run (PROD)
+      - name: Deploy Frontend to Cloud Run (PROD)
         run: |
           gcloud run deploy invoice-scanner-frontend-prod \
             --image=europe-west1-docker.pkg.dev/strawbayscannerprod/invoice-scanner/frontend:latest \
@@ -66,6 +74,7 @@ jobs:
             --min-instances=1 \
             --set-env-vars "API_URL=https://invoice-scanner-api-prod.run.app,ENVIRONMENT=production"
 
+      # Get the deployed URLs
       - name: Get service URLs
         run: |
           API_URL=$(gcloud run services describe invoice-scanner-api-prod \
@@ -83,30 +92,34 @@ jobs:
           echo "API_URL=$API_URL" >> $GITHUB_ENV
           echo "FRONTEND_URL=$FRONTEND_URL" >> $GITHUB_ENV
 
+      # Run smoke tests
       - name: Run smoke tests
         run: |
-          echo "Testing API health endpoint..."
-          API_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.API_URL }}/health || echo "000")
+          echo "Testing PROD API health endpoint..."
+          API_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.API_URL }}/health)
           
           if [ "$API_HEALTH" == "200" ]; then
             echo "✅ API health check passed (HTTP $API_HEALTH)"
           else
-            echo "⚠️  API health check returned (HTTP $API_HEALTH) - may still be initializing"
+            echo "❌ API health check failed (HTTP $API_HEALTH)"
+            exit 1
           fi
           
           echo ""
-          echo "Testing Frontend..."
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.FRONTEND_URL }} || echo "000")
+          echo "Testing PROD Frontend..."
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.FRONTEND_URL }})
           
           if [ "$FRONTEND_STATUS" == "200" ]; then
             echo "✅ Frontend is responding (HTTP $FRONTEND_STATUS)"
           else
-            echo "⚠️  Frontend check returned (HTTP $FRONTEND_STATUS) - may still be initializing"
+            echo "❌ Frontend check failed (HTTP $FRONTEND_STATUS)"
+            exit 1
           fi
 
+      # Summary
       - name: Deployment Summary
         run: |
-          echo "✅ PROD Deployment Complete!"
+          echo "🎉 PROD Deployment Complete!"
           echo ""
           echo "🌐 Service URLs:"
           echo "  API:      ${{ env.API_URL }}"
@@ -115,3 +128,5 @@ jobs:
           echo "📊 Environment: PRODUCTION"
           echo "🏢 Project:     strawbayscannerprod"
           echo "🌍 Region:      europe-west1"
+          echo ""
+          echo "✨ Your application is now live in production!"
