@@ -375,6 +375,79 @@ PROD: (same pattern)
 
 ---
 
+## VPC ACCESS CONNECTOR (REQUIRED FOR PRIVATE IP) - Dec 26
+
+**Problem Discovered:** 
+- Cloud SQL instances are Private IP only (secure by default)
+- Cloud Run services need special networking to reach Private IP
+- Error without VPC Connector: `Cloud SQL instance does not have any IP addresses matching preference: PRIMARY`
+
+**Solution:** VPC Access Connector
+- Creates a managed VPC connector between Cloud Run and VPC (where Cloud SQL lives)
+- Allows Cloud Run to reach Private IP resources securely
+- Must be in same region as Cloud Run (europe-west1)
+
+**Implementation (REQUIRED - Must Run Manually):**
+
+### Step 1: Create VPC Access Connector (one-time setup)
+```bash
+gcloud compute networks vpc-access connectors create run-connector \
+  --region=europe-west1 \
+  --network=default \
+  --range=10.8.0.0/28 \
+  --project=strawbayscannertest
+```
+
+### Step 2: Update Cloud Run Services to Use Connector (TEST environment)
+```bash
+gcloud run services update invoice-scanner-api-test \
+  --region=europe-west1 \
+  --vpc-connector=run-connector \
+  --vpc-egress=all \
+  --project=strawbayscannertest
+
+gcloud run services update invoice-scanner-frontend-test \
+  --region=europe-west1 \
+  --vpc-connector=run-connector \
+  --vpc-egress=all \
+  --project=strawbayscannertest
+```
+
+### Step 3: Update Cloud Run Services to Use Connector (PROD environment)
+```bash
+gcloud compute networks vpc-access connectors create run-connector \
+  --region=europe-west1 \
+  --network=default \
+  --range=10.8.0.0/28 \
+  --project=strawbayscannerprod
+
+gcloud run services update invoice-scanner-api-prod \
+  --region=europe-west1 \
+  --vpc-connector=run-connector \
+  --vpc-egress=all \
+  --project=strawbayscannerprod
+
+gcloud run services update invoice-scanner-frontend-prod \
+  --region=europe-west1 \
+  --vpc-connector=run-connector \
+  --vpc-egress=all \
+  --project=strawbayscannerprod
+```
+
+**Why this works:**
+- VPC Connector bridges Cloud Run ↔ VPC network
+- Cloud SQL Private IP exists in VPC
+- Cloud Run can now reach Private IP via connector
+- `--vpc-egress=all` routes all outbound traffic through connector
+
+**Status:** ✅ IMPLEMENTED Dec 26 (manually for TEST, must repeat for PROD)
+
+**In pipeline.yml:** 
+- Consider adding VPC connector setup to deploy-test/deploy-prod jobs if possible
+- Alternative: Document as manual post-deployment step
+
+---
+
 ## DATABASE DRIVER STRATEGY: pg8000 Migration (DECIDED Dec 26)
 
 ### Problem Discovery (Dec 26 - CRITICAL)
