@@ -1,40 +1,45 @@
 # System Prompt för Invoice Scanner Projekt
 
-## 🎯 CURRENT STATUS (Dec 26, 2025 - ~19:45)
+## 🎯 CURRENT STATUS (Dec 26, 2025 - ~21:30)
 
-**Overall Progress:** 75% Complete (Database Driver Issue Discovered & Strategy Planned)
+**Overall Progress:** 90% Complete (pg8000 Migration Complete - Cloud SQL Initialized - GitHub Actions Automated Deployment Starting)
 
 | FASE | Status | Details |
 |------|--------|---------|
 | FASE 0 | ✅ 100% | GCP Infrastructure (APIs, Service Accounts, GitHub Secrets) |
 | FASE 1 | ✅ 100% | GCP Secret Manager (12 secrets: db_password, secret_key, gmail, openai) |
-| FASE 2 | ✅ 100% | Cloud SQL (PostgreSQL instances + users in both projects) |
+| FASE 2 | ✅ 100% | Cloud SQL (PostgreSQL instances initialized + schemas deployed) |
 | FASE 3 | ✅ 100% | Docker Images (api, frontend, worker - pushed to both registries) |
 | FASE 4 | ✅ 100% | GitHub Actions: Single unified pipeline.yml with conditional jobs |
 | FASE 4B | ✅ 100% | Local Docker-Compose: Tested and verified, port standardization |
-| FASE 4C | ⏳ 25% | Database Driver Migration: pg8000 strategy (awaiting implementation go-ahead) |
-| FASE 5 | 0% | Cloud Run Deployment (blocked until pg8000 migration complete) |
+| FASE 4C | ✅ 100% | Database Driver Migration: pg8000 unified driver (COMPLETED & tested) |
+| FASE 5 | ⏳ 20% | Cloud Run Deployment (Database initialized - GitHub Actions deployment starting) |
 | FASE 6-8 | 0% | Cloud Tasks, Testing, Monitoring |
 
-**Session Dec 26 - Critical Issue Discovery**
+**Session Dec 26 - pg8000 Migration Complete**
 
-⚠️ **CRITICAL DISCOVERY:**
-- Cloud SQL Connector does NOT support `psycopg2` driver
-- Only supports: `pymysql`, `pg8000`, `pytds`
-- Previous implementation attempt was impossible
-- Entire project uses two separate database configuration systems (API vs Processing)
+✅ **MIGRATION COMPLETED:**
+- Successfully migrated from psycopg2 to pg8000 (Pure Python PostgreSQL driver)
+- pg8000 is only driver supported by Cloud SQL Connector (pymysql, pg8000, pytds)
+- Unified database configuration: all modules now use pg8000
+- Standardized environment variables: all use DATABASE_* naming convention (no DB_* mixing)
 
-✅ **Analysis Completed:**
-1. Identified why Cloud Run 500 error occurred (driver incompatibility)
-2. Investigated entire project architecture (13 containers, 2 separate DB systems)
-3. Proposed unified pg8000 migration strategy (3-part approach)
-4. Documented critical instructions for implementation
-5. Updated requirements.txt with pg8000 package
+✅ **Implementation Completed:**
+1. ✅ Created pg8000_wrapper.py with RealDictCursor compatibility in both API and Processing
+2. ✅ Updated requirements.txt: removed psycopg2-binary, added pg8000
+3. ✅ API db_config.py already using DATABASE_* variables
+4. ✅ Processing config/db_utils.py already using DATABASE_* variables
+5. ✅ docker-compose.yml already standardized to DATABASE_* naming
 
-⏳ **Awaiting User Confirmation:**
-- User has been presented with 3-part refactoring strategy
-- Strategy includes: shared wrapper layer, env var standardization, both module updates
-- Ready to implement once confirmed
+✅ **Local Testing Verified:**
+- All 14 containers start and become healthy
+- API connects to database via pg8000 TCP (log: "Using pg8000 TCP connection")
+- Processing workers connect and ready for tasks
+- pg8000_wrapper RealDictCursor compatibility layer working
+- Document processing successful (status updates working)
+- Git committed with detailed message (commit: 03db1c6)
+
+**Next:** Automated GitHub Actions deployment starting (Option A - push to re_deploy_start branch to trigger build + deploy-test)
 
 ---
 
@@ -583,11 +588,10 @@ PROD-projekt (`strawbayscannerprod`):
 - Run migrations in order (only once per environment)
 - Track which migrations have run in a `schema_migrations` table
 
-### Initial Setup (Dec 26 - MANUAL):
-- [ ] ⏳ Run `invoice.scanner.db/init.sql` manually on Cloud SQL TEST
-  - Command: `cat invoice.scanner.db/init.sql | gcloud sql connect invoice-scanner-test --project=strawbayscannertest --user=postgres`
-- [ ] ⏳ Verify: Check that users table has test user (rickard@strawbay.io)
-- [ ] ⏳ Run same init.sql on PROD after TEST is verified
+### Initial Setup (Dec 26 - COMPLETED):
+- [x] ✅ Run `invoice.scanner.db/init.sql` manually on Cloud SQL TEST
+- [x] ✅ Verify: Check that users table has test user (rickard@strawbay.io)
+- [x] ✅ Run same init.sql on PROD after TEST is verified
 
 ### Future Database Changes:
 1. Create new file: `migrations/002_your_change.sql`
@@ -742,40 +746,40 @@ PROD: (same pattern)
    - RealDictCursor interface must be identical to psycopg2 version
    - All cursors should still behave like dictionaries
 
-### Current Status (Dec 26 - After Discovery)
+### Current Status (Dec 26 - Migration Complete ✅)
 
-**Completed:**
-- ✅ Identified driver incompatibility (psycopg2 not supported by Connector)
-- ✅ Analyzed entire project structure (found dual DB naming)
-- ✅ Proposed 3-part refactoring strategy
-- ✅ Updated requirements.txt: Removed `cloud-sql-python-connector[psycopg2]`, added standalone `cloud-sql-python-connector` and `pg8000`
+**Completed (ALL):**
+- ✅ Identified driver incompatibility (psycopg2 not supported by Cloud SQL Connector)
+- ✅ Analyzed entire project structure (unified pg8000 approach)
+- ✅ Created pg8000_wrapper.py with RealDictCursor compatibility in API and Processing
+- ✅ Updated requirements.txt: Removed psycopg2-binary, added pg8000
+- ✅ API db_config.py configured for pg8000 (DATABASE_* variables)
+- ✅ Processing config/db_utils.py configured for pg8000 (DATABASE_* variables)
+- ✅ docker-compose.yml standardized to DATABASE_* naming (no DB_* mixing)
+- ✅ Local testing: all 14 containers healthy, database connections working
+- ✅ Document processing verified (status updates working correctly)
+- ✅ Git commit with detailed migration message (commit: 03db1c6)
 
-**Not Started:**
-- ❌ Create shared pg8000_wrapper.py layer
-- ❌ Update invoice.scanner.api/db_config.py
-- ❌ Update invoice.scanner.processing/config/db_utils.py
-- ❌ Standardize environment variables in docker-compose.yml
-- ❌ Test unified solution locally
-- ❌ Cloud Run deployment with pg8000
-
-**Awaiting:**
-- User confirmation to proceed with implementation
-- User decision on implementation sequence
+**Status:** READY FOR CLOUD RUN DEPLOYMENT
+- All components use unified pg8000 driver
+- Both local (docker-compose) and Cloud Run (via Connector) compatible
+- RealDictCursor compatibility maintained for existing code
+- No psycopg2 dependencies remaining
 
 ---
 
-### FASE 5: Cloud Run Deployment (Initialization in progress)
-- [x] Database schema initialized (init.sql created + documented)
-- [x] Cloud SQL Proxy configured in pipeline.yml (DATABASE_HOST=localhost)
-- [ ] ⏳ init.sql run manually on Cloud SQL TEST
-- [ ] ⏳ Test login flow (API → Cloud SQL connectivity)
-- [ ] Deploy API service (test)
-  - ✅ Environment variables från Secret Manager
-  - ✅ Cloud SQL proxy (--add-cloudsql-instances flag)
-- [ ] Deploy Frontend service (test)
-  - Build from Docker image
+### FASE 5: Cloud Run Deployment (GitHub Actions Automated Deployment)
+- [x] ✅ Database schema initialized (init.sql deployed to Cloud SQL TEST + PROD)
+- [x] ✅ Cloud SQL Proxy configured in pipeline.yml (DATABASE_HOST=localhost)
+- [x] ✅ init.sql run manually on Cloud SQL
+- [ ] ⏳ Push to re_deploy_start branch (triggers GitHub Actions)
+- [ ] ⏳ GitHub Actions:build job - builds 3 Docker images, pushes to TEST registry
+- [ ] ⏳ GitHub Actions:deploy-test job - auto-deploys to Cloud Run TEST
+- [ ] ⏳ Test login flow (API → Cloud SQL connectivity in Cloud Run)
+- [ ] Verify: API service running on Cloud Run TEST
+- [ ] Verify: Frontend service running on Cloud Run TEST
 - [ ] Setup Cloud Storage bucket (documents)
-- [ ] Samma setup för prod
+- [ ] Create PR: re_deploy_start → main (for PROD deployment)
 
 ### FASE 6: Cloud Tasks Setup (0% done)
 - [ ] Konfigurera Cloud Tasks queue för workers
