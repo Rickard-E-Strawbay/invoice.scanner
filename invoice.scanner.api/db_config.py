@@ -35,17 +35,19 @@ IS_UNIX_SOCKET = DATABASE_HOST.startswith('/')
 
 if IS_UNIX_SOCKET:
     # Cloud Run with Cloud SQL Proxy (Unix socket)
-    # CRITICAL: Cloud SQL Proxy in Cloud Run creates sockets at /cloudsql/...
-    # BUT psycopg2 may have permission issues accessing the socket file
-    # WORKAROUND: Connect via localhost:5432 instead (Cloud SQL Proxy maps to this)
+    # Socket path: /cloudsql/PROJECT:REGION:INSTANCE
+    # But psycopg2 needs just the directory part for unix socket
+    # Format: postgresql://user:password@/dbname with host=/cloudsql/...
     
-    print(f"[db_config] Connecting via Cloud SQL Proxy TCP fallback: scanner_test@localhost:5432/{DATABASE_NAME}")
+    socket_dir = DATABASE_HOST  # This is /cloudsql/PROJECT:REGION:INSTANCE
     
-    # Use TCP localhost instead of Unix socket (Cloud SQL Proxy supports both)
-    DATABASE_URL = f"postgresql://{DATABASE_USER}:{quote_plus(DATABASE_PASSWORD)}@localhost:5432/{DATABASE_NAME}"
+    print(f"[db_config] Connecting via Unix socket: {DATABASE_USER}@{socket_dir}/{DATABASE_NAME}")
+    
+    # psycopg2 format for Unix socket connection
+    # When using Unix socket, omit @ hostname part, use ?host= instead
+    DATABASE_URL = f"postgresql://{DATABASE_USER}:{quote_plus(DATABASE_PASSWORD)}@/{DATABASE_NAME}?host={socket_dir}"
     DB_CONFIG = {
-        'host': 'localhost',
-        'port': 5432,
+        'host': socket_dir,
         'user': DATABASE_USER,
         'password': DATABASE_PASSWORD,
         'database': DATABASE_NAME
