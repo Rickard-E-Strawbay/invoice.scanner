@@ -34,11 +34,20 @@ if not all([DATABASE_HOST, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME]):
 IS_UNIX_SOCKET = DATABASE_HOST.startswith('/')
 
 if IS_UNIX_SOCKET:
-    # Cloud Run with Cloud SQL Proxy (Unix socket - no port in connection string)
-    print(f"[db_config] Connecting via Unix socket: {DATABASE_USER}@{DATABASE_HOST}/{DATABASE_NAME}")
-    DATABASE_URL = f"postgresql://{DATABASE_USER}:{quote_plus(DATABASE_PASSWORD)}@/{DATABASE_NAME}?host={DATABASE_HOST}"
+    # Cloud Run with Cloud SQL Proxy (Unix socket)
+    # Extract socket directory (everything before the last slash doesn't contain filename)
+    # Socket path format: /cloudsql/project:region:instance
+    socket_dir = DATABASE_HOST  # The path itself IS the socket directory
+    
+    print(f"[db_config] Connecting via Unix socket: {DATABASE_USER}@{socket_dir}/{DATABASE_NAME}")
+    
+    # For psycopg2/SQLAlchemy: use unix_sock_dir parameter
+    # Format: postgresql://user:password@/database?unix_sock_dir=/path/to/socket/dir
+    DATABASE_URL = f"postgresql://{DATABASE_USER}:{quote_plus(DATABASE_PASSWORD)}@/{DATABASE_NAME}?unix_sock_dir={socket_dir}"
+    
+    # For psycopg2 direct connection with Unix socket
     DB_CONFIG = {
-        'host': DATABASE_HOST,
+        'host': socket_dir,
         'user': DATABASE_USER,
         'password': DATABASE_PASSWORD,
         'database': DATABASE_NAME
