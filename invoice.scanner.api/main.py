@@ -625,7 +625,9 @@ def get_all_companies():
             """)
             companies = cursor.fetchall()
             print(f"[get_all_companies] Found {len(companies)} companies")
-            return jsonify({"companies": companies}), 200
+            # Convert PG8000DictRow objects to dictionaries for JSON serialization
+            companies_list = [dict(company) for company in companies]
+            return jsonify({"companies": companies_list}), 200
     except Exception as e:
         print(f"[get_all_companies] Error fetching companies: {e}")
         return jsonify({"error": "Failed to fetch companies"}), 500
