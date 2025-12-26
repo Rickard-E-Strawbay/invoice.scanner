@@ -342,7 +342,7 @@ def get_connection_pg8000_connector(
         return None
     
     try:
-        from cloud_sql_python_connector import Connector
+        from google.cloud.sql.connector import Connector
         
         connector = Connector()
         conn = connector.connect(
