@@ -1,13 +1,14 @@
 # Use Microsoft's official Python Dev Container base image
 FROM python:3.11-slim
 
-# Install system dependencies including Cloud SQL Proxy
+# Install system dependencies including Cloud SQL Auth Proxy v2
 RUN apt-get update && apt-get install -y \
     curl \
+    gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install Cloud SQL Proxy
-RUN curl -o /cloud-sql-proxy https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64 && \
+# Download and install Cloud SQL Auth Proxy v2
+RUN curl -o /cloud-sql-proxy https://dl.google.com/cloudsql/cloud-sql-proxy.linux.amd64 && \
     chmod +x /cloud-sql-proxy
 
 # Upgrade pip and install Python dependencies
@@ -26,8 +27,9 @@ RUN mkdir -p /cloudsql
 # Expose port 8080 (Cloud Run expects this by default)
 EXPOSE 8080
 
-# Start Cloud SQL Proxy in background, then start Flask app
-# Cloud SQL Proxy will listen on Unix socket and create it at /cloudsql/
-# INSTANCE_CONNECTION_NAME env var must be set (e.g., "project:region:instance")
-CMD ["/bin/sh", "-c", "/cloud-sql-proxy ${INSTANCE_CONNECTION_NAME} --unix-socket-path /cloudsql & python -u main.py"]
+# Start Cloud SQL Auth Proxy v2 in background, then start Flask app
+# Cloud SQL Auth Proxy v2 uses IAM authentication (no password needed)
+# Listens on Unix socket at /cloudsql/ and uses service account credentials
+# INSTANCE_CONNECTION_NAME env var should be set (e.g., "project:region:instance")
+CMD ["/bin/sh", "-c", "/cloud-sql-proxy ${INSTANCE_CONNECTION_NAME} --unix-socket-dir=/cloudsql & sleep 2 && python -u main.py"]
 
