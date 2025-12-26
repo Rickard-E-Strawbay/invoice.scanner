@@ -166,10 +166,5 @@ SELECT
     '1.0'
 FROM users_company 
 WHERE organization_id = '559421-9601';
-    
-
-
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO scanner;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO scanner;
 
 

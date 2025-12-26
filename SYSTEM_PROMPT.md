@@ -105,6 +105,9 @@ När du gör ändringar, förklara:
 - Ignorera att `docker-compose.local.yml` redan kan existera
 - Anta att användaren vill ha Path A/B/C utan att fråga
 
+### 7. EFTER VARJE OPERATION
+- Läs denna fil och se till att hålla kritiska instruktioner i minnet.
+
 **GÖR:**
 - Undersök först
 - Fråga
@@ -551,10 +554,100 @@ PROD-projekt (`strawbayscannerprod`):
 - ⏳ First merge to re_deploy_start (pipeline.yml:build + pipeline.yml:deploy-test run)
 - ⏳ First merge to main (pipeline.yml:build + pipeline.yml:deploy-prod with approval)
 
-### FASE 5: Cloud Run Deployment (0% done)
+---
+
+## DATABASE MIGRATION STRATEGY (DECIDED Dec 26)
+
+**Decision:** Use **Versionalized SQL Migrations** approach for future database changes
+
+### How it works:
+- Each database change gets its own versioned SQL file: `migrations/001_initial.sql`, `002_add_column_x.sql`, etc.
+- Files are named: `{number}_{description}.sql` (e.g., `001_initial.sql`, `002_add_invoices_table.sql`)
+- Run migrations in order (only once per environment)
+- Track which migrations have run in a `schema_migrations` table
+
+### Initial Setup (Dec 26 - MANUAL):
+- [ ] ⏳ Run `invoice.scanner.db/init.sql` manually on Cloud SQL TEST
+  - Command: `cat invoice.scanner.db/init.sql | gcloud sql connect invoice-scanner-test --project=strawbayscannertest --user=postgres`
+- [ ] ⏳ Verify: Check that users table has test user (rickard@strawbay.io)
+- [ ] ⏳ Run same init.sql on PROD after TEST is verified
+
+### Future Database Changes:
+1. Create new file: `migrations/002_your_change.sql`
+2. Document what changed
+3. Run it manually on TEST first
+4. After verification, run on PROD
+5. Add to git + commit
+
+### Directory Structure:
+```
+invoice.scanner.db/
+├── init.sql (initial schema + seed data)
+└── migrations/
+    ├── 002_add_feature_x.sql
+    ├── 003_update_permissions.sql
+    └── ...
+```
+
+---
+
+## CLOUD SQL PROXY CONFIGURATION (DECIDED Dec 26)
+
+**Problem (Dec 26 08:15):** Cloud Run API couldn't connect to Cloud SQL
+- Error: `connection to server at "invoice-scanner-test.c.strawbayscannertest.cloudsql.googleapis.com" port 5432 failed: Connection timed out`
+- Root cause: Cloud SQL is Private IP only, API tried public hostname
+
+**Solution:** Cloud SQL Auth Proxy sidecar in Cloud Run
+- Already configured in pipeline.yml with `--add-cloudsql-instances` flag
+- Creates secure tunnel from Cloud Run container to Cloud SQL
+- Exposes connection on `localhost:5432`
+
+**Implementation (Dec 26):**
+1. ✅ pipeline.yml already has `--add-cloudsql-instances` flag in both deploy-test and deploy-prod
+2. ✅ Changed DATABASE_HOST from `invoice-scanner-test.c.strawbayscannertest.cloudsql.googleapis.com` to `localhost`
+3. ✅ Same for PROD: `invoice-scanner-prod.c.strawbayscannerprod.cloudsql.googleapis.com` → `localhost`
+4. Rationale: Cloud SQL Proxy maps port 5432 to localhost internally
+
+**Environment Variables in Cloud Run:**
+```
+TEST:
+  DATABASE_HOST=localhost (with Cloud SQL Proxy sidecar)
+  DATABASE_PORT=5432
+  DATABASE_USER=scanner_test
+  DATABASE_PASSWORD=(from Secret Manager)
+  DATABASE_NAME=invoice_scanner
+
+PROD: (same pattern)
+  DATABASE_HOST=localhost
+  DATABASE_PORT=5432
+  DATABASE_USER=scanner_prod
+  DATABASE_PASSWORD=(from Secret Manager)
+  DATABASE_NAME=invoice_scanner
+```
+
+**How it works:**
+1. Cloud Run container starts with `--add-cloudsql-instances=project:region:instance`
+2. Google Cloud Proxy sidecar automatically starts (injected by Cloud Run)
+3. Proxy creates secure connection to Cloud SQL (Private IP)
+4. Proxy listens on `localhost:5432` inside container
+5. Application connects to `localhost:5432` (authenticated via Cloud Run service account)
+
+**Reference:**
+- [Google Cloud SQL Auth Proxy Docs](https://cloud.google.com/sql/docs/postgres/sql-proxy)
+- [Cloud Run + Cloud SQL Integration](https://cloud.google.com/run/docs/configuring/sql-connectors)
+
+**Status:** ✅ CONFIGURED in pipeline.yml (both TEST and PROD)
+
+---
+
+### FASE 5: Cloud Run Deployment (Initialization in progress)
+- [x] Database schema initialized (init.sql created + documented)
+- [x] Cloud SQL Proxy configured in pipeline.yml (DATABASE_HOST=localhost)
+- [ ] ⏳ init.sql run manually on Cloud SQL TEST
+- [ ] ⏳ Test login flow (API → Cloud SQL connectivity)
 - [ ] Deploy API service (test)
-  - Environment variables från Secret Manager
-  - Cloud SQL proxy
+  - ✅ Environment variables från Secret Manager
+  - ✅ Cloud SQL proxy (--add-cloudsql-instances flag)
 - [ ] Deploy Frontend service (test)
   - Build from Docker image
 - [ ] Setup Cloud Storage bucket (documents)
