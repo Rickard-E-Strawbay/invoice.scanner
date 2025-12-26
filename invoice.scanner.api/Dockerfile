@@ -8,8 +8,9 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install Cloud SQL Auth Proxy v2 (latest stable)
-RUN curl -fsSL https://dl.google.com/cloudsql/cloud-sql-proxy.linux.amd64 -o /cloud-sql-proxy && \
+# Download and install Cloud SQL Auth Proxy v2 from official Google storage
+# Using v2.20.0 from: https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases
+RUN curl -fsSL https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.20.0/cloud-sql-proxy.linux.amd64 -o /cloud-sql-proxy && \
     chmod +x /cloud-sql-proxy && \
     /cloud-sql-proxy --version 2>&1 | head -1
 
