@@ -24,7 +24,7 @@
 
 ---
 
-**Overall Progress:** 98% Complete - Ready for Document Processing Testing
+**Overall Progress:** 99% Complete - Ready for Testing
 
 | FASE | Status | Details | Last Updated |
 |------|--------|---------|--------------|
@@ -41,12 +41,12 @@
 | **FASE 5C** | ✅ 100% | Session Management: Environment-aware Flask session cookies (HTTPS) | **Dec 26** |
 | **FASE 5D** | ✅ 100% | API Response Fields: company_enabled added to user responses | **Dec 26 16:32** |
 | **FASE 5E** | ✅ 100% | Email Service: Disabled in Cloud Run (pending SendGrid migration) | **Dec 26 16:40** |
-| FASE 6 | ⏳ Planning | Document Storage: GCS + Hybrid approach | **Dec 26 16:45** |
-| FASE 6A | 📝 Planned | Create GCS Bucket for document storage | **READY** |
-| FASE 6B | 📝 Planned | Build storage_service.py abstraction layer | **READY** |
-| FASE 6C | 📝 Planned | Update upload/download endpoints to use abstraction | **READY** |
-| FASE 6D | 📝 Planned | Configure environment-aware storage (local vs GCS) | **READY** |
-| FASE 6E | 📝 Planned | Test document processing end-to-end | **READY** |
+| FASE 6 | ✅ 100% | Document Storage: Hybrid approach (Local + GCS) - COMPLETED | **Dec 26 17:10** |
+| FASE 6A | ✅ 100% | Create GCS Buckets (test-docs, prod-docs) | **Dec 26 17:05** |
+| FASE 6B | ✅ 100% | Build storage_service.py abstraction layer | **Dec 26 17:08** |
+| FASE 6C | ✅ 100% | Update upload/download endpoints to use abstraction | **Dec 26 17:09** |
+| FASE 6D | ✅ 100% | Configure environment-aware storage (local vs GCS) | **Dec 26 17:10** |
+| FASE 6E | 🔄 In Progress | Test document processing end-to-end | **NEXT** |
 | FASE 7-8 | 0% | Cloud Tasks, Monitoring, Production validation | Future |
 
 ### 🚀 WHAT'S READY NOW (Dec 26, 22:30)
@@ -67,39 +67,40 @@
 
 ---
 
-## 🎯 FOKUS JUST NU - December 26, 2025 (16:40)
+## 🎯 FOKUS JUST NU - December 26, 2025 (17:10)
 
-**FASE 5 är COMPLETE:** API & Frontend deployed till Cloud Run TEST ✅
+**FASE 6 är COMPLETE:** Hybrid storage service implemented! ✅
 
 ### Vad som är gjort ✅
-- ✅ Cloud Run TEST deployment working (API 00048, Frontend deployed)
-- ✅ JSON serialization fixed (PG8000DictRow → dict conversion)
-- ✅ `company_enabled` field added to user API responses
-- ✅ Session cookies environment-aware (HTTPS in Cloud Run)
-- ✅ VPC Access Connectors configured for Private IP Cloud SQL
-- ✅ Email service disabled (temporary - pending SendGrid migration)
-- ✅ Admin user management fully functional (Enable/Disable buttons working)
-- ✅ Company management functional (Disable button tested, Enable pending company status)
+- ✅ storage_service.py created with LocalStorageService och GCSStorageService
+- ✅ upload_document endpoint updated to use storage service
+- ✅ get_document_preview endpoint updated to use storage service
+- ✅ GCS buckets created (invoice-scanner-test-docs, invoice-scanner-prod-docs)
+- ✅ docker-compose.yml configured with STORAGE_TYPE=local
+- ✅ pipeline.yml configured with STORAGE_TYPE=gcs + GCS_BUCKET for both TEST and PROD
+- ✅ requirements.txt updated with google-cloud-storage for both API and processing
+- ✅ storage_service.py copied to processing folder for worker access
+- ✅ All changes committed to git
 
-### Känd begränsning ⚠️
-- Email: Disabled i Cloud Run TEST (SMTP kan inte nå Gmail från Cloud Run)
-  - Temporary fix: Returns success without sending
-  - Long-term: Migrate to SendGrid API
-  - Location: `invoice.scanner.api/lib/email_service.py` line 1 (TODO comment in place)
+### Arkitektur ✅
+- **Local dev**: `STORAGE_TYPE=local` → Docker volumes (`./documents/` mounted)
+- **Cloud TEST**: `STORAGE_TYPE=gcs`, `GCS_BUCKET=invoice-scanner-test-docs`
+- **Cloud PROD**: `STORAGE_TYPE=gcs`, `GCS_BUCKET=invoice-scanner-prod-docs`
+- **Same code**: StorageService abstraction handles both seamlessly
+- **Worker support**: Processing service can use storage service via imported module
 
 ### Nästa steg 👉
-**FASE 6: Document Processing / Scan Service Testing**
-1. Test document upload via frontend
-2. Verify processing service triggers correctly
-3. Check vectorstore integration (Chroma)
-4. Validate document retrieval
-
-**Blockers:** None - System is fully operational for testing
+**FASE 6E: Test End-to-End Document Processing**
+1. Deploy updated code to Cloud Run TEST (push to re_deploy_start)
+2. Test document upload via frontend
+3. Verify file appears in GCS bucket
+4. Check processing pipeline integration
+5. Verify document retrieval works from GCS
 
 ### Git Status
 - Branch: `re_deploy_start` 
-- Commits ahead: Latest fixes pushed (email disable, company_enabled fields)
-- Ready to: Test FASE 6 (processing) or merge to main for PROD
+- Latest commit: hybrid storage implementation
+- Ready to: Push → GitHub Actions builds → Deploy to TEST
 
 ---
 
