@@ -122,13 +122,22 @@ jobs:
             --cpu=1 \
             --timeout=1800 \
             --max-instances=10 \
-            --set-env-vars "DATABASE_HOST=invoice-scanner-test.c.strawbayscannertest.cloudsql.googleapis.com,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_test,DATABASE_PASSWORD=${DB_PASSWORD},DATABASE_PORT=5432,FLASK_SECRET_KEY=${SECRET_KEY},FLASK_ENV=test,EMAIL_SENDER=${GMAIL_SENDER},EMAIL_PASSWORD=${GMAIL_PASSWORD},OPENAI_API_KEY=${OPENAI_API_KEY},GCP_PROJECT=strawbayscannertest,GCP_REGION=europe-west1"
+            --add-cloudsql-instances=strawbayscannertest:europe-west1:invoice-scanner-test \
+            --set-env-vars "DATABASE_HOST=/cloudsql/strawbayscannertest:europe-west1:invoice-scanner-test,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_test,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_PORT=5432,FLASK_SECRET_KEY=$SECRET_KEY,FLASK_ENV=test,EMAIL_SENDER=$GMAIL_SENDER,EMAIL_PASSWORD=$GMAIL_PASSWORD,OPENAI_API_KEY=$OPENAI_API_KEY,GCP_PROJECT=strawbayscannertest,GCP_REGION=europe-west1"
         env:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           SECRET_KEY: ${{ env.SECRET_KEY }}
           GMAIL_SENDER: ${{ env.GMAIL_SENDER }}
           GMAIL_PASSWORD: ${{ env.GMAIL_PASSWORD }}
           OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+
+      - name: Grant public access to API
+        run: |
+          gcloud run services add-iam-policy-binding invoice-scanner-api-test \
+            --region=europe-west1 \
+            --project=strawbayscannertest \
+            --member=allUsers \
+            --role=roles/run.invoker
 
       - name: Deploy Frontend to Cloud Run
         run: |
@@ -142,7 +151,15 @@ jobs:
             --cpu=1 \
             --timeout=3600 \
             --max-instances=10 \
-            --set-env-vars "API_URL=https://invoice-scanner-api-test.run.app,ENVIRONMENT=test"
+            --set-env-vars "VITE_API_URL=https://invoice-scanner-api-test-wcpzrlxtjq-ew.a.run.app,ENVIRONMENT=test"
+
+      - name: Grant public access to Frontend
+        run: |
+          gcloud run services add-iam-policy-binding invoice-scanner-frontend-test \
+            --region=europe-west1 \
+            --project=strawbayscannertest \
+            --member=allUsers \
+            --role=roles/run.invoker
 
       - name: Get service URLs
         run: |
@@ -236,13 +253,22 @@ jobs:
             --timeout=1800 \
             --max-instances=20 \
             --min-instances=1 \
-            --set-env-vars "DATABASE_HOST=invoice-scanner-prod.c.strawbayscannerprod.cloudsql.googleapis.com,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=${DB_PASSWORD},DATABASE_PORT=5432,FLASK_SECRET_KEY=${SECRET_KEY},FLASK_ENV=production,EMAIL_SENDER=${GMAIL_SENDER},EMAIL_PASSWORD=${GMAIL_PASSWORD},OPENAI_API_KEY=${OPENAI_API_KEY},GCP_PROJECT=strawbayscannerprod,GCP_REGION=europe-west1"
+            --add-cloudsql-instances=strawbayscannerprod:europe-west1:invoice-scanner-prod \
+            --set-env-vars "DATABASE_HOST=/cloudsql/strawbayscannerprod:europe-west1:invoice-scanner-prod,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_PORT=5432,FLASK_SECRET_KEY=$SECRET_KEY,FLASK_ENV=production,EMAIL_SENDER=$GMAIL_SENDER,EMAIL_PASSWORD=$GMAIL_PASSWORD,OPENAI_API_KEY=$OPENAI_API_KEY,GCP_PROJECT=strawbayscannerprod,GCP_REGION=europe-west1"
         env:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           SECRET_KEY: ${{ env.SECRET_KEY }}
           GMAIL_SENDER: ${{ env.GMAIL_SENDER }}
           GMAIL_PASSWORD: ${{ env.GMAIL_PASSWORD }}
           OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
+
+      - name: Grant public access to API
+        run: |
+          gcloud run services add-iam-policy-binding invoice-scanner-api-prod \
+            --region=europe-west1 \
+            --project=strawbayscannerprod \
+            --member=allUsers \
+            --role=roles/run.invoker
 
       - name: Deploy Frontend to Cloud Run
         run: |
@@ -257,7 +283,15 @@ jobs:
             --timeout=3600 \
             --max-instances=20 \
             --min-instances=1 \
-            --set-env-vars "API_URL=https://invoice-scanner-api-prod.run.app,ENVIRONMENT=production"
+            --set-env-vars "VITE_API_URL=https://invoice-scanner-api-prod-wcpzrlxtjq-ew.a.run.app,ENVIRONMENT=production"
+
+      - name: Grant public access to Frontend
+        run: |
+          gcloud run services add-iam-policy-binding invoice-scanner-frontend-prod \
+            --region=europe-west1 \
+            --project=strawbayscannerprod \
+            --member=allUsers \
+            --role=roles/run.invoker
 
       - name: Get service URLs
         run: |

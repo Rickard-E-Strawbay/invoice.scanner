@@ -98,6 +98,31 @@ def refresh_user_session(user_id):
 
 
 # =============
+# CORS Configuration
+# =============
+def get_cors_origins():
+    """Get allowed CORS origins based on environment.
+    
+    - Local dev: Always allow localhost:8080
+    - TEST: Allow TEST Cloud Run frontend + localhost
+    - PROD: Allow PROD Cloud Run frontend + localhost
+    """
+    env = os.getenv('FLASK_ENV', 'development')
+    
+    # Always allow localhost for local development
+    origins = ['http://localhost:8080', 'https://localhost:8080']
+    
+    if env == 'production':
+        # Production environment
+        origins.append('https://invoice-scanner-frontend-prod-wcpzrlxtjq-ew.a.run.app')
+    else:
+        # Development/Test environment
+        origins.append('https://invoice-scanner-frontend-test-wcpzrlxtjq-ew.a.run.app')
+    
+    print(f"[CORS] Allowed origins: {origins}")
+    return origins
+
+# =============
 # App & Config
 # =============
 app = Flask(__name__)
@@ -107,7 +132,7 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
-CORS(app, supports_credentials=True, origins=[os.getenv('FRONTEND_URL', 'http://localhost:3000')])
+CORS(app, supports_credentials=True, origins=get_cors_origins())
 
 # Flask-smorest + Swagger configuration
 app.config["API_TITLE"] = "Example API"
