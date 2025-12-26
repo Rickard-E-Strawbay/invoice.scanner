@@ -549,7 +549,7 @@ def search_companies():
             )
             companies = cursor.fetchall()
             print(f"[search-companies] Found {len(companies)} companies: {companies}")
-            return jsonify({"companies": companies}), 200
+            return jsonify({"companies": [dict(company) for company in companies]}), 200
     except Exception as e:
         print(f"[search-companies] Error searching companies: {e}")
         return jsonify({"error": "Search failed"}), 500
