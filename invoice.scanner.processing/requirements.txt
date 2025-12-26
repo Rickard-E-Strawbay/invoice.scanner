@@ -7,8 +7,8 @@ redis>=5.0.0
 flask>=3.0.0
 
 # Database
-pg8000>=1.30.0
-cloud-sql-python-connector>=1.4.0
+pg8000==1.30.5
+cloud-sql-python-connector==1.4.3
 SQLAlchemy>=2.0.0
 
 # ===== IMAGE PROCESSING =====

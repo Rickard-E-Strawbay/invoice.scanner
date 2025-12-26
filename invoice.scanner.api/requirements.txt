@@ -14,8 +14,8 @@ marshmallow<4.0.0,>=3.0.0
 flask_cors
 anthropic
 google-generativeai
-cloud-sql-python-connector
-pg8000
+cloud-sql-python-connector==1.4.3
+pg8000==1.30.5
 jinja2>=3.0.0
 python-dotenv
 requests>=2.31.0
