@@ -67,40 +67,45 @@
 
 ---
 
-## 🎯 FOKUS JUST NU - December 26, 2025 (17:10)
+## 🎯 FOKUS JUST NU - December 26, 2025 (17:45)
 
-**FASE 6 är COMPLETE:** Hybrid storage service implemented! ✅
+**FASE 6E: Testing Storage Service End-to-End** 🔄
+
+### Strategi: 3-steg approach
+1. ✅ **Local (docker-compose)**: Verifiera upload → docker volume fungerar
+2. 🔄 **Cloud RUN TEST**: Verifiera upload → GCS bucket fungerar
+3. 📋 **Cloud Tasks (FASE 7)**: Processing i Cloud (deferred)
 
 ### Vad som är gjort ✅
-- ✅ storage_service.py created with LocalStorageService och GCSStorageService
-- ✅ upload_document endpoint updated to use storage service
-- ✅ get_document_preview endpoint updated to use storage service
-- ✅ GCS buckets created (invoice-scanner-test-docs, invoice-scanner-prod-docs)
-- ✅ docker-compose.yml configured with STORAGE_TYPE=local
-- ✅ pipeline.yml configured with STORAGE_TYPE=gcs + GCS_BUCKET for both TEST and PROD
-- ✅ requirements.txt updated with google-cloud-storage for both API and processing
-- ✅ storage_service.py copied to processing folder for worker access
-- ✅ All changes committed to git
+- ✅ storage_service.py med LocalStorageService + GCSStorageService
+- ✅ API endpoints updated för storage service (upload_document, get_document_preview)
+- ✅ Docker-compose konfigurerad: STORAGE_TYPE=local
+- ✅ GCS buckets skapade (test-docs, prod-docs)
+- ✅ Pipeline.yml simplified (bara API + Frontend, inget processing deployment)
+- ✅ preprocessing_tasks.py integrated storage service detection
+- ✅ Frontend fixed (fullscreen violation)
 
-### Arkitektur ✅
-- **Local dev**: `STORAGE_TYPE=local` → Docker volumes (`./documents/` mounted)
-- **Cloud TEST**: `STORAGE_TYPE=gcs`, `GCS_BUCKET=invoice-scanner-test-docs`
-- **Cloud PROD**: `STORAGE_TYPE=gcs`, `GCS_BUCKET=invoice-scanner-prod-docs`
-- **Same code**: StorageService abstraction handles both seamlessly
-- **Worker support**: Processing service can use storage service via imported module
+### Pipeline status
+- **Building:** API + Frontend only
+- **Deploying:** API + Frontend to Cloud Run TEST  
+- **Processing:** Runs locally via docker-compose (no Cloud Run deployment)
 
 ### Nästa steg 👉
-**FASE 6E: Test End-to-End Document Processing**
-1. Deploy updated code to Cloud Run TEST (push to re_deploy_start)
-2. Test document upload via frontend
-3. Verify file appears in GCS bucket
-4. Check processing pipeline integration
-5. Verify document retrieval works from GCS
+**LOCAL TESTING (kan göra nu):**
+1. Verifiera frontend kan ladda upp document
+2. Verifiera filen sparas i `./documents/raw/` (volume mount)
+3. Verifiera processing kan läsa från storage_service
+4. Verifiera processing pipeline startar (mockad)
+
+**CLOUD TESTING (när pipeline klar):**
+1. Verifiera Cloud Run API mottager upload
+2. Verifiera filen sparas i `gs://invoice-scanner-test-docs/raw/`
+3. Verifiera dokumentstatus uppdateras i database
 
 ### Git Status
-- Branch: `re_deploy_start` 
-- Latest commit: hybrid storage implementation
-- Ready to: Push → GitHub Actions builds → Deploy to TEST
+- Branch: `re_deploy_start`
+- Latest: Removed processing Cloud Run deployment (keeping local)
+- Ready: Full storage_service testing lokalt och i Cloud
 
 ---
 
