@@ -32,7 +32,7 @@ EXPOSE 8080
 
 # Start Cloud SQL Auth Proxy v2 in background, then start Flask app
 # Cloud SQL Auth Proxy v2 uses IAM authentication (no password needed)
-# Listens on Unix socket at /cloudsql/
+# Uses --unix-socket flag (not --unix-socket-dir) to specify socket directory
 # INSTANCE_CONNECTION_NAME env var must be set (e.g., "project:region:instance")
-CMD ["/bin/sh", "-c", "(/cloud-sql-proxy ${INSTANCE_CONNECTION_NAME} --unix-socket-dir=/cloudsql &) && sleep 3 && python -u main.py"]
+CMD ["/bin/sh", "-c", "(/cloud-sql-proxy ${INSTANCE_CONNECTION_NAME} --unix-socket /cloudsql &) && sleep 3 && python -u main.py"]
 
