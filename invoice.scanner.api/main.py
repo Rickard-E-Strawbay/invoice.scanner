@@ -13,6 +13,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from db_config import DB_CONFIG, get_connection, RealDictCursor
 import os
 from dotenv import load_dotenv
+from lib.storage_service import init_storage_service
 from lib.email_service import (
     send_company_registration_pending_email,
     send_user_registration_pending_email,
@@ -24,6 +25,14 @@ from lib.email_service import (
 from lib.password_validator import validate_password_strength
 
 load_dotenv()
+
+# Initialize storage service (LOCAL or GCS based on STORAGE_TYPE env var)
+try:
+    storage_service = init_storage_service()
+    print(f"[INIT] Storage service initialized: STORAGE_TYPE={os.environ.get('STORAGE_TYPE', 'local')}")
+except Exception as e:
+    print(f"[INIT] Error initializing storage service: {e}")
+    storage_service = None
 
 # =============
 # Database Helper
@@ -1961,10 +1970,17 @@ def upload_document():
         # ========== SAVE FILE ==========
         doc_id = str(uuid.uuid4())
         unique_filename = f"{doc_id}.{file_ext}"
-        file_path = DOCUMENTS_RAW_DIR / unique_filename
         
-        file.save(str(file_path))
-        print(f"[upload_document] File saved: {file_path}")
+        # Use storage service (LOCAL or GCS)
+        if not storage_service:
+            return jsonify({"error": "Storage service not initialized"}), 500
+        
+        try:
+            file_path = storage_service.save(f"raw/{unique_filename}", file)
+            print(f"[upload_document] File saved: {file_path}")
+        except Exception as save_error:
+            print(f"[upload_document] Storage error: {save_error}")
+            return jsonify({"error": "Failed to save file"}), 500
         
         # ========== CREATE DATABASE RECORD ==========
         conn = get_db_connection()
@@ -2482,21 +2498,22 @@ def get_document_preview(doc_id):
                         "error": f"Preview not available for status: {doc['status']}"
                     }), 400
                 
-                # Build file path using document ID
-                from defines import DOCUMENTS_RAW_DIR
-                # Files are stored with their UUID as filename + original extension
+                # Get file using storage service
                 _, ext = os.path.splitext(doc["raw_filename"])
-                file_path = os.path.join(DOCUMENTS_RAW_DIR, f"{doc['id']}{ext}")
+                file_storage_path = f"raw/{doc['id']}{ext}"
                 
-                # Check if file exists
-                if not os.path.exists(file_path):
-                    return jsonify({"error": "File not found"}), 404
+                if not storage_service:
+                    return jsonify({"error": "Storage service not initialized"}), 500
+                
+                file_content = storage_service.get(file_storage_path)
+                if file_content is None:
+                    return jsonify({"error": "File not found in storage"}), 404
                 
                 # Read and serve the file
                 from flask import send_file
+                from io import BytesIO
                 
                 # Determine MIME type based on file extension
-                _, ext = os.path.splitext(doc["raw_filename"])
                 mime_type = "application/octet-stream"
                 if ext.lower() in [".pdf"]:
                     mime_type = "application/pdf"
@@ -2508,9 +2525,10 @@ def get_document_preview(doc_id):
                     mime_type = "image/tiff"
                 
                 return send_file(
-                    file_path,
+                    BytesIO(file_content),
                     mimetype=mime_type,
-                    as_attachment=False
+                    as_attachment=False,
+                    download_name=doc["raw_filename"]
                 )
         
         except Exception as e:

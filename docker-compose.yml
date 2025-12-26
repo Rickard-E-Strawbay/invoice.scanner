@@ -68,6 +68,7 @@ services:
       - DATABASE_USER=scanner
       - DATABASE_PASSWORD=scanner
       - DATABASE_NAME=invoice_scanner
+      - STORAGE_TYPE=local
       - DOCUMENTS_RAW_DIR=/app/documents/raw
       - DOCUMENTS_PROCESSED_DIR=/app/documents/processed
       - FLASK_ENV=development

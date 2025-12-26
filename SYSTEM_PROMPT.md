@@ -41,7 +41,12 @@
 | **FASE 5C** | ✅ 100% | Session Management: Environment-aware Flask session cookies (HTTPS) | **Dec 26** |
 | **FASE 5D** | ✅ 100% | API Response Fields: company_enabled added to user responses | **Dec 26 16:32** |
 | **FASE 5E** | ✅ 100% | Email Service: Disabled in Cloud Run (pending SendGrid migration) | **Dec 26 16:40** |
-| FASE 6 | ⏳ Testing | Document processing, Scan service validation | **NEXT** |
+| FASE 6 | ⏳ Planning | Document Storage: GCS + Hybrid approach | **Dec 26 16:45** |
+| FASE 6A | 📝 Planned | Create GCS Bucket for document storage | **READY** |
+| FASE 6B | 📝 Planned | Build storage_service.py abstraction layer | **READY** |
+| FASE 6C | 📝 Planned | Update upload/download endpoints to use abstraction | **READY** |
+| FASE 6D | 📝 Planned | Configure environment-aware storage (local vs GCS) | **READY** |
+| FASE 6E | 📝 Planned | Test document processing end-to-end | **READY** |
 | FASE 7-8 | 0% | Cloud Tasks, Monitoring, Production validation | Future |
 
 ### 🚀 WHAT'S READY NOW (Dec 26, 22:30)
@@ -96,7 +101,83 @@
 - Commits ahead: Latest fixes pushed (email disable, company_enabled fields)
 - Ready to: Test FASE 6 (processing) or merge to main for PROD
 
+---
 
+## 🎯 FASE 6: DOCUMENT STORAGE STRATEGY (Dec 26, 16:45)
+
+### Problem
+- Cloud Run har **ephemeral filesystem** (raderas vid container restart)
+- Local använder Docker volume (`./documents/` mountad)
+- Upload endpoint försöker skriva till `/app/documents/raw/` → **fails på Cloud Run**
+
+### Error
+```
+[upload_document] Error: [Errno 2] No such file or directory: '/app/documents/raw/98863725-c6b8-4170-800b-d66cf4bb57e7.pdf'
+```
+
+### Solution: HYBRID APPROACH (Local volumes + GCS)
+
+| Strategi | Local | Cloud | Kostnad | Komplexitet |
+|----------|-------|-------|---------|-------------|
+| **Hybrid: Volumes + GCS** ⭐⭐ | ✅ | ✅ | Låg | Medel |
+| GCS endast | ✗ | ✅ | Låg | Låg |
+| Cloud Filestore | ✗ | ✅ | Högt | Låg |
+
+**Valda strategi: HYBRID** för att:
+1. ✅ Local dev exakt samma som idag (volumes)
+2. ✅ Cloud Run får persistent storage (GCS)
+3. ✅ Same code, environment-aware backend
+
+### Implementation Plan (5 Steps)
+
+#### Step 1: Create GCS Bucket
+- Projekt: `strawbayscannertest` (TEST), `strawbayproduction` (PROD)
+- Bucket name: `invoice-scanner-test-docs` (TEST), `invoice-scanner-prod-docs` (PROD)
+- Region: `europe-west1`
+- Access: Via Cloud Run service account IAM
+- Retention: Standard (no lifecycle policy initially)
+
+#### Step 2: Create Storage Abstraction Layer
+- New file: `invoice.scanner.api/lib/storage_service.py`
+- Interface: `StorageService` (abstract)
+- Implementations:
+  - `LocalStorageService`: Read/write from `/app/documents/`
+  - `GCSStorageService`: Read/write from GCS bucket
+- Selection via environment variable: `STORAGE_TYPE=local|gcs`
+
+#### Step 3: Update Document Endpoints
+- `upload_document`: Change from direct file write to `StorageService.save()`
+- `get_document`: Change from direct file read to `StorageService.get()`
+- `delete_document`: Change to `StorageService.delete()`
+- `list_documents`: Change to `StorageService.list()`
+
+#### Step 4: Environment Configuration
+- **Local (docker-compose.yml)**: `STORAGE_TYPE=local` → Uses volumes
+- **Cloud Run TEST**: `STORAGE_TYPE=gcs` + bucket creds → Uses GCS
+- **Cloud Run PROD**: `STORAGE_TYPE=gcs` + separate bucket → Uses GCS
+
+#### Step 5: Data Migration (Optional)
+- Script: Copy existing `documents/raw/` to GCS bucket
+- Only needed if TEST has existing data
+
+### Code Changes Required
+1. Create `storage_service.py` (new file)
+2. Update `app.py` - import and use StorageService
+3. Update environment configs (docker-compose, Cloud Run env vars)
+4. No changes to endpoints - same API, different backend
+
+### Local Compatibility ✅
+- **No changes to docker-compose.yml volumes**
+- **Same code, different STORAGE_TYPE env var**
+- **Works exactly as before locally**
+
+### Success Criteria
+- ✅ Local: Files written to `./documents/raw/`
+- ✅ Cloud Run TEST: Files written to `gs://invoice-scanner-test-docs/`
+- ✅ API response: Same regardless of backend
+- ✅ No frontend changes needed
+
+---
 
 ## Projekt-specifikt
 

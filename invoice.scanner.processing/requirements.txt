@@ -9,6 +9,7 @@ flask>=3.0.0
 # Database
 pg8000==1.30.5
 cloud-sql-python-connector==1.4.3
+google-cloud-storage>=2.14.0
 SQLAlchemy>=2.0.0
 
 # ===== IMAGE PROCESSING =====
