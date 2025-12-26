@@ -342,7 +342,7 @@ def get_connection_pg8000_connector(
         return None
     
     try:
-        from google.cloud.sql.connector import Connector
+        from google.cloud.sql.connector import Connector, IPTypes
         
         connector = Connector()
         conn = connector.connect(
@@ -350,7 +350,8 @@ def get_connection_pg8000_connector(
             "pg8000",
             user=user,
             password=password,
-            db=database
+            db=database,
+            ip_type=IPTypes.PRIVATE
         )
         logger.info(f"[DB] Connected via Cloud SQL Connector: {database}")
         return PG8000Connection(conn)
