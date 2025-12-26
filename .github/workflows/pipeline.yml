@@ -123,7 +123,7 @@ jobs:
             --timeout=1800 \
             --max-instances=10 \
             --add-cloudsql-instances=strawbayscannertest:europe-west1:invoice-scanner-test \
-            --set-env-vars "DATABASE_HOST=/cloudsql/strawbayscannertest:europe-west1:invoice-scanner-test,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_test,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_PORT=5432,FLASK_SECRET_KEY=$SECRET_KEY,FLASK_ENV=test,EMAIL_SENDER=$GMAIL_SENDER,EMAIL_PASSWORD=$GMAIL_PASSWORD,OPENAI_API_KEY=$OPENAI_API_KEY,GCP_PROJECT=strawbayscannertest,GCP_REGION=europe-west1"
+            --set-env-vars "INSTANCE_CONNECTION_NAME=strawbayscannertest:europe-west1:invoice-scanner-test,DATABASE_HOST=/cloudsql/strawbayscannertest:europe-west1:invoice-scanner-test,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_test,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_PORT=5432,FLASK_SECRET_KEY=$SECRET_KEY,FLASK_ENV=test,EMAIL_SENDER=$GMAIL_SENDER,EMAIL_PASSWORD=$GMAIL_PASSWORD,OPENAI_API_KEY=$OPENAI_API_KEY,GCP_PROJECT=strawbayscannertest,GCP_REGION=europe-west1"
         env:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           SECRET_KEY: ${{ env.SECRET_KEY }}
@@ -254,7 +254,7 @@ jobs:
             --max-instances=20 \
             --min-instances=1 \
             --add-cloudsql-instances=strawbayscannerprod:europe-west1:invoice-scanner-prod \
-            --set-env-vars "DATABASE_HOST=/cloudsql/strawbayscannerprod:europe-west1:invoice-scanner-prod,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_PORT=5432,FLASK_SECRET_KEY=$SECRET_KEY,FLASK_ENV=production,EMAIL_SENDER=$GMAIL_SENDER,EMAIL_PASSWORD=$GMAIL_PASSWORD,OPENAI_API_KEY=$OPENAI_API_KEY,GCP_PROJECT=strawbayscannerprod,GCP_REGION=europe-west1"
+            --set-env-vars "INSTANCE_CONNECTION_NAME=strawbayscannerprod:europe-west1:invoice-scanner-prod,DATABASE_HOST=/cloudsql/strawbayscannerprod:europe-west1:invoice-scanner-prod,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_PORT=5432,FLASK_SECRET_KEY=$SECRET_KEY,FLASK_ENV=production,EMAIL_SENDER=$GMAIL_SENDER,EMAIL_PASSWORD=$GMAIL_PASSWORD,OPENAI_API_KEY=$OPENAI_API_KEY,GCP_PROJECT=strawbayscannerprod,GCP_REGION=europe-west1"
         env:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           SECRET_KEY: ${{ env.SECRET_KEY }}
