@@ -29,7 +29,7 @@ RUN pip install --upgrade pip setuptools wheel && \
     pip install -r /tmp/requirements.txt
 
 # Copy application code
-COPY ./invoice.scanner.processing .
+COPY . .
 
 # Create necessary directories
 RUN mkdir -p /app/documents/raw && \
