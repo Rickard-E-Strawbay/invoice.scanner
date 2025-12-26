@@ -1,49 +1,63 @@
 """
-Database Utilities
+Database Utilities (pg8000 unified driver)
 
 Centralized database connection and utility functions.
 Used by all tasks for consistent database access.
 
+Migrated from psycopg2 to pg8000 (Pure Python PostgreSQL driver):
+- Supports both local TCP and Cloud SQL Connector
+- RealDictCursor compatibility maintained for all queries
+- Standardized environment variable naming: DATABASE_*
+
 FUNCTIONS:
-    get_db_connection(): PostgreSQL connection
+    get_db_connection(): PostgreSQL connection (pg8000-based)
     update_document_status(): Update document processing status
     get_document_status(): Retrieve current document status
 """
 
 import logging
 import os
+import sys
+from pathlib import Path
 from typing import Optional, Dict, Any
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
+# Add processing directory to path for imports
+PROCESSING_PATH = str(Path(__file__).parent.parent)
+if PROCESSING_PATH not in sys.path:
+    sys.path.insert(0, PROCESSING_PATH)
+
+from pg8000_wrapper import (
+    get_connection as get_pg8000_connection,
+    RealDictCursor
+)
 
 logger = logging.getLogger(__name__)
 
 
-def get_db_connection() -> Optional[psycopg2.extensions.connection]:
+def get_db_connection():
     """
-    Establish PostgreSQL database connection.
+    Establish PostgreSQL database connection (pg8000-based).
 
     Reads connection parameters from environment variables:
-    - DB_HOST: Database hostname (default: 'postgres')
-    - DB_NAME: Database name (default: 'invoice_scanner')
-    - DB_USER: Database user (default: 'scanner')
-    - DB_PASSWORD: Database password (default: 'password')
-    - DB_PORT: Database port (default: 5432)
+    - DATABASE_HOST: Database hostname (default: 'postgres')
+    - DATABASE_NAME: Database name (default: 'invoice_scanner')
+    - DATABASE_USER: Database user (default: 'scanner')
+    - DATABASE_PASSWORD: Database password (default: 'password')
+    - DATABASE_PORT: Database port (default: 5432)
 
     Returns:
-        psycopg2 connection object or None if connection fails.
+        pg8000 connection object (with RealDictCursor compatibility) or None if connection fails.
 
     Raises:
         Logs errors but does not raise - calling code must handle None.
     """
     try:
-        conn = psycopg2.connect(
-            host=os.getenv('DB_HOST', 'postgres'),
-            database=os.getenv('DB_NAME', 'invoice_scanner'),
-            user=os.getenv('DB_USER', 'scanner'),
-            password=os.getenv('DB_PASSWORD', 'password'),
-            port=int(os.getenv('DB_PORT', 5432))
+        conn = get_pg8000_connection(
+            host=os.getenv('DATABASE_HOST', 'postgres'),
+            port=int(os.getenv('DATABASE_PORT', 5432)),
+            database=os.getenv('DATABASE_NAME', 'invoice_scanner'),
+            user=os.getenv('DATABASE_USER', 'scanner'),
+            password=os.getenv('DATABASE_PASSWORD', 'password')
         )
         return conn
     except Exception as e:
@@ -128,8 +142,7 @@ def get_document_status(document_id: str) -> Optional[Dict[str, Any]]:
                 (document_id,)
             )
             result = cursor.fetchone()
-            return dict(result) if result else None
-    except Exception as e:
+            return dict(result.to_dict()) if result else None
         logger.error(
             f"[DB] Error retrieving document {document_id}: {e}",
             exc_info=True

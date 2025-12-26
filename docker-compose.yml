@@ -54,8 +54,8 @@ services:
 
   api:
     build:
-      context: ./invoice.scanner.api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./invoice.scanner.api/Dockerfile
     container_name: invoice.scanner.api
     ports:
       - "5001:5000"
@@ -97,8 +97,8 @@ services:
   # Base processing service (coordinator)
   processing:
     build:
-      context: ./invoice.scanner.processing
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./invoice.scanner.processing/Dockerfile
     image: invoice.scanner.processing:latest
     container_name: invoice.scanner.processing
     environment:

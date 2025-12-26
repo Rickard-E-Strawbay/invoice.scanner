@@ -21,23 +21,23 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
-COPY requirements.txt .
+COPY ./invoice.scanner.processing/requirements.txt /tmp/requirements.txt
 
 # Install Python dependencies
 RUN pip install --upgrade pip setuptools wheel && \
-    pip install -r requirements.txt
+    pip install -r /tmp/requirements.txt
 
 # Copy application code
-COPY . .
+COPY ./invoice.scanner.processing .
 
 # Create necessary directories
 RUN mkdir -p /app/documents/raw && \
     mkdir -p /app/documents/processed && \
     mkdir -p /app/logs
 
-# Health check
+# Health check - verify process is alive (works for both Celery and HTTP service)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:5002/health || exit 1
+    CMD ps aux | grep -q "[p]ython" || exit 1
 
 # Default command - can be overridden
 CMD ["python", "http_service.py"]

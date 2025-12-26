@@ -9,10 +9,8 @@ import threading
 import time
 import uuid
 import secrets
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from werkzeug.security import generate_password_hash, check_password_hash
-from db_config import DB_CONFIG, get_connection
+from db_config import DB_CONFIG, get_connection, RealDictCursor
 import os
 from dotenv import load_dotenv
 from lib.email_service import (

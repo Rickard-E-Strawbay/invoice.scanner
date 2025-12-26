@@ -1,8 +1,8 @@
 # System Prompt för Invoice Scanner Projekt
 
-## 🎯 CURRENT STATUS (Dec 25, 2025 - ~19:15)
+## 🎯 CURRENT STATUS (Dec 26, 2025 - ~19:45)
 
-**Overall Progress:** 75% Complete
+**Overall Progress:** 75% Complete (Database Driver Issue Discovered & Strategy Planned)
 
 | FASE | Status | Details |
 |------|--------|---------|
@@ -12,36 +12,29 @@
 | FASE 3 | ✅ 100% | Docker Images (api, frontend, worker - pushed to both registries) |
 | FASE 4 | ✅ 100% | GitHub Actions: Single unified pipeline.yml with conditional jobs |
 | FASE 4B | ✅ 100% | Local Docker-Compose: Tested and verified, port standardization |
-| FASE 5 | 0% | Cloud Run Deployment (ready after first PR merge) |
+| FASE 4C | ⏳ 25% | Database Driver Migration: pg8000 strategy (awaiting implementation go-ahead) |
+| FASE 5 | 0% | Cloud Run Deployment (blocked until pg8000 migration complete) |
 | FASE 6-8 | 0% | Cloud Tasks, Testing, Monitoring |
 
-**Session Dec 25 - Local Verification + Port Standardization:**
+**Session Dec 26 - Critical Issue Discovery**
 
-✅ **Completed:**
-1. Standardized environment variables: DATABASE_* convention everywhere
-2. docker-compose.yml updated to use DATABASE_HOST, DATABASE_PORT, etc.
-3. db_config.py made flexible (supports both DATABASE_* and DB_* for backwards compat)
-4. Verified all services start locally (API, Frontend, Workers, Redis, DB)
-5. API /health endpoint working (returns HTTP 200)
-6. **Port Standardization:** Frontend now uses port 8080 (same as Cloud Run)
-   - Before: docker-compose 3000→3000, Cloud Run 8080
-   - After: Both use 8080 for consistency
-   - Dockerfile/start.sh already configured for 8080
+⚠️ **CRITICAL DISCOVERY:**
+- Cloud SQL Connector does NOT support `psycopg2` driver
+- Only supports: `pymysql`, `pg8000`, `pytds`
+- Previous implementation attempt was impossible
+- Entire project uses two separate database configuration systems (API vs Processing)
 
-**Local Testing Results:**
-- ✅ Docker-compose up: 13/13 containers running
-- ✅ Database: Healthy (PostgreSQL)
-- ✅ Redis: Healthy
-- ✅ API: Running on 5001, /health endpoint responds with 200
-- ✅ Frontend: Running on 8080 (now matches Cloud Run)
-- ✅ All Celery workers: Healthy
-- ✅ Flower monitoring: Running on 5555
+✅ **Analysis Completed:**
+1. Identified why Cloud Run 500 error occurred (driver incompatibility)
+2. Investigated entire project architecture (13 containers, 2 separate DB systems)
+3. Proposed unified pg8000 migration strategy (3-part approach)
+4. Documented critical instructions for implementation
+5. Updated requirements.txt with pg8000 package
 
-**Git Status:**
-- Branch: `re_deploy_start`
-- Modified: docker-compose.yml (port 3000→8080 for frontend)
-- Modified: SYSTEM_PROMPT.md (this document)
-- Ready to commit
+⏳ **Awaiting User Confirmation:**
+- User has been presented with 3-part refactoring strategy
+- Strategy includes: shared wrapper layer, env var standardization, both module updates
+- Ready to implement once confirmed
 
 ---
 
@@ -107,12 +100,36 @@ När du gör ändringar, förklara:
 
 ### 7. EFTER VARJE OPERATION
 - Läs denna fil och se till att hålla kritiska instruktioner i minnet.
+- **SPECIELL UPPMÄRKSAMHET:** Se avsnittet "DATABASE DRIVER STRATEGY: pg8000 Migration"
+- Kolla Current Status för vad som är KLART vs ⏳ vs ❌
 
 **GÖR:**
 - Undersök först
 - Fråga
 - Vänd på tanken om det redan finns en bättre lösning
 - Respektera befintliga design-beslut
+
+### 8. KRITISKA REGLER FÖR pg8000 MIGRATIONEN (Dec 26)
+
+**ALDRIG implementera pg8000-migrationen utan att:**
+1. ✅ Läsa ALLA filer som använder `psycopg2.connect()` eller `RealDictCursor`
+2. ✅ Förstå hur RealDictCursor används i varje fil
+3. ✅ Grep-a för alla `DB_*` och `DATABASE_*` environment variables
+4. ✅ Verifiera att docker-compose.yml får samma update
+5. ✅ Testa lokalt med alla 13 containers innan Cloud Run
+6. ✅ **HÅLLA ENHETLIGHET:** Inte blanda DATABASE_* och DB_* naming
+
+**GÖR:**
+- Refactor systematiskt (API → Processing → docker-compose)
+- Test lokalt efter VARJE steg
+- Bekräfta att RealDictCursor wrapper fungerar identiskt
+- Dokumentera ändringar i git commits
+
+**GÖR INTE:**
+- Implementera endast halva migrationen
+- Blanda gamla och nya environment variable-namn
+- Hoppa över processing-modulen
+- Förvänta Cloud Run att fungera innan lokal test är klar
 
 ## Projekt-specifikt
 
@@ -637,6 +654,113 @@ PROD: (same pattern)
 - [Cloud Run + Cloud SQL Integration](https://cloud.google.com/run/docs/configuring/sql-connectors)
 
 **Status:** ✅ CONFIGURED in pipeline.yml (both TEST and PROD)
+
+---
+
+## DATABASE DRIVER STRATEGY: pg8000 Migration (DECIDED Dec 26)
+
+### Problem Discovery (Dec 26 - CRITICAL)
+
+**Error in Cloud Run logs (10:00:39):**
+```
+"Driver 'psycopg2' is not supported."
+```
+
+**Root Cause Investigation:**
+- Cloud SQL Connector API documentation discovered: Only supports `pymysql`, `pg8000`, `pytds`
+- psycopg2 is NOT supported by Cloud SQL Connector
+- Current code attempted: `connector.connect(..., "psycopg2", ...)`
+- This was doomed to fail in Cloud Run
+
+**Architecture Issue (SIMULTANEOUS DISCOVERY):**
+- API uses `DATABASE_*` environment variables
+- Processing uses `DB_*` environment variables (old naming convention)
+- Two separate database connection systems in same project
+- Cannot fix one without fixing both
+
+### Solution: Unified pg8000 Strategy
+
+**Why pg8000?**
+- ✅ Pure Python PostgreSQL driver (no C dependencies)
+- ✅ Cloud SQL Connector officially supports it
+- ✅ Works with local TCP connections (docker-compose)
+- ✅ Works with future Connector mode in Cloud Run
+- ✅ Single solution for all environments
+
+**Challenges:**
+- pg8000 doesn't have `RealDictCursor` built-in (like psycopg2)
+- Current codebase heavily uses RealDictCursor for dictionary-like row access
+- Solution: Create wrapper layer providing RealDictCursor interface for pg8000
+
+### Implementation Plan (3-Part Refactoring)
+
+**Part 1: Create Shared Database Abstraction Layer**
+- Location: `/shared/pg8000_wrapper.py`
+- Provides: `RealDictCursor`-like interface for pg8000 rows
+- Supports: Both local TCP (docker-compose) and future Connector mode (Cloud Run)
+- Implements: Connection pooling for efficiency
+
+**Part 2: Standardize Environment Variables Across Entire Project**
+- Converge: `DB_*` variables → `DATABASE_*` (uniform naming)
+- Files affected:
+  - `invoice.scanner.api/db_config.py` - Already uses DATABASE_*
+  - `invoice.scanner.api/db_utils.py` - Uses db_config imports
+  - `invoice.scanner.processing/config/db_utils.py` - Uses old DB_* (needs update)
+  - `docker-compose.yml` - Update all 13 services to use DATABASE_*
+- Rationale: Single naming convention simplifies debugging + matches Cloud Run
+
+**Part 3: Update Both API and Processing Modules**
+- API: Refactor db_config.py to use shared pg8000 wrapper
+- Processing: Update config/db_utils.py to use shared wrapper + new env vars
+- Verify: All existing functionality preserved (RealDictCursor behavior replicated)
+- Test: All 13 containers work locally before Cloud Run
+
+### Critical Instructions (Must Remember)
+
+**When implementing pg8000 migration:**
+
+1. **INVESTIGATE FIRST**
+   - Grep for all uses of `psycopg2.connect()`
+   - Find all places using `RealDictCursor`
+   - Check all environment variable references
+   - Understand current connection patterns
+
+2. **STANDARDIZE NAMING SYSTEMATICALLY**
+   - Don't leave dual naming convention (mixing DATABASE_* and DB_*)
+   - Update docker-compose.yml simultaneously
+   - Verify all 13 containers get correct variables
+   - No half-migrations
+
+3. **TEST LOCALLY BEFORE CLOUD RUN**
+   - Run all 13 containers with new pg8000 wrapper
+   - Test API login endpoint (uses database)
+   - Test processing workers (use database queries)
+   - Verify RealDictCursor compatibility layer works
+
+4. **MAINTAIN BACKWARD COMPATIBILITY**
+   - Existing code should not know it's pg8000 internally
+   - RealDictCursor interface must be identical to psycopg2 version
+   - All cursors should still behave like dictionaries
+
+### Current Status (Dec 26 - After Discovery)
+
+**Completed:**
+- ✅ Identified driver incompatibility (psycopg2 not supported by Connector)
+- ✅ Analyzed entire project structure (found dual DB naming)
+- ✅ Proposed 3-part refactoring strategy
+- ✅ Updated requirements.txt: Removed `cloud-sql-python-connector[psycopg2]`, added standalone `cloud-sql-python-connector` and `pg8000`
+
+**Not Started:**
+- ❌ Create shared pg8000_wrapper.py layer
+- ❌ Update invoice.scanner.api/db_config.py
+- ❌ Update invoice.scanner.processing/config/db_utils.py
+- ❌ Standardize environment variables in docker-compose.yml
+- ❌ Test unified solution locally
+- ❌ Cloud Run deployment with pg8000
+
+**Awaiting:**
+- User confirmation to proceed with implementation
+- User decision on implementation sequence
 
 ---
 

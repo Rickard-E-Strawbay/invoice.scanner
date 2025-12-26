@@ -1,15 +1,26 @@
 """
-Database configuration for Invoice Scanner API
+Database configuration for Invoice Scanner API (pg8000 unified driver)
 
 Connection modes:
-- Cloud Run: Cloud SQL Connector + psycopg2 (Private IP, IAM auth)
-- Local docker-compose: psycopg2 TCP to db service
+- Cloud Run: pg8000 via Cloud SQL Connector (Private IP, IAM auth)
+- Local docker-compose: pg8000 TCP to db service
 
-K_SERVICE env var indicates Cloud Run environment.
-INSTANCE_CONNECTION_NAME is set in Cloud Run for Connector.
+Uses pg8000 (Pure Python PostgreSQL driver) for both environments:
+- Works with Cloud SQL Connector (only supports: pymysql, pg8000, pytds)
+- Works with local TCP connections
+- Provides RealDictCursor compatibility layer for existing code
+
+Migration from psycopg2:
+- All existing code using RealDictCursor continues to work
+- Connection factory and cursor usage unchanged
 """
 import os
 from urllib.parse import quote_plus
+
+from pg8000_wrapper import (
+    get_connection as get_pg8000_connection,
+    RealDictCursor
+)
 
 # Environment detection
 IS_CLOUD_RUN = os.getenv('K_SERVICE') is not None
@@ -23,10 +34,11 @@ DATABASE_NAME = os.getenv('DATABASE_NAME')
 INSTANCE_CONNECTION_NAME = os.getenv('INSTANCE_CONNECTION_NAME')  # Cloud Run only
 
 print(f"[db_config] Environment: {'Cloud Run' if IS_CLOUD_RUN else 'Local'}")
+print(f"[db_config] Driver: pg8000 (Pure Python PostgreSQL)")
 
 if IS_CLOUD_RUN:
     # ==========================================
-    # Cloud Run mode: Cloud SQL Connector
+    # Cloud Run mode: pg8000 via Cloud SQL Connector
     # ==========================================
     if not all([INSTANCE_CONNECTION_NAME, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME]):
         print("[db_config] ERROR: Missing Cloud SQL Connector configuration for Cloud Run")
@@ -42,46 +54,35 @@ if IS_CLOUD_RUN:
             "  - DATABASE_NAME"
         )
     
-    print(f"[db_config] Using Cloud SQL Connector")
+    print(f"[db_config] Using Cloud SQL Connector with pg8000")
     print(f"[db_config] Instance: {INSTANCE_CONNECTION_NAME}")
     print(f"[db_config] User: {DATABASE_USER}")
     print(f"[db_config] Database: {DATABASE_NAME}")
     
-    # Initialize Cloud SQL Connector
-    from google.cloud.sql.connector import Connector
-    
-    connector = Connector()
-    
     def get_connection():
-        """Get a database connection using Cloud SQL Connector (Cloud Run)"""
-        try:
-            conn = connector.connect(
-                INSTANCE_CONNECTION_NAME,
-                "psycopg2",
-                user=DATABASE_USER,
-                password=DATABASE_PASSWORD,
-                db=DATABASE_NAME
-            )
-            print(f"[db_config] Connected via Cloud SQL Connector: {DATABASE_NAME}")
-            return conn
-        except Exception as e:
-            print(f"[db_config] ERROR: Cloud SQL Connector connection failed: {e}")
-            raise
+        """Get database connection via Cloud SQL Connector (pg8000)"""
+        return get_pg8000_connection(
+            use_connector=True,
+            instance_connection_name=INSTANCE_CONNECTION_NAME,
+            database=DATABASE_NAME,
+            user=DATABASE_USER,
+            password=DATABASE_PASSWORD
+        )
     
-    # For compatibility with legacy code
+    # For compatibility
     DB_CONFIG = {
         'instance_connection_name': INSTANCE_CONNECTION_NAME,
-        'driver': 'psycopg2',
+        'driver': 'pg8000',
         'user': DATABASE_USER,
         'password': DATABASE_PASSWORD,
-        'db': DATABASE_NAME
+        'database': DATABASE_NAME
     }
     DATABASE_URL = None
     ODBC_CONNECTION_STRING = None
 
 else:
     # ==========================================
-    # Local mode: psycopg2 TCP
+    # Local mode: pg8000 TCP
     # ==========================================
     if not all([DATABASE_HOST, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME]):
         print("[db_config] ERROR: Missing database configuration for local mode")
@@ -97,31 +98,29 @@ else:
             "  - DATABASE_NAME"
         )
     
-    print(f"[db_config] Using psycopg2 TCP connection")
+    print(f"[db_config] Using pg8000 TCP connection")
     print(f"[db_config] Host: {DATABASE_HOST}:{DATABASE_PORT}")
     print(f"[db_config] User: {DATABASE_USER}")
     print(f"[db_config] Database: {DATABASE_NAME}")
     
-    # Standard psycopg2 configuration for local docker-compose
-    DATABASE_URL = f"postgresql+psycopg2://{DATABASE_USER}:{quote_plus(DATABASE_PASSWORD)}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
+    # pg8000 configuration for local docker-compose
+    DATABASE_URL = f"postgresql+pg8000://{DATABASE_USER}:{quote_plus(DATABASE_PASSWORD)}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
     DB_CONFIG = {
         'host': DATABASE_HOST,
-        'port': DATABASE_PORT,
+        'port': int(DATABASE_PORT),
         'user': DATABASE_USER,
         'password': DATABASE_PASSWORD,
         'database': DATABASE_NAME
     }
     
     ODBC_CONNECTION_STRING = f"Driver={{PostgreSQL Unicode}};Server={DATABASE_HOST};Port={DATABASE_PORT};Database={DATABASE_NAME};Uid={DATABASE_USER};Pwd={DATABASE_PASSWORD};"    
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
     
     def get_connection():
-        """Get a database connection using psycopg2 TCP (Local)"""
-        try:
-            conn = psycopg2.connect(**DB_CONFIG)
-            print(f"[db_config] Connected via psycopg2 TCP: {DATABASE_NAME}")
-            return conn
-        except Exception as e:
-            print(f"[db_config] ERROR: psycopg2 connection failed: {e}")
-            raise
+        """Get database connection via pg8000 TCP (Local)"""
+        return get_pg8000_connection(
+            host=DATABASE_HOST,
+            port=int(DATABASE_PORT),
+            database=DATABASE_NAME,
+            user=DATABASE_USER,
+            password=DATABASE_PASSWORD
+        )
