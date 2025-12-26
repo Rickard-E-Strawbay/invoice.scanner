@@ -47,8 +47,28 @@ if IS_CLOUD_RUN:
     print(f"[db_config] User: {DATABASE_USER}")
     print(f"[db_config] Database: {DATABASE_NAME}")
     
-    # Configuration for Cloud SQL Connector
-    # Will be used in main.py with: connector.connect(**DB_CONFIG)
+    # Initialize Cloud SQL Connector
+    from google.cloud.sql.connector import Connector
+    
+    connector = Connector()
+    
+    def get_connection():
+        """Get a database connection using Cloud SQL Connector (Cloud Run)"""
+        try:
+            conn = connector.connect(
+                INSTANCE_CONNECTION_NAME,
+                "psycopg2",
+                user=DATABASE_USER,
+                password=DATABASE_PASSWORD,
+                db=DATABASE_NAME
+            )
+            print(f"[db_config] Connected via Cloud SQL Connector: {DATABASE_NAME}")
+            return conn
+        except Exception as e:
+            print(f"[db_config] ERROR: Cloud SQL Connector connection failed: {e}")
+            raise
+    
+    # For compatibility with legacy code
     DB_CONFIG = {
         'instance_connection_name': INSTANCE_CONNECTION_NAME,
         'driver': 'psycopg2',
@@ -56,8 +76,7 @@ if IS_CLOUD_RUN:
         'password': DATABASE_PASSWORD,
         'db': DATABASE_NAME
     }
-    
-    DATABASE_URL = None  # Will use creator function with Connector
+    DATABASE_URL = None
     ODBC_CONNECTION_STRING = None
 
 else:
@@ -93,4 +112,16 @@ else:
         'database': DATABASE_NAME
     }
     
-    ODBC_CONNECTION_STRING = f"Driver={{PostgreSQL Unicode}};Server={DATABASE_HOST};Port={DATABASE_PORT};Database={DATABASE_NAME};Uid={DATABASE_USER};Pwd={DATABASE_PASSWORD};"
+    ODBC_CONNECTION_STRING = f"Driver={{PostgreSQL Unicode}};Server={DATABASE_HOST};Port={DATABASE_PORT};Database={DATABASE_NAME};Uid={DATABASE_USER};Pwd={DATABASE_PASSWORD};"    
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    
+    def get_connection():
+        """Get a database connection using psycopg2 TCP (Local)"""
+        try:
+            conn = psycopg2.connect(**DB_CONFIG)
+            print(f"[db_config] Connected via psycopg2 TCP: {DATABASE_NAME}")
+            return conn
+        except Exception as e:
+            print(f"[db_config] ERROR: psycopg2 connection failed: {e}")
+            raise

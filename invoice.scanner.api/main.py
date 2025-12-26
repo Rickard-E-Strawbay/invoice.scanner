@@ -12,7 +12,7 @@ import secrets
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from werkzeug.security import generate_password_hash, check_password_hash
-from db_config import DB_CONFIG
+from db_config import DB_CONFIG, get_connection
 import os
 from dotenv import load_dotenv
 from lib.email_service import (
@@ -31,9 +31,14 @@ load_dotenv()
 # Database Helper
 # =============
 def get_db_connection():
-    """Get a database connection."""
+    """Get a database connection.
+    
+    Routes to appropriate connection method:
+    - Cloud Run: Cloud SQL Connector (from get_connection in db_config)
+    - Local: psycopg2 TCP (from get_connection in db_config)
+    """
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = get_connection()
         return conn
     except Exception as e:
         print(f"Database connection error: {e}")
