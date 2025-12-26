@@ -262,12 +262,17 @@ def task_status(task_id: str) -> Tuple[Dict[str, Any], int]:
             500
         )
 
-
 # ===== MAIN =====
 
 if __name__ == '__main__':
-    logger.info("[HTTP] Starting processing HTTP service on port 5002")
-    # Run on port 5002 for processing service
+    import os
+    
+    # Get port from environment variable (Cloud Run sets PORT=8080)
+    # For local development, default to 5002
+    port = int(os.environ.get('PORT', 5002))
+    
+    logger.info(f"[HTTP] Starting processing HTTP service on port {port}")
+    # Run Flask app on specified port
     # debug=False for production security
-    app.run(host='0.0.0.0', port=5002, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False)
 

@@ -73,14 +73,6 @@ jobs:
           docker push ${{ steps.set-vars.outputs.registry }}/worker:latest 2>/dev/null || echo "Worker image skipped"
           docker push ${{ steps.set-vars.outputs.registry }}/worker:${{ github.sha }} 2>/dev/null || echo "Worker image skipped"
 
-      - name: Build and Push Processing image
-        run: |
-          docker build -t ${{ steps.set-vars.outputs.registry }}/processing:latest \
-                       -t ${{ steps.set-vars.outputs.registry }}/processing:${{ github.sha }} \
-                       ./invoice.scanner.processing
-          docker push ${{ steps.set-vars.outputs.registry }}/processing:latest
-          docker push ${{ steps.set-vars.outputs.registry }}/processing:${{ github.sha }}
-
       - name: Build Summary
         run: |
           echo "✅ Build Complete!"
@@ -142,33 +134,6 @@ jobs:
       - name: Grant public access to API
         run: |
           gcloud run services add-iam-policy-binding invoice-scanner-api-test \
-            --region=europe-west1 \
-            --project=strawbayscannertest \
-            --member=allUsers \
-            --role=roles/run.invoker
-
-      - name: Deploy Processing HTTP Service to Cloud Run
-        run: |
-          gcloud run deploy invoice-scanner-processing-test \
-            --image=europe-west1-docker.pkg.dev/strawbayscannertest/invoice-scanner/processing:latest \
-            --platform=managed \
-            --region=europe-west1 \
-            --project=strawbayscannertest \
-            --allow-unauthenticated \
-            --memory=2Gi \
-            --cpu=2 \
-            --timeout=3600 \
-            --max-instances=5 \
-            --set-env-vars "STORAGE_TYPE=gcs,GCS_BUCKET=invoice-scanner-test-docs,REDIS_URL=redis://redis:6379/0,DATABASE_HOST=localhost,DATABASE_PORT=5432,DATABASE_USER=scanner_test,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_NAME=invoice_scanner,INSTANCE_CONNECTION_NAME=strawbayscannertest:europe-west1:invoice-scanner-test,FLASK_ENV=test,OPENAI_API_KEY=$OPENAI_API_KEY" \
-            --add-cloudsql-instances=strawbayscannertest:europe-west1:invoice-scanner-test \
-            --service-account=447531332666-compute@developer.gserviceaccount.com
-        env:
-          DB_PASSWORD: ${{ env.DB_PASSWORD }}
-          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
-
-      - name: Grant public access to Processing
-        run: |
-          gcloud run services add-iam-policy-binding invoice-scanner-processing-test \
             --region=europe-west1 \
             --project=strawbayscannertest \
             --member=allUsers \
@@ -300,34 +265,6 @@ jobs:
       - name: Grant public access to API
         run: |
           gcloud run services add-iam-policy-binding invoice-scanner-api-prod \
-            --region=europe-west1 \
-            --project=strawbayscannerprod \
-            --member=allUsers \
-            --role=roles/run.invoker
-
-      - name: Deploy Processing HTTP Service to Cloud Run
-        run: |
-          gcloud run deploy invoice-scanner-processing-prod \
-            --image=europe-west1-docker.pkg.dev/strawbayscannerprod/invoice-scanner/processing:latest \
-            --platform=managed \
-            --region=europe-west1 \
-            --project=strawbayscannerprod \
-            --allow-unauthenticated \
-            --memory=2Gi \
-            --cpu=2 \
-            --timeout=3600 \
-            --max-instances=10 \
-            --min-instances=1 \
-            --set-env-vars "STORAGE_TYPE=gcs,GCS_BUCKET=invoice-scanner-prod-docs,REDIS_URL=redis://redis:6379/0,DATABASE_HOST=localhost,DATABASE_PORT=5432,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_NAME=invoice_scanner,INSTANCE_CONNECTION_NAME=strawbayscannerprod:europe-west1:invoice-scanner-prod,FLASK_ENV=production,OPENAI_API_KEY=$OPENAI_API_KEY" \
-            --add-cloudsql-instances=strawbayscannerprod:europe-west1:invoice-scanner-prod \
-            --service-account=447531332666-compute@developer.gserviceaccount.com
-        env:
-          DB_PASSWORD: ${{ env.DB_PASSWORD }}
-          OPENAI_API_KEY: ${{ env.OPENAI_API_KEY }}
-
-      - name: Grant public access to Processing
-        run: |
-          gcloud run services add-iam-policy-binding invoice-scanner-processing-prod \
             --region=europe-west1 \
             --project=strawbayscannerprod \
             --member=allUsers \
