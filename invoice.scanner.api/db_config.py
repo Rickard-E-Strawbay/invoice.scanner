@@ -1,6 +1,10 @@
 """
 Database configuration for Invoice Scanner API
 Uses DATABASE_* naming convention for all environments (Cloud Run + Docker Compose)
+
+Connection modes:
+- Unix socket (Cloud Run): DATABASE_HOST=/cloudsql/project:region:instance (no port in connection string)
+- TCP localhost (docker-compose): DATABASE_HOST=db, DATABASE_PORT=5432
 """
 import os
 from urllib.parse import quote_plus
@@ -26,19 +30,33 @@ if not all([DATABASE_HOST, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME]):
         "  - DATABASE_NAME"
     )
 
-print(f"[db_config] Connecting to {DATABASE_USER}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}")
+# Determine connection mode: Unix socket vs TCP
+IS_UNIX_SOCKET = DATABASE_HOST.startswith('/')
 
-# SQLAlchemy connection string
-DATABASE_URL = f"postgresql://{DATABASE_USER}:{quote_plus(DATABASE_PASSWORD)}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
+if IS_UNIX_SOCKET:
+    # Cloud Run with Cloud SQL Proxy (Unix socket - no port in connection string)
+    print(f"[db_config] Connecting via Unix socket: {DATABASE_USER}@{DATABASE_HOST}/{DATABASE_NAME}")
+    DATABASE_URL = f"postgresql://{DATABASE_USER}:{quote_plus(DATABASE_PASSWORD)}@/{DATABASE_NAME}?host={DATABASE_HOST}"
+    DB_CONFIG = {
+        'host': DATABASE_HOST,
+        'user': DATABASE_USER,
+        'password': DATABASE_PASSWORD,
+        'database': DATABASE_NAME
+    }
+else:
+    # Local docker-compose with TCP (standard TCP connection)
+    print(f"[db_config] Connecting via TCP: {DATABASE_USER}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}")
+    DATABASE_URL = f"postgresql://{DATABASE_USER}:{quote_plus(DATABASE_PASSWORD)}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
+    DB_CONFIG = {
+        'host': DATABASE_HOST,
+        'port': DATABASE_PORT,
+        'user': DATABASE_USER,
+        'password': DATABASE_PASSWORD,
+        'database': DATABASE_NAME
+    }
 
-# For psycopg2 direct connection
-DB_CONFIG = {
-    'host': DATABASE_HOST,
-    'port': DATABASE_PORT,
-    'user': DATABASE_USER,
-    'password': DATABASE_PASSWORD,
-    'database': DATABASE_NAME
-}
-
-# ODBC connection string (for direct ODBC usage)
-ODBC_CONNECTION_STRING = f"Driver={{PostgreSQL Unicode}};Server={DATABASE_HOST};Port={DATABASE_PORT};Database={DATABASE_NAME};Uid={DATABASE_USER};Pwd={DATABASE_PASSWORD};"
+# ODBC connection string (for direct ODBC usage - typically TCP only)
+if not IS_UNIX_SOCKET:
+    ODBC_CONNECTION_STRING = f"Driver={{PostgreSQL Unicode}};Server={DATABASE_HOST};Port={DATABASE_PORT};Database={DATABASE_NAME};Uid={DATABASE_USER};Pwd={DATABASE_PASSWORD};"
+else:
+    ODBC_CONNECTION_STRING = None  # ODBC not typically used with Unix sockets
