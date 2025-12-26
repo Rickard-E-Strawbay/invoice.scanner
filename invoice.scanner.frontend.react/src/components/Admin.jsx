@@ -378,6 +378,7 @@ function Admin() {
 
   const handleToggleUserStatus = async (userId, currentStatus) => {
     try {
+      console.log(`[Admin] Toggling user ${userId} from ${currentStatus} to ${!currentStatus}`);
       const response = await fetch(`${API_BASE_URL}/auth/admin/users/${userId}`, {
         method: "PUT",
         credentials: "include",
@@ -390,12 +391,14 @@ function Admin() {
       });
 
       const data = await response.json();
+      console.log(`[Admin] Response status: ${response.status}, data:`, data);
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to update user status");
       }
 
       // Update the user in the list
+      console.log(`[Admin] Updating user in state, new data:`, data.user);
       setUsers(users.map((u) => (u.id === userId ? data.user : u)));
     } catch (err) {
       console.error("Error updating user status:", err);
