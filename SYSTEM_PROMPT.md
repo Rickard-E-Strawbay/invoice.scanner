@@ -1,504 +1,218 @@
 # System Prompt för Invoice Scanner Projekt
 
-## 🎯 CURRENT STATUS (Dec 26, 2025 - ~21:30)
+---
 
-**Overall Progress:** 90% Complete (pg8000 Migration Complete - Cloud SQL Initialized - GitHub Actions Automated Deployment Starting)
+## 📋 QUICK REFERENCE - Läs detta först!
 
-| FASE | Status | Details |
-|------|--------|---------|
-| FASE 0 | ✅ 100% | GCP Infrastructure (APIs, Service Accounts, GitHub Secrets) |
-| FASE 1 | ✅ 100% | GCP Secret Manager (12 secrets: db_password, secret_key, gmail, openai) |
-| FASE 2 | ✅ 100% | Cloud SQL (PostgreSQL instances initialized + schemas deployed) |
-| FASE 3 | ✅ 100% | Docker Images (api, frontend, worker - pushed to both registries) |
-| FASE 4 | ✅ 100% | GitHub Actions: Single unified pipeline.yml with conditional jobs |
-| FASE 4B | ✅ 100% | Local Docker-Compose: Tested and verified, port standardization |
-| FASE 4C | ✅ 100% | Database Driver Migration: pg8000 unified driver (COMPLETED & tested) |
-| FASE 5 | ⏳ 20% | Cloud Run Deployment (Database initialized - GitHub Actions deployment starting) |
-| FASE 6-8 | 0% | Cloud Tasks, Testing, Monitoring |
+| Vad | Status | Vad gör vi |
+|-----|--------|-----------|
+| **Local Docker** | ✅ Ready | Alla 14 containers bygger + health |
+| **pg8000 Driver** | ✅ Complete | Testad med pg8000_wrapper + RealDictCursor |
+| **Database** | ✅ Ready | Cloud SQL TEST+PROD initialiserad |
+| **GitHub Actions** | ✅ Ready | Pipeline.yml (single file, 3 jobs) |
+| **GCP Secrets** | ✅ Ready | 12 secrets i Secret Manager |
+| **Docker Images** | ✅ Ready | Api, Frontend, Worker pushed till registries |
+| **NEXT STEP** | 👉 DO THIS | Push to `re_deploy_start` → GitHub Actions triggers |
 
-**Session Dec 26 - pg8000 Migration Complete**
-
-✅ **MIGRATION COMPLETED:**
-- Successfully migrated from psycopg2 to pg8000 (Pure Python PostgreSQL driver)
-- pg8000 is only driver supported by Cloud SQL Connector (pymysql, pg8000, pytds)
-- Unified database configuration: all modules now use pg8000
-- Standardized environment variables: all use DATABASE_* naming convention (no DB_* mixing)
-
-✅ **Implementation Completed:**
-1. ✅ Created pg8000_wrapper.py with RealDictCursor compatibility in both API and Processing
-2. ✅ Updated requirements.txt: removed psycopg2-binary, added pg8000
-3. ✅ API db_config.py already using DATABASE_* variables
-4. ✅ Processing config/db_utils.py already using DATABASE_* variables
-5. ✅ docker-compose.yml already standardized to DATABASE_* naming
-
-✅ **Local Testing Verified:**
-- All 14 containers start and become healthy
-- API connects to database via pg8000 TCP (log: "Using pg8000 TCP connection")
-- Processing workers connect and ready for tasks
-- pg8000_wrapper RealDictCursor compatibility layer working
-- Document processing successful (status updates working)
-- Git committed with detailed message (commit: 03db1c6)
-
-**Next:** Automated GitHub Actions deployment starting (Option A - push to re_deploy_start branch to trigger build + deploy-test)
+**Enkelt sagt:**
+- Allt är klart lokalt
+- Push to re_deploy_start aktiverar GitHub Actions
+- Pipeline bygger Docker images → pushar till GCP → deployar till Cloud Run TEST
+- Verifiera TEST → merge to main för PROD
 
 ---
 
-## Kritiska Instruktioner för AI-assistenten
+**Overall Progress:** 95% Complete - Ready for Cloud Run TEST Deployment
 
-### 1. UNDERSÖK FÖRST - SKAPA SIST
-**ALDRIG** börja skapa filer, dockerfiler, konfigurationer eller strukturer utan att först:
-- ✅ Läsa vad som redan finns (`ls -la`, `find`, `cat`)
-- ✅ Förstå den befintliga arkitekturen
-- ✅ Checka `git status` och befintliga branches
-- ✅ **FRÅGA ANVÄNDAREN** vad som redan är gjort innan du börjar
+| FASE | Status | Details | Last Updated |
+|------|--------|---------|--------------|
+| FASE 0 | ✅ 100% | GCP Infrastructure (APIs, Service Accounts, GitHub Secrets) | Dec 25 |
+| FASE 1 | ✅ 100% | GCP Secret Manager (12 secrets configured) | Dec 25 |
+| FASE 2 | ✅ 100% | Cloud SQL (PostgreSQL instances initialized + schemas deployed) | Dec 26 |
+| FASE 3 | ✅ 100% | Docker Images (api, frontend, worker - pushed to both registries) | Dec 24 |
+| FASE 4 | ✅ 100% | GitHub Actions: Single unified pipeline.yml with conditional jobs | Dec 25 |
+| FASE 4B | ✅ 100% | Local Docker-Compose: Fresh rebuild completed - all 14 containers healthy | Dec 26 22:30 |
+| FASE 4C | ✅ 100% | Database Driver Migration: pg8000 unified driver + RealDictCursor wrapper | Dec 26 |
+| **FASE 5** | ⏳ 0% | **Cloud Run Deployment (NEXT STEP - Push to re_deploy_start)** | **READY TO START** |
+| FASE 6-8 | 0% | Cloud Tasks, Testing, Monitoring (future phases) | N/A |
 
-### 2. FRÅGA INNAN DU GÖR KAOS
-Om du tänker skapa:
-- Flera konfigurationsfiler (docker-compose.yml, .env-filer, etc.)
-- Deployment-strukturer eller GitHub Actions
-- Stora config-system
-- Dokumentation
+### 🚀 WHAT'S READY NOW (Dec 26, 22:30)
 
-**FRÅGA ALLTID ANVÄNDAREN:**
-```
-Innan jag börjar, vill du att jag ska:
-1. [Alternativ A]
-2. [Alternativ B]
-3. [Alternativ C]
+✅ **Infrastructure & Code:**
+- All 14 Docker containers build and run locally (fresh rebuild verified)
+- pg8000 database driver unified across all modules (pg8000_wrapper.py in place)
+- Database: Cloud SQL TEST + PROD initialized with schemas
+- GitHub Actions pipeline.yml configured and ready (single file, 3 conditional jobs)
+- All GCP secrets and credentials configured
 
-Eller har du redan något specifikt i åtanke?
-```
+✅ **Next Action - SIMPLE 3-STEP PROCESS:**
+1. **Push to re_deploy_start** → GitHub Actions pipeline.yml:build triggers automatically
+2. **Build completes** → pipeline.yml:deploy-test triggers automatically (no approval needed)
+3. **TEST Cloud Run services live** → Verify API/Frontend connectivity, then merge to main for PROD
 
-### 3. GREP OCH EXAMINE FÖRST
-Innan ändringar i existerande kod:
-```bash
-# Checka vad som redan finns
-grep -r "docker-compose" .
-grep -r "ENVIRONMENT" .
-git log --oneline -10
+**Current Blockers:** NONE - System is fully ready for deployment
 
-# Förstå arkitekturen
-find . -name "*.yml" -o -name "*.yaml" | head -20
-find . -name "Dockerfile*" | head -20
-find . -name "requirements.txt" | head -20
-```
+---
 
-### 4. RESPEKTERA BEFINTLIGA DECISIONS
-- Om det redan finns en docker-compose.yml → modifiera, inte skapa nya
-- Om det redan finns en Dockerfile-struktur → följ samma mönster
-- Om det redan finns en requirements.txt → checka innehållet innan du lägger till
-- Om det redan finns ett branch-system → förstå namngivningen
+## 🎯 FOKUS JUST NU - December 26, 2025
 
-### 5. DOKUMENTERA VALEN
-När du gör ändringar, förklara:
-- ✅ VAD du gjorde
-- ✅ VARFÖR du gjorde det så
-- ✅ VAD som redan fanns
-- ✅ VAD som är nästa steg
+**FASE 5 är nästa:** Push code to re_deploy_start branch för att trigga GitHub Actions deployment till Cloud Run TEST
 
-### 6. FELLA FÄLLORNA
-**GÖR INTE:**
-- Skapa 16+ deployment-filer på gut känsla
-- Implementera komplexe system utan att fråga först
-- Ignorera att `docker-compose.local.yml` redan kan existera
-- Anta att användaren vill ha Path A/B/C utan att fråga
+### Vad som är gjort ✅
+- Lokal docker-compose bygger perfekt (14 containers healthy)
+- pg8000 migrationen är komplett och testad
+- GitHub Actions pipeline är konfigurerad och redo
+- Cloud SQL (TEST + PROD) är initialiserad med schemas
+- Alla GCP secrets är på plats
 
-### 7. EFTER VARJE OPERATION
-- Läs denna fil och se till att hålla kritiska instruktioner i minnet.
-- **SPECIELL UPPMÄRKSAMHET:** Se avsnittet "DATABASE DRIVER STRATEGY: pg8000 Migration"
-- Kolla Current Status för vad som är KLART vs ⏳ vs ❌
+### Nästa steg 👉
+1. **Git push till re_deploy_start** → Triggar pipeline.yml:build automatiskt
+2. **Pipeline bygger Docker images** → Pushar till TEST Artifact Registry (~5-10 min)
+3. **Pipeline.yml:deploy-test körs** → Deployar till Cloud Run TEST automatiskt (~3-5 min)
+4. **Verifiera** → Testa API/Frontend på Cloud Run TEST
+5. **PR till main** → För PROD deployment (med approval gate)
 
-**GÖR:**
-- Undersök först
-- Fråga
-- Vänd på tanken om det redan finns en bättre lösning
-- Respektera befintliga design-beslut
-
-### 8. KRITISKA REGLER FÖR pg8000 MIGRATIONEN (Dec 26)
-
-**ALDRIG implementera pg8000-migrationen utan att:**
-1. ✅ Läsa ALLA filer som använder `psycopg2.connect()` eller `RealDictCursor`
-2. ✅ Förstå hur RealDictCursor används i varje fil
-3. ✅ Grep-a för alla `DB_*` och `DATABASE_*` environment variables
-4. ✅ Verifiera att docker-compose.yml får samma update
-5. ✅ Testa lokalt med alla 13 containers innan Cloud Run
-6. ✅ **HÅLLA ENHETLIGHET:** Inte blanda DATABASE_* och DB_* naming
-
-**GÖR:**
-- Refactor systematiskt (API → Processing → docker-compose)
-- Test lokalt efter VARJE steg
-- Bekräfta att RealDictCursor wrapper fungerar identiskt
-- Dokumentera ändringar i git commits
-
-**GÖR INTE:**
-- Implementera endast halva migrationen
-- Blanda gamla och nya environment variable-namn
-- Hoppa över processing-modulen
-- Förvänta Cloud Run att fungera innan lokal test är klar
+**Inget att fixa lokalt - systemet är ready!**
 
 ## Projekt-specifikt
 
-### Invoice Scanner Status
+### Invoice Scanner - Core Info
 - **Repo:** https://github.com/Rickard-E-Strawbay/invoice.scanner
-- **Branch-struktur:** main (production), re_deploy_start (current development)
-- **Huvuddelar:** API (Flask), Frontend (React), Processing (Workers)
-- **Docker:** Använder docker-compose.yml (INTE docker-compose.local.yml)
+- **Branches:** main (PROD) ← PR ← re_deploy_start (TEST)
+- **Architecture:** API (Flask) + Frontend (React) + Workers (Celery)
+- **Docker:** docker-compose.yml (single source of truth)
+- **Deployment:** GitHub Actions (auto-builds + auto-deploys)
 
-### Innan du skapar något deployment/GCP-relaterat:
-1. FRÅGA vad som redan är gjort
-2. Läs deployment/ om det finns
-3. Checka .github/workflows om GitHub Actions redan finns
-4. Fråga om vilken PATH (A/B/C) eller approach användaren vill ha
+### Filer ALDRIG ändra utan att fråga:
+- `.github/workflows/pipeline.yml`
+- docker-compose.yml (infrastruktur)
+- Hele config-system (invoice.scanner.api/config/)
+- .env-filer (använd GCP Secret Manager istället)
 
-### Filer att ALDRIG skapa utan att fråga:
-- Nya docker-compose*.yml
-- .env-filer eller .env.*
-- Deployment-manualer (15000+ ord)
-- GitHub Actions workflows
-- Hela config-system (invoice.scanner.api/config/)
+---
+
+## ⚠️ AI-ASSISTENTENS KRITISKA INSTRUKTIONER
+
+### ÖVERSTA PRIORITET - Läs innan du gör något
+1. **LÄSA DENNA FIL** innan någon operation
+2. **FRÅGA innan komplexitet** - inte bara implementera
+3. **RESPEKTERA befintliga decisions** - inte överskriv
+4. **TESTA lokalt innan Cloud** - docker-compose först
+
+### REGLER SOM MÅSTE FÖLJAS
+- ✅ **ALDRIG** skapa docker-compose files utan att fråga
+- ✅ **ALDRIG** ändra .github/workflows/pipeline.yml utan att fråga
+- ✅ **ALDRIG** manuellt deploy till Cloud Run (pipeline gör det)
+- ✅ **ALDRIG** manuellt build till GCP registries (pipeline gör det)
+- ✅ **FRÅGA FÖRST** innan ändringar i GCP Secret Manager
+- ✅ **FRÅGA FÖRST** innan ändringar i Cloud SQL config
+
+### VÅR PROCESS (ej pipeline)
+1. Läs vad som redan finns (`ls`, `grep`, `git log`)
+2. Förstå arkitekturen
+3. Fråga användaren: "Vill du att jag ska [X] eller [Y]?"
+4. Plan + dokumentera
+5. Test lokalt (docker-compose)
+6. Verifiera git diff
+7. Commit med kontext
+
+### BEFINTLIGA DECISIONS - RESPEKTERA
+| Decision | Varför | Ändra INTE |
+|----------|--------|-----------|
+| pg8000 driver | Cloud SQL Connector krävs | Inte psycopg2 |
+| DATABASE_* vars | Standardiserad naming | Inte DB_* mix |
+| Single pipeline.yml | Clean + maintainable | Inte 3 files |
+| Cloud SQL Private IP | Säkerhet | Inte public |
+| RealDictCursor wrapper | Backward compatibility | Inte raw pg8000 |
+| docker-compose.yml | Source of truth | Inte .local variant |
+
+### VID PROBLEM
+Ordning: Logs (GitHub Actions) → Logs (Cloud Run) → Logs (Cloud SQL) → FIX KOD → RE-PUSH
 
 ## Användarens Preferenser
 - Vill ha ENKLA lösningar först
 - Vill att jag ska FRÅGA innan komplexitet
 - Gillar TYDLIGA instruktioner
 - Vill FÖRSTÅ vad som görs, inte bara att det görs
+- **VIKTIGAST:** Trust the pipeline - det är korrekt konfigurerat
 
 ---
 
-## GCP DEPLOYMENT ARKITEKTUR & STRATEGI
+## GCP DEPLOYMENT - ÖVERGRIPANDE ARKITEKTUR
 
-### Infrastruktur-beslut (GODKÄND av användare)
+### Enkel flöde (Branch → Deploy)
 
-**Secrets Management:**
-- ✅ GitHub Secrets: Endast `GCP_SA_KEY` (Service Account JSON)
-- ✅ GCP Secret Manager: Alla application secrets (DB passwords, API keys, etc.)
-- Full audit trail + rotation via GCP
-
-**Databas:**
-- ✅ Cloud SQL PostgreSQL (test + prod)
-- Private networking (inte exponerat)
-- Automatisk backup på prod
-
-**Deployment-modell:**
 ```
-┌─────────────────────────────────────────────────┐
-│  API + Frontend: Cloud Run (persistent)         │
-│  - Alltid tillgänglig                           │
-│  - Auto-scaling på trafik                       │
-│  - ~$10-50/månad för låg trafik                 │
-│                                                 │
-│  Workers: Serverless (on-demand)                │
-│  - Preprocessing, OCR, LLM, Extraction         │
-│  - Cloud Tasks + Cloud Pub/Sub                 │
-│  - Betala bara per execution                   │
-│                                                 │
-│  Data: Cloud SQL + Cloud Storage               │
-└─────────────────────────────────────────────────┘
+feature branch → PR → re_deploy_start (merge)
+  ↓
+  Pipeline.yml:build (auto-trigger)
+    - Auto-detects branch
+    - Uses GCP_SA_KEY_TEST
+    - Builds 3 images (API, Frontend, Worker)
+    - Pushs to TEST Artifact Registry
+  ↓
+  Pipeline.yml:deploy-test (auto-trigger)
+    - Fetches TEST secrets from Secret Manager
+    - Deploys API + Frontend to Cloud Run TEST
+    - Runs smoke tests
+  ↓
+  ✅ TEST Cloud Run services live
+
+
+main branch deployment (manual approval):
+  ↓
+  Create PR: re_deploy_start → main
+  ↓
+  Pipeline.yml:build (auto-trigger)
+    - Uses GCP_SA_KEY_PROD
+    - Builds to PROD Artifact Registry
+  ↓
+  Pipeline.yml:deploy-prod (waits for approval)
+    - ⚠️ MANUAL APPROVAL GATE (24h timeout)
+    - After approval: Fetches PROD secrets
+    - Deploys to Cloud Run PROD
+  ↓
+  ✅ PROD Cloud Run services live
 ```
+
+### Secrets Mapping
+
+**TEST-projekt → Environment Variables:**
+```
+db_user_test → DATABASE_USER
+db_password_test → DATABASE_PASSWORD
+secret_key_test → FLASK_SECRET_KEY
+gmail_sender → EMAIL_SENDER
+gmail_password → EMAIL_PASSWORD
+openai_api_key → OPENAI_API_KEY
+```
+
+**PROD-projekt → samma pattern** (med _prod suffixes)
+
+### Key Architecture Points
+- ✅ **Private Cloud SQL** - Private IP + Cloud SQL Auth Proxy sidecar
+- ✅ **Centralized Secrets** - GCP Secret Manager (not in code)
+- ✅ **pg8000 Driver** - Pure Python (Cloud SQL Connector compatible)
+- ✅ **Single Pipeline** - `.github/workflows/pipeline.yml` (not 3 separate files)
+- ✅ **Branch Detection** - Auto-selects TEST vs PROD based on branch
 
 ---
 
-## CI/CD PIPELINE - DETALJERAD DEFINITION (v3 - UNIFIED - Dec 25)
+## CI/CD PIPELINE - SIMPLIFIED
 
-### Branch-strategi (PR-baserad säkerhet)
+**File:** `.github/workflows/pipeline.yml` (single file, 3 conditional jobs - FINAL)
 
-```
-1. Developer creates feature branch
-   └─ git checkout -b feature/my-feature
-   
-2. Developer pushes and creates Pull Request against re_deploy_start
-   └─ GitHub: Requires 1 approval
-   └─ GitHub: PR must be reviewed
+**How it works:**
+1. **push to re_deploy_start** → build job (auto) → deploy-test job (auto)
+2. **push to main** → build job (auto) → deploy-prod job (waits for manual approval)
 
-3. Reviewer approves PR
-   └─ Developer merges to re_deploy_start
+**Each branch gets right secrets:**
+- re_deploy_start: GCP_SA_KEY_TEST → TEST Artifact Registry → TEST Cloud Run
+- main: GCP_SA_KEY_PROD → PROD Artifact Registry → PROD Cloud Run
 
-4. After merge to re_deploy_start:
-   └─ pipeline.yml:build triggers automatically (push event)
-   └─ Auto-detects branch = re_deploy_start
-   └─ Builds images, pushes to TEST Artifact Registry
-   └─ pipeline.yml:deploy-test triggers automatically (after build)
-   └─ Deploys to TEST Cloud Run
-   └─ Smoke tests run
-   └─ ✅ TEST environment live
-
-5. For PROD: Developer creates PR main ← re_deploy_start
-   └─ GitHub: Requires 1-2 approvals
-   └─ GitHub: PR must be reviewed
-
-6. Reviewer approves PROD PR
-   └─ Developer merges to main
-
-7. After merge to main:
-   └─ pipeline.yml:build triggers automatically (push event)
-   └─ Auto-detects branch = main
-   └─ Builds images, pushes to PROD Artifact Registry
-   └─ pipeline.yml:deploy-prod job appears (waiting)
-   └─ ⚠️ MANUAL APPROVAL GATE (GitHub environment: "production")
-   └─ Admin/Reviewer clicks "Approve" in GitHub UI
-   └─ pipeline.yml:deploy-prod resumes (24h timeout)
-   └─ Deploys to PROD Cloud Run
-   └─ Smoke tests run
-   └─ ✅ PROD environment live
-```
-
-### GitHub Actions Workflows (1 file, 3 conditional jobs - FINAL)
-
-**File:** `.github/workflows/pipeline.yml`
-
-**Structure:**
-```yaml
-on:
-  push:
-    branches: [re_deploy_start, main]
-
-jobs:
-  build: ...              # Always runs (detects branch)
-  deploy-test: ...        # Runs only on re_deploy_start (needs: build)
-  deploy-prod: ...        # Runs only on main (needs: build, environment: production)
-```
-
-#### 1️⃣ build job - Build & Push Docker Images (UNIFIED)
-**Triggers:** Push to `re_deploy_start` OR `main`
-
-**Auto-detects branch and uses correct GCP project:**
-```yaml
-Branch detection logic (in first step):
-  if github.ref == 'refs/heads/main' 
-    → use GCP_SA_KEY_PROD 
-    → push to strawbayscannerprod registry
-  
-  else (re_deploy_start)
-    → use GCP_SA_KEY_TEST 
-    → push to strawbayscannertest registry
-```
-
-**Docker images som byggs:**
-- `api:latest` & `api:{git-sha}` 
-- `frontend:latest` & `frontend:{git-sha}`
-- `worker:latest` & `worker:{git-sha}` (optional)
-
-**Push location (auto-detected):**
-- TEST-projekt: `europe-west1-docker.pkg.dev/strawbayscannertest/invoice-scanner/`
-- PROD-projekt: `europe-west1-docker.pkg.dev/strawbayscannerprod/invoice-scanner/`
-
-**Steps i build job:**
-```yaml
-1. Checkout code
-2. Detect branch → determine GCP project + registry + SA key
-3. Authenticate to Google Cloud (GCP_SA_KEY_TEST or GCP_SA_KEY_PROD)
-4. Configure Docker authentication to Artifact Registry
-5. Build API image:     docker build → tag latest + sha → push
-6. Build Frontend image: docker build → tag latest + sha → push
-7. Build Worker image:   docker build → tag latest + sha → push (if exists)
-8. Build summary: Show which environment + registry used
-```
-
-**Outputs from build:**
-- `registry` - Which Artifact Registry used
-- `environment` - "test" or "prod"
-- `gcp_project` - Project ID used
-
-#### 2️⃣ deploy-test job - Deploy to TEST (Conditional on re_deploy_start)
-**Triggers:** After pipeline.yml:build completes, ONLY if on `re_deploy_start`
-**Condition:** `if: github.ref == 'refs/heads/re_deploy_start'`
-**Environment:** GitHub environment "test" (no approval required)
-**Dependencies:** `needs: build`
-
-**What it does:**
-1. Waits for build job to complete
-2. Only runs if branch is re_deploy_start
-3. Authenticates to GCP TEST project
-4. Fetches 5 secrets from GCP Secret Manager (test project)
-5. Deploys invoice-scanner-api-test to Cloud Run
-6. Deploys invoice-scanner-frontend-test to Cloud Run
-7. Runs smoke tests (curl /health endpoint)
-8. Outputs service URLs
-
-**Configuration:**
-- Memory: API 512Mi, Frontend 256Mi
-- CPU: 1 for each
-- Max instances: 10 each
-- Environment variables: Auto-injected from GCP secrets
-
-#### 3️⃣ deploy-prod job - Deploy to PROD (Conditional on main, with manual approval)
-**Triggers:** After pipeline.yml:build completes, ONLY if on `main`
-**Condition:** `if: github.ref == 'refs/heads/main'`
-**Environment:** GitHub environment "production" (REQUIRES manual approval)
-**Dependencies:** `needs: build`
-
-**What it does:**
-1. Waits for build job to complete
-2. Only runs if branch is main
-3. ⚠️ PAUSES and waits for manual approval (24h timeout)
-4. After approval: Authenticates to GCP PROD project
-5. Fetches 5 secrets from GCP Secret Manager (prod project)
-6. Deploys invoice-scanner-api-prod to Cloud Run
-7. Deploys invoice-scanner-frontend-prod to Cloud Run
-8. Runs smoke tests
-9. Outputs service URLs
-
-**Configuration:**
-- Memory: API 512Mi, Frontend 256Mi
-- CPU: 1 for each
-- Min instances: 1 each (always running - cheaper idle state)
-- Max instances: 20 each (auto-scale under load)
-- Environment variables: Auto-injected from GCP secrets (prod variants)
-
-### Arkitektur-diagram (UPDATED - UNIFIED)
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                         GitHub                                   │
-│  main (prod) ←─ Pull Request ← re_deploy_start (dev)            │
-└────────────────────┬───────────────────────┬─────────────────────┘
-                     │                       │
-                     │ Push to main          │ Push to re_deploy_start
-                     │                       │
-         ┌───────────▼─────────┐   ┌────────▼──────────────┐
-         │   pipeline.yml      │   │   pipeline.yml        │
-         │   :build job        │   │   :build job          │
-         │ (GCP_SA_KEY_PROD)   │   │ (GCP_SA_KEY_TEST)     │
-         │ Build & Push Images │   │ Build & Push Images   │
-         │ to PROD registry    │   │ to TEST registry      │
-         └──────────┬──────────┘   └────────┬──────────────┘
-                    │                       │
-         ┌──────────▼──────────┐   ┌────────▼──────────────┐
-         │  Artifact Registry  │   │ Artifact Registry    │
-         │   PROD Project      │   │  TEST Project        │
-         │  (eu-west1 repo)    │   │  (eu-west1 repo)     │
-         └──────────┬──────────┘   └────────┬──────────────┘
-                    │                       │
-         ┌──────────▼────────────┐   ┌─────▼──────────────┐
-         │  pipeline.yml         │   │  pipeline.yml      │
-         │  :deploy-prod job     │   │  :deploy-test job  │
-         │ (requires approval!)  │   │ (auto-run)         │
-         │                       │   │                    │
-         │ ⚠️ MANUAL APPROVAL    │   │ Fetch secrets_test │
-         │ GATE (24h timeout)    │   │ Deploy to TEST     │
-         │ <CLICK "APPROVE">     │   └─────┬──────────────┘
-         │                       │         │
-         │ After approval:       │    ┌────▼──────────────┐
-         │ Fetch secrets_prod    │    │  TEST Cloud Run   │
-         │ Deploy to PROD        │    │  - api-test       │
-         └──────────┬────────────┘    │  - frontend-test  │
-                    │                 │ Smoke tests OK    │
-         ┌──────────▼──────────┐      └───────────────────┘
-         │  PROD Cloud Run     │
-         │  - api-prod         │
-         │  - frontend-prod    │
-         │ Smoke tests OK      │
-         └─────────────────────┘
-```
-
-**Key points:**
-- ✅ Single `pipeline.yml` file (not 3 separate files)
-- ✅ All jobs in one place
-- ✅ Branch detection in first step of build job
-- ✅ deploy-test runs ONLY if branch is re_deploy_start
-- ✅ deploy-prod runs ONLY if branch is main (with approval)
-- ✅ Clean, maintainable, no duplication
-
-### Secret Manager Mapping
-
-**GCP Secret Manager → Environment Variables:**
-
-TEST-projekt (`strawbayscannertest`):
-```
-Secret name              → Env var               → Används i
-─────────────────────────────────────────────────────────────────
-db_user_test            → DATABASE_USER         → Cloud Run API
-db_password_test        → DATABASE_PASSWORD     → Cloud Run API
-secret_key_test         → FLASK_SECRET_KEY      → Cloud Run API
-gmail_sender            → EMAIL_SENDER          → Cloud Run API
-gmail_password          → EMAIL_PASSWORD        → Cloud Run API
-openai_api_key          → OPENAI_API_KEY        → Cloud Run API
-```
-
-PROD-projekt (`strawbayscannerprod`):
-```
-Secret name              → Env var               → Används i
-─────────────────────────────────────────────────────────────────
-db_user_prod            → DATABASE_USER         → Cloud Run API
-db_password_prod        → DATABASE_PASSWORD     → Cloud Run API
-secret_key_prod         → FLASK_SECRET_KEY      → Cloud Run API
-gmail_sender            → EMAIL_SENDER          → Cloud Run API
-gmail_password          → EMAIL_PASSWORD        → Cloud Run API
-openai_api_key          → OPENAI_API_KEY        → Cloud Run API
-```
-
-### GitHub Environments (Manual Approval)
-
-**GitHub → Settings → Environments:**
-
-Skapa två environments:
-```
-test
-├─ Deployment branches: re_deploy_start, feature/*
-└─ No approval needed
-
-production
-├─ Deployment branches: main
-├─ Required reviewers: (Rickard)
-└─ Timeout: 24 hours
-```
-
-**I pipeline.yml (deploy-prod job):**
-```yaml
-environment:
-  name: production
-  url: https://api-prod-xxxxx.run.app
-```
+**That's it!** The pipeline handles everything (building, pushing, deploying).
 
 ---
-
-### Complete CI/CD Flow Exempel (UNIFIED PIPELINE)
-
-**Scenario: Utvecklare pushar feature**
-
-```
-1. Utvecklare: git push origin my-feature
-2. GitHub: Öppnar PR mot re_deploy_start
-3. GitHub: CI-checks kör linting, tester, etc
-4. Utvecklare/Reviewer: Merge PR
-5. GitHub: Detekterar push till re_deploy_start
-6. pipeline.yml:build: 
-   - Detekterar branch = re_deploy_start
-   - Använder GCP_SA_KEY_TEST
-   - Bygger api:latest, frontend:latest, worker:latest
-   - Pushar till strawbayscannertest Artifact Registry
-7. pipeline.yml:deploy-test (auto-trigger efter build):
-   - Villkor: if: github.ref == 'refs/heads/re_deploy_start'
-   - Kör automatiskt (no approval needed)
-   - Använder GCP_SA_KEY_TEST
-   - Hämtar 5 secrets från TEST Secret Manager
-   - Deployar till Cloud Run services
-   - Kör smoke tests
-8. Utvecklare testar på: api-test-xxxxx.run.app
-```
-
-**Scenario: Merge till main (PROD deployment)**
-
-```
-1. PR merged in GitHub → main
-2. GitHub: Detekterar push till main
-3. pipeline.yml:build: 
-   - Detekterar branch = main
-   - Använder GCP_SA_KEY_PROD
-   - Bygger och pushar till strawbayscannerprod Artifact Registry
-4. pipeline.yml:deploy-prod-job: PAUSES och väntar på approval
-   - Villkor: if: github.ref == 'refs/heads/main' + environment: production
-   - GitHub visar: "This job requires manual approval"
-   - Timeout: 24 timmar
-5. Rickard loggar in i GitHub Actions UI
-   - Ser deploy-prod job i Pending state
-   - Klickar "Review deployments" → "production" → "Approve and deploy"
-6. pipeline.yml:deploy-prod (resumed):
-   - Använder GCP_SA_KEY_PROD
-   - Hämtar 5 secrets från PROD Secret Manager
-   - Deployar till Cloud Run (prod services)
-   - Kör smoke tests
-7. Live på: api-prod-xxxxx.run.app
-```
 
 ---
 
@@ -768,18 +482,21 @@ PROD: (same pattern)
 
 ---
 
-### FASE 5: Cloud Run Deployment (GitHub Actions Automated Deployment)
-- [x] ✅ Database schema initialized (init.sql deployed to Cloud SQL TEST + PROD)
-- [x] ✅ Cloud SQL Proxy configured in pipeline.yml (DATABASE_HOST=localhost)
-- [x] ✅ init.sql run manually on Cloud SQL
-- [ ] ⏳ Push to re_deploy_start branch (triggers GitHub Actions)
-- [ ] ⏳ GitHub Actions:build job - builds 3 Docker images, pushes to TEST registry
-- [ ] ⏳ GitHub Actions:deploy-test job - auto-deploys to Cloud Run TEST
-- [ ] ⏳ Test login flow (API → Cloud SQL connectivity in Cloud Run)
-- [ ] Verify: API service running on Cloud Run TEST
-- [ ] Verify: Frontend service running on Cloud Run TEST
-- [ ] Setup Cloud Storage bucket (documents)
-- [ ] Create PR: re_deploy_start → main (for PROD deployment)
+### FASE 5: Cloud Run TEST Deployment (NEXT - Ready to Start)
+
+**Status:** ✅ All prerequisites complete - Ready for GitHub Actions pipeline
+
+**Steps to execute:**
+- [ ] 1. Verify local: `docker-compose down && docker-compose up -d --build` (DONE ✅)
+- [ ] 2. Commit any pending changes: `git add . && git commit -m "..."`
+- [ ] 3. Push to re_deploy_start: `git push origin re_deploy_start`
+- [ ] 4. Monitor GitHub Actions: https://github.com/Rickard-E-Strawbay/invoice.scanner/actions
+  - build job runs (~5-10 min): builds api, frontend, worker images
+  - deploy-test job runs (~3-5 min): deploys to Cloud Run TEST
+  - Both jobs should complete successfully with smoke tests passing
+- [ ] 5. After deployment: Test API/Frontend on Cloud Run TEST URLs
+- [ ] 6. Create PR: re_deploy_start → main (for PROD deployment)
+- [ ] 7. After PROD PR approval: Merge to main (pipeline.yml:deploy-prod with manual approval gate)
 
 ### FASE 6: Cloud Tasks Setup (0% done)
 - [ ] Konfigurera Cloud Tasks queue för workers
