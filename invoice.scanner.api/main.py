@@ -129,11 +129,24 @@ def get_cors_origins():
 # App & Config
 # =============
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(32))
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', os.getenv('SECRET_KEY', secrets.token_hex(32)))
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-# Use Lax for development (same-site redirects), None requires Secure (HTTPS)
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = False
+
+# Session cookie configuration - environment aware
+# Cloud Run uses HTTPS, so we need Secure=True and SameSite=None
+# Local development uses HTTP, so we need Secure=False and SameSite=Lax
+IS_CLOUD_RUN = os.getenv('K_SERVICE') is not None
+if IS_CLOUD_RUN:
+    # Cloud Run: HTTPS environment
+    app.config['SESSION_COOKIE_SECURE'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+    print("[config] Session cookies: SECURE=True, SAMESITE=None (Cloud Run HTTPS)")
+else:
+    # Local development: HTTP environment
+    app.config['SESSION_COOKIE_SECURE'] = False
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    print("[config] Session cookies: SECURE=False, SAMESITE=Lax (Local HTTP)")
+
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 CORS(app, supports_credentials=True, origins=get_cors_origins())
 
