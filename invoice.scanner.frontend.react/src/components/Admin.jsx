@@ -348,6 +348,7 @@ function Admin() {
 
   const handleToggleCompanyStatus = async (companyId, currentStatus) => {
     try {
+      console.log(`[Admin] Toggling company ${companyId} from ${currentStatus} to ${!currentStatus}`);
       const response = await fetch(`${API_BASE_URL}/auth/admin/companies/${companyId}`, {
         method: "PUT",
         credentials: "include",
@@ -360,12 +361,14 @@ function Admin() {
       });
 
       const data = await response.json();
+      console.log(`[Admin] Response status: ${response.status}, data:`, data);
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to update company status");
       }
 
       // Update the company in the list
+      console.log(`[Admin] Updating company in state, new data:`, data.company);
       setCompanies(companies.map((c) => (c.id === companyId ? data.company : c)));
     } catch (err) {
       console.error("Error updating company status:", err);
