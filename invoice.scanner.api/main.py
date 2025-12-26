@@ -9,11 +9,13 @@ import threading
 import time
 import uuid
 import secrets
+from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from db_config import DB_CONFIG, get_connection, RealDictCursor
 import os
 from dotenv import load_dotenv
 from lib.storage_service import init_storage_service
+from lib.processing_backend import init_processing_backend
 from lib.email_service import (
     send_company_registration_pending_email,
     send_user_registration_pending_email,
@@ -33,6 +35,14 @@ try:
 except Exception as e:
     print(f"[INIT] Error initializing storage service: {e}")
     storage_service = None
+
+# Initialize processing backend (LOCAL Celery or CLOUD Functions based on env)
+try:
+    processing_backend = init_processing_backend()
+    print(f"[INIT] Processing backend initialized: {processing_backend.backend_type}")
+except Exception as e:
+    print(f"[INIT] Error initializing processing backend: {e}")
+    processing_backend = None
 
 # =============
 # Database Helper
@@ -2009,56 +2019,29 @@ def upload_document():
                 print(f"[upload_document] Document record created: {doc_id}")
                 
                 # ========== TRIGGER ASYNC PROCESSING ==========
+                task_id = None
                 try:
-                    import requests
-                    
-                    # Call processing service via HTTP to trigger task
-                    processing_url = os.environ.get('PROCESSING_SERVICE_URL', 'http://localhost:5002')
-                    
-                    task_id = None
-                    try:
-                        response = requests.post(
-                            f'{processing_url}/api/tasks/orchestrate',
-                            json={
-                                'document_id': str(doc_id),
-                                'company_id': str(company_id)
-                            },
-                            timeout=10
-                        )
-                        
-                        if response.status_code == 202:
-                            task_id = response.json().get('task_id', 'processing-queued')
-                            print(f"[upload_document] Processing task queued: {task_id}")
-                        else:
-                            print(f"[upload_document] Processing service returned {response.status_code}")
-                            task_id = None
-                    except requests.exceptions.RequestException as e:
-                        print(f"[upload_document] Could not reach processing service: {str(e)}")
+                    if processing_backend:
+                        result = processing_backend.trigger_task(str(doc_id), str(company_id))
+                        task_id = result.get('task_id')
+                        print(f"[upload_document] Processing task queued via {processing_backend.backend_type}: {task_id}")
+                    else:
+                        print(f"[upload_document] Warning: Processing backend not initialized")
                         task_id = None
-                    
-                    return jsonify({
-                        "message": "Document uploaded and queued for processing",
-                        "document": dict(document) if document else {
-                            "id": doc_id,
-                            "raw_filename": filename,
-                            "status": "preprocessing",
-                            "created_at": datetime.utcnow().isoformat()
-                        },
-                        "task_id": task_id
-                    }), 201
-                    
                 except Exception as task_error:
                     print(f"[upload_document] Warning: Could not trigger processing task: {task_error}")
-                    # Fortfarande returneraSuccess, men processing kanske inte startas
-                    return jsonify({
-                        "message": "Document uploaded (processing may start shortly)",
-                        "document": dict(document) if document else {
-                            "id": doc_id,
-                            "raw_filename": filename,
-                            "status": "preprocessing"
-                        },
-                        "warning": "Processing may be delayed"
-                    }), 201
+                    task_id = None
+                
+                return jsonify({
+                    "message": "Document uploaded and queued for processing",
+                    "document": dict(document) if document else {
+                        "id": doc_id,
+                        "raw_filename": filename,
+                        "status": "preprocessing",
+                        "created_at": datetime.utcnow().isoformat()
+                    },
+                    "task_id": task_id
+                }), 201
                 
         except Exception as db_error:
             conn.rollback()

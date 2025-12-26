@@ -22,14 +22,14 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
-COPY requirements.txt /tmp/requirements.txt
+COPY invoice.scanner.processing/requirements.txt /tmp/requirements.txt
 
 # Install Python dependencies
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -r /tmp/requirements.txt
 
 # Copy application code
-COPY . .
+COPY invoice.scanner.processing /app
 
 # Create necessary directories
 RUN mkdir -p /app/documents/raw && \

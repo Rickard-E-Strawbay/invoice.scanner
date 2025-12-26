@@ -7,17 +7,17 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip and install Python dependencies
-COPY requirements.txt /tmp/requirements.txt
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY invoice.scanner.api/requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -r /tmp/requirements.txt && \
     rm -rf /tmp/requirements.txt
 
-# Set working directory
-WORKDIR /app
-
 # Copy application code
-COPY . /app
+COPY invoice.scanner.api /app
 
 # Expose port 8080 (Cloud Run expects this by default)
 EXPOSE 8080
