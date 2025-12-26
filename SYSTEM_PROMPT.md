@@ -12,17 +12,19 @@
 | **GitHub Actions** | ✅ Ready | Pipeline.yml (single file, 3 jobs) |
 | **GCP Secrets** | ✅ Ready | 12 secrets i Secret Manager |
 | **Docker Images** | ✅ Ready | Api, Frontend, Worker pushed till registries |
-| **NEXT STEP** | 👉 DO THIS | Push to `re_deploy_start` → GitHub Actions triggers |
+| **Cloud Run TEST** | ✅ Live | API rev 00048 + Frontend deployed & working |
+| **Admin Panel** | ✅ Working | User/Company management, Enable/Disable buttons |
+| **NEXT STEP** | 👉 DO THIS | Test document processing (Scan service) |
 
 **Enkelt sagt:**
-- Allt är klart lokalt
-- Push to re_deploy_start aktiverar GitHub Actions
-- Pipeline bygger Docker images → pushar till GCP → deployar till Cloud Run TEST
-- Verifiera TEST → merge to main för PROD
+- Cloud Run TEST är live och fungerar
+- Admin panel fungerar (Enable/Disable buttons working)
+- Email är temp disabled (SMTP kan inte nå från Cloud Run)
+- Ready to test document processing
 
 ---
 
-**Overall Progress:** 95% Complete - Ready for Cloud Run TEST Deployment
+**Overall Progress:** 98% Complete - Ready for Document Processing Testing
 
 | FASE | Status | Details | Last Updated |
 |------|--------|---------|--------------|
@@ -33,8 +35,14 @@
 | FASE 4 | ✅ 100% | GitHub Actions: Single unified pipeline.yml with conditional jobs | Dec 25 |
 | FASE 4B | ✅ 100% | Local Docker-Compose: Fresh rebuild completed - all 14 containers healthy | Dec 26 22:30 |
 | FASE 4C | ✅ 100% | Database Driver Migration: pg8000 unified driver + RealDictCursor wrapper | Dec 26 |
-| **FASE 5** | ⏳ 0% | **Cloud Run Deployment (NEXT STEP - Push to re_deploy_start)** | **READY TO START** |
-| FASE 6-8 | 0% | Cloud Tasks, Testing, Monitoring (future phases) | N/A |
+| **FASE 5** | ✅ 100% | Cloud Run Deployment (API & Frontend deployed to TEST) | **Dec 26 16:40** |
+| **FASE 5A** | ✅ 100% | JSON Serialization: PG8000DictRow → dict conversion fixes | **Dec 26 16:45** |
+| **FASE 5B** | ✅ 100% | VPC Access Connectors: Private IP connectivity TEST+PROD | **Dec 26** |
+| **FASE 5C** | ✅ 100% | Session Management: Environment-aware Flask session cookies (HTTPS) | **Dec 26** |
+| **FASE 5D** | ✅ 100% | API Response Fields: company_enabled added to user responses | **Dec 26 16:32** |
+| **FASE 5E** | ✅ 100% | Email Service: Disabled in Cloud Run (pending SendGrid migration) | **Dec 26 16:40** |
+| FASE 6 | ⏳ Testing | Document processing, Scan service validation | **NEXT** |
+| FASE 7-8 | 0% | Cloud Tasks, Monitoring, Production validation | Future |
 
 ### 🚀 WHAT'S READY NOW (Dec 26, 22:30)
 
@@ -54,25 +62,41 @@
 
 ---
 
-## 🎯 FOKUS JUST NU - December 26, 2025
+## 🎯 FOKUS JUST NU - December 26, 2025 (16:40)
 
-**FASE 5 är nästa:** Push code to re_deploy_start branch för att trigga GitHub Actions deployment till Cloud Run TEST
+**FASE 5 är COMPLETE:** API & Frontend deployed till Cloud Run TEST ✅
 
 ### Vad som är gjort ✅
-- Lokal docker-compose bygger perfekt (14 containers healthy)
-- pg8000 migrationen är komplett och testad
-- GitHub Actions pipeline är konfigurerad och redo
-- Cloud SQL (TEST + PROD) är initialiserad med schemas
-- Alla GCP secrets är på plats
+- ✅ Cloud Run TEST deployment working (API 00048, Frontend deployed)
+- ✅ JSON serialization fixed (PG8000DictRow → dict conversion)
+- ✅ `company_enabled` field added to user API responses
+- ✅ Session cookies environment-aware (HTTPS in Cloud Run)
+- ✅ VPC Access Connectors configured for Private IP Cloud SQL
+- ✅ Email service disabled (temporary - pending SendGrid migration)
+- ✅ Admin user management fully functional (Enable/Disable buttons working)
+- ✅ Company management functional (Disable button tested, Enable pending company status)
+
+### Känd begränsning ⚠️
+- Email: Disabled i Cloud Run TEST (SMTP kan inte nå Gmail från Cloud Run)
+  - Temporary fix: Returns success without sending
+  - Long-term: Migrate to SendGrid API
+  - Location: `invoice.scanner.api/lib/email_service.py` line 1 (TODO comment in place)
 
 ### Nästa steg 👉
-1. **Git push till re_deploy_start** → Triggar pipeline.yml:build automatiskt
-2. **Pipeline bygger Docker images** → Pushar till TEST Artifact Registry (~5-10 min)
-3. **Pipeline.yml:deploy-test körs** → Deployar till Cloud Run TEST automatiskt (~3-5 min)
-4. **Verifiera** → Testa API/Frontend på Cloud Run TEST
-5. **PR till main** → För PROD deployment (med approval gate)
+**FASE 6: Document Processing / Scan Service Testing**
+1. Test document upload via frontend
+2. Verify processing service triggers correctly
+3. Check vectorstore integration (Chroma)
+4. Validate document retrieval
 
-**Inget att fixa lokalt - systemet är ready!**
+**Blockers:** None - System is fully operational for testing
+
+### Git Status
+- Branch: `re_deploy_start` 
+- Commits ahead: Latest fixes pushed (email disable, company_enabled fields)
+- Ready to: Test FASE 6 (processing) or merge to main for PROD
+
+
 
 ## Projekt-specifikt
 
