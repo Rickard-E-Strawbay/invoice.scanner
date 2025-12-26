@@ -4,7 +4,7 @@ FROM python:3.11-bullseye
 
 WORKDIR /app
 
-# Install system dependencies (non-GPU version)
+# Install system dependencies (non-GPU version, including SSL for cloud-sql-python-connector)
 RUN apt-get update && apt-get install -y \
     build-essential \
     tesseract-ocr \
@@ -17,11 +17,12 @@ RUN apt-get update && apt-get install -y \
     libglvnd0 \
     libglvnd-dev \
     curl \
+    libssl-dev \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
-COPY ./invoice.scanner.processing/requirements.txt /tmp/requirements.txt
+COPY requirements.txt /tmp/requirements.txt
 
 # Install Python dependencies
 RUN pip install --upgrade pip setuptools wheel && \

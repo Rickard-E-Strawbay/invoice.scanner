@@ -1,16 +1,17 @@
 # Use Microsoft's official Python Dev Container base image
 FROM python:3.11-slim
 
-# Install system dependencies
+# Install system dependencies (including SSL for cloud-sql-python-connector)
 RUN apt-get update && apt-get install -y \
     curl \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip and install Python dependencies
-COPY requirements.txt /tmp/pip-tmp/
+COPY requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip setuptools wheel && \
-    pip install -r /tmp/pip-tmp/requirements.txt && \
-    rm -rf /tmp/pip-tmp
+    pip install -r /tmp/requirements.txt && \
+    rm -rf /tmp/requirements.txt
 
 # Set working directory
 WORKDIR /app
