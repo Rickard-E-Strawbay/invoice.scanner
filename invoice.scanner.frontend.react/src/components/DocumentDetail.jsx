@@ -310,6 +310,7 @@ function DocumentDetail({ document, onClose, onSave }) {
                   <iframe 
                     src={previewUrl} 
                     title="Document preview"
+                    allow="fullscreen"
                     style={{
                       width: "100%",
                       height: "100%",
