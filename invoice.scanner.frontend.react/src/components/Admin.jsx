@@ -369,7 +369,14 @@ function Admin() {
 
       // Update the company in the list
       console.log(`[Admin] Updating company in state, new data:`, data.company);
-      setCompanies(companies.map((c) => (c.id === companyId ? data.company : c)));
+      console.log(`[Admin] Companies before update:`, companies);
+      console.log(`[Admin] Will update company ${companyId} in array with length ${companies.length}`);
+      const updated = companies.map((c) => {
+        console.log(`[Admin] Checking company ${c.id} === ${companyId}? ${c.id === companyId}`);
+        return c.id === companyId ? data.company : c;
+      });
+      console.log(`[Admin] Companies after map:`, updated);
+      setCompanies(updated);
     } catch (err) {
       console.error("Error updating company status:", err);
       alert(`Error: ${err.message}`);
