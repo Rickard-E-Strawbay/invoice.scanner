@@ -1011,6 +1011,12 @@ def create_user():
             new_user = cursor.fetchone()
             conn.commit()
             
+            # Get company_enabled status
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("SELECT company_enabled FROM users_company WHERE id = %s", (company_id,))
+                company = cursor.fetchone()
+                company_enabled = company["company_enabled"] if company else False
+            
             print(f"[create_user] User {email} created by admin {user_id}")
             
             return jsonify({
@@ -1020,6 +1026,7 @@ def create_user():
                     "name": new_user["name"],
                     "role_key": new_user["role_key"],
                     "user_enabled": new_user["user_enabled"],
+                    "company_enabled": company_enabled,
                     "created_at": new_user["created_at"],
                     "updated_at": new_user["updated_at"]
                 }
@@ -1166,6 +1173,12 @@ def update_user(user_id):
             
             print(f"[update_user] User {user_id} updated by admin {admin_id}")
             
+            # Get company_enabled status
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("SELECT company_enabled FROM users_company WHERE id = %s", (updated_user["company_id"],))
+                company = cursor.fetchone()
+                company_enabled = company["company_enabled"] if company else False
+            
             return jsonify({
                 "user": {
                     "id": str(updated_user["id"]),
@@ -1173,6 +1186,7 @@ def update_user(user_id):
                     "name": updated_user["name"],
                     "role_key": updated_user["role_key"],
                     "user_enabled": updated_user["user_enabled"],
+                    "company_enabled": company_enabled,
                     "company_name": company_name,
                     "created_at": updated_user["created_at"],
                     "updated_at": updated_user["updated_at"]
