@@ -322,6 +322,7 @@ function Dashboard() {
       "predicted": { background: "#dbeafe", color: "#1e40af" },
       
       // Error states
+      "failed_preprocessing": { background: "#fee2e2", color: "#991b1b" },
       "preprocess_error": { background: "#fee2e2", color: "#991b1b" },
       "ocr_error": { background: "#fee2e2", color: "#991b1b" },
       "predict_error": { background: "#fee2e2", color: "#991b1b" },
@@ -351,6 +352,29 @@ function Dashboard() {
       "extraction", 
       "automated_evaluation"
     ];
+    
+    // Error states should show error icon
+    const errorStates = [
+      "failed_preprocessing",
+      "preprocess_error",
+      "ocr_error",
+      "predict_error",
+      "extraction_error",
+      "automated_evaluation_error",
+      "error"
+    ];
+    
+    if (errorStates.includes(status)) {
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{
+          display: "inline-block"
+        }}>
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+      );
+    }
 
     if (processingStates.includes(status)) {
       return (
@@ -768,7 +792,7 @@ function Dashboard() {
                               gap: "0.5rem"
                             }}>
                               {getStatusIcon(doc.status)}
-                              {doc.status}
+                              {doc.status_name || doc.status}
                             </span>
                           </td>
                           <td style={{ padding: "1rem", color: "#666" }}>

@@ -25,13 +25,13 @@ DEPLOYMENT STEPS:
     1. gcloud functions deploy cf_preprocess_document \
          --runtime python311 \
          --trigger-topic document-processing \
-         --entry-point process_preprocess \
+         --entry-point cf_preprocess_document \
          --project=strawbayscannertest
 
     2. gcloud functions deploy cf_extract_ocr_text \
          --runtime python311 \
          --trigger-topic document-ocr \
-         --entry-point process_ocr \
+         --entry-point cf_extract_ocr_text \
          --project=strawbayscannertest
 
     ... (continue for each stage)
@@ -53,6 +53,83 @@ from datetime import datetime
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
+logger.setLevel(os.getenv('FUNCTION_LOG_LEVEL', 'DEBUG'))
+
+# Add console handler to ensure logs are printed
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+
+# ===== LOCAL PUB/SUB SIMULATOR =====
+# When running locally without GCP credentials, simulate Pub/Sub by directly calling functions
+
+def simulate_pubsub_message(topic_name: str, message_data: Dict[str, Any]) -> None:
+    """
+    Simulate Pub/Sub message delivery by directly calling the appropriate Cloud Function.
+    
+    In GCP, Cloud Functions are triggered by Pub/Sub topics.
+    Locally, we simulate this by directly invoking the next function.
+    """
+    logger.info(f"[LOCAL-PUBSUB] 📨 Simulating Pub/Sub message to {topic_name}")
+    
+    # Create a mock CloudEvent object
+    import base64
+    from cloudevents.http import CloudEvent
+    
+    # Encode message as Pub/Sub would
+    message_json = json.dumps(message_data).encode('utf-8')
+    encoded_message = base64.b64encode(message_json).decode('utf-8')
+    
+    # Create CloudEvent in Pub/Sub format
+    cloud_event = CloudEvent({
+        "specversion": "1.0",
+        "type": "google.cloud.pubsub.topic.publish",
+        "source": f"//pubsub.googleapis.com/projects/local/topics/{topic_name}",
+        "id": f"local-{message_data.get('document_id', 'unknown')}",
+        "time": datetime.now().isoformat() + "Z",
+        "datacontenttype": "application/json",
+    }, data={
+        "message": {
+            "data": encoded_message,
+            "attributes": {
+                "document_id": message_data.get('document_id', ''),
+                "company_id": message_data.get('company_id', '')
+            }
+        }
+    })
+    
+    # Map topic names to functions and call them
+    topic_to_function = {
+        'document-ocr': 'cf_extract_ocr_text',
+        'document-llm': 'cf_predict_invoice_data',
+        'document-extraction': 'cf_extract_structured_data',
+        'document-evaluation': 'cf_run_automated_evaluation',
+    }
+    
+    if topic_name in topic_to_function:
+        func_name = topic_to_function[topic_name]
+        logger.info(f"[LOCAL-PUBSUB] 🔗 Calling {func_name} directly (local mode)")
+        
+        # Get the function from globals and call it
+        try:
+            func = globals().get(func_name)
+            if func:
+                func(cloud_event)
+                logger.info(f"[LOCAL-PUBSUB] ✅ Successfully called {func_name}")
+            else:
+                logger.error(f"[LOCAL-PUBSUB] ❌ Function {func_name} not found")
+        except Exception as e:
+            logger.error(f"[LOCAL-PUBSUB] ❌ Error calling {func_name}: {e}")
+            import traceback
+            traceback.print_exc()
+    else:
+        logger.warning(f"[LOCAL-PUBSUB] ⚠️  No function mapping for topic {topic_name}")
+    formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 # Get configuration from environment
 PROJECT_ID = os.getenv('GCP_PROJECT_ID')
@@ -61,6 +138,7 @@ DATABASE_NAME = os.getenv('DATABASE_NAME', 'invoice_scanner')
 DATABASE_USER = os.getenv('DATABASE_USER', 'scanner')
 DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD', 'password')
 DATABASE_PORT = int(os.getenv('DATABASE_PORT', 5432))
+PROCESSING_SLEEP_TIME = float(os.getenv('PROCESSING_SLEEP_TIME', '1.0'))  # seconds
 
 
 def get_db_connection():
@@ -84,45 +162,76 @@ def get_db_connection():
 
 def update_document_status(document_id: str, status: str, error: str = None) -> bool:
     """Update document status in database."""
+    logger.info(f"[DB] 🔗 Connecting to database...")
     conn = get_db_connection()
     if not conn:
+        logger.error(f"[DB] ❌ Connection failed!")
         return False
+    
+    logger.info(f"[DB] ✓ Connected. Updating document {document_id} to status '{status}'")
     
     try:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
                 UPDATE documents
-                SET status = %s, error = %s, updated_at = CURRENT_TIMESTAMP
+                SET status = %s, updated_at = CURRENT_TIMESTAMP
                 WHERE id = %s
                 """,
-                (status, error, document_id)
+                (status, document_id)
             )
             conn.commit()
-            logger.info(f"[DB] Document {document_id} status -> {status}")
+            logger.info(f"[DB] ✓ Document {document_id} status updated -> {status}")
             return True
     except Exception as e:
-        logger.error(f"[DB] Error updating status: {e}")
+        logger.error(f"[DB] ❌ Error updating status: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         return False
     finally:
         conn.close()
+        logger.info(f"[DB] 🔌 Connection closed")
 
 
 def publish_to_topic(topic_name: str, message_data: Dict[str, Any]) -> bool:
     """Publish message to Pub/Sub topic to trigger next stage."""
     try:
+        logger.info(f"[Pub/Sub] 🔗 Creating publisher client...")
         publisher = pubsub_v1.PublisherClient()
         topic_path = publisher.topic_path(PROJECT_ID, topic_name)
+        logger.info(f"[Pub/Sub] 📍 Topic path: {topic_path}")
         
         message_json = json.dumps(message_data).encode('utf-8')
+        logger.info(f"[Pub/Sub] 📨 Publishing message: {message_data}")
+        
         future = publisher.publish(topic_path, message_json)
         message_id = future.result(timeout=5)
         
-        logger.info(f"[Pub/Sub] Published to {topic_name}: {message_id}")
+        logger.info(f"[Pub/Sub] ✓ Published to {topic_name} with message_id: {message_id}")
         return True
     except Exception as e:
-        logger.error(f"[Pub/Sub] Failed to publish: {e}")
-        return False
+        # If we're running locally without GCP credentials, simulate the message delivery
+        if "DefaultCredentialsError" in type(e).__name__:
+            logger.warning(f"[Pub/Sub] ⚠️  No GCP credentials - simulating local Pub/Sub")
+            logger.info(f"[Pub/Sub] 📨 [LOCAL] Publishing message to {topic_name}: {message_data}")
+            
+            # Simulate the message by calling the next function directly
+            simulate_pubsub_message(topic_name, message_data)
+            return True
+        else:
+            logger.error(f"[Pub/Sub] ❌ Failed to publish: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+
+# ===== DEBUG: Request inspection =====
+# Lägg till Flask-route för att inspektera alla inkommande förfrågningar
+try:
+    from functions_framework import create_app
+    # Vi kan inte enkelt lägga till middleware här, men vi kan logga i själva funktionen
+except:
+    pass
 
 
 # ===== CLOUD FUNCTION 1: PREPROCESSING =====
@@ -142,7 +251,6 @@ def cf_preprocess_document(cloud_event):
         5. Publish to 'document-ocr' topic to trigger next stage
     """
     try:
-        # Decode Pub/Sub message
         import base64
         
         pubsub_message = base64.b64decode(cloud_event.data["message"]["data"]).decode()
@@ -153,10 +261,10 @@ def cf_preprocess_document(cloud_event):
         stage = message.get('stage')
         
         if stage != 'preprocess':
-            logger.info(f"[CF-PREPROCESS] Skipping message with stage={stage}")
+            logger.info(f"[CF-PREPROCESS] ⏭️  Skipping message with stage={stage} (not 'preprocess')")
             return
         
-        logger.info(f"[CF-PREPROCESS] Processing document {document_id}")
+        logger.info(f"[CF-PREPROCESS] ✅ Processing document {document_id}")
         
         # Update status
         update_document_status(document_id, 'preprocessing')
@@ -164,7 +272,7 @@ def cf_preprocess_document(cloud_event):
         # TODO: Add actual preprocessing logic here
         # For now: mock delay to simulate processing
         import time
-        time.sleep(5)
+        time.sleep(PROCESSING_SLEEP_TIME)
         
         # Mark complete
         update_document_status(document_id, 'preprocessed')
@@ -176,12 +284,12 @@ def cf_preprocess_document(cloud_event):
             'stage': 'ocr'
         })
         
-        logger.info(f"[CF-PREPROCESS] Completed for {document_id}")
-    
+        logger.info(f"[CF-PREPROCESS] ✅ Completed for {document_id}")
+        
     except Exception as e:
-        logger.error(f"[CF-PREPROCESS] Error: {e}", exc_info=True)
-        document_id = message.get('document_id') if 'message' in locals() else 'unknown'
-        update_document_status(document_id, 'error', str(e))
+        logger.error(f"[CF-PREPROCESS] ❌ Error: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # ===== CLOUD FUNCTION 2: OCR EXTRACTION =====
@@ -212,7 +320,7 @@ def cf_extract_ocr_text(cloud_event):
         
         # TODO: Add actual OCR logic here
         import time
-        time.sleep(5)
+        time.sleep(PROCESSING_SLEEP_TIME)
         
         update_document_status(document_id, 'ocr_complete')
         
@@ -259,7 +367,7 @@ def cf_predict_invoice_data(cloud_event):
         
         # TODO: Add actual LLM logic here
         import time
-        time.sleep(5)
+        time.sleep(PROCESSING_SLEEP_TIME)
         
         update_document_status(document_id, 'llm_complete')
         
@@ -306,7 +414,7 @@ def cf_extract_structured_data(cloud_event):
         
         # TODO: Add actual extraction logic here
         import time
-        time.sleep(5)
+        time.sleep(PROCESSING_SLEEP_TIME)
         
         update_document_status(document_id, 'extraction_complete')
         
@@ -355,7 +463,7 @@ def cf_run_automated_evaluation(cloud_event):
         
         # TODO: Add actual evaluation logic here
         import time
-        time.sleep(5)
+        time.sleep(PROCESSING_SLEEP_TIME)
         
         # Final stage - mark as completed
         update_document_status(document_id, 'completed')

@@ -2020,28 +2020,51 @@ def upload_document():
                 
                 # ========== TRIGGER ASYNC PROCESSING ==========
                 task_id = None
+                processing_error = None
                 try:
                     if processing_backend:
                         result = processing_backend.trigger_task(str(doc_id), str(company_id))
                         task_id = result.get('task_id')
-                        print(f"[upload_document] Processing task queued via {processing_backend.backend_type}: {task_id}")
+                        backend_status = result.get('status')
+                        
+                        # Check if processing backend returned an error
+                        if backend_status in ['service_unavailable', 'service_error']:
+                            processing_error = result.get('error', 'Unknown error')
+                            print(f"[upload_document] ❌ PROCESSING ERROR: {processing_error}")
+                            
+                            # Update document status to failed_preprocessing
+                            try:
+                                with conn.cursor() as cursor:
+                                    cursor.execute(
+                                        "UPDATE documents SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                                        ('failed_preprocessing', doc_id)
+                                    )
+                                    conn.commit()
+                                    print(f"[upload_document] ✅ Document status updated to failed_preprocessing")
+                            except Exception as update_error:
+                                print(f"[upload_document] Error updating document status: {update_error}")
+                        else:
+                            print(f"[upload_document] ✅ Processing task queued via {processing_backend.backend_type}")
                     else:
-                        print(f"[upload_document] Warning: Processing backend not initialized")
+                        print(f"[upload_document] ⚠️  Processing backend not initialized")
                         task_id = None
                 except Exception as task_error:
-                    print(f"[upload_document] Warning: Could not trigger processing task: {task_error}")
+                    print(f"[upload_document] ❌ Error triggering processing: {task_error}")
+                    processing_error = str(task_error)
                     task_id = None
                 
                 return jsonify({
-                    "message": "Document uploaded and queued for processing",
-                    "document": dict(document) if document else {
-                        "id": doc_id,
+                    "message": "Document uploaded" + (" and queued for processing" if not processing_error else " but processing unavailable"),
+                    "document": {
+                        "id": str(doc_id),
                         "raw_filename": filename,
-                        "status": "preprocessing",
+                        "status": "failed_preprocessing" if processing_error else "preprocessing",
+                        "processing_error": processing_error if processing_error else None,
                         "created_at": datetime.utcnow().isoformat()
                     },
-                    "task_id": task_id
-                }), 201
+                    "task_id": task_id,
+                    "processing_error": processing_error
+                }), 201 if not processing_error else 202
                 
         except Exception as db_error:
             conn.rollback()
@@ -2304,12 +2327,14 @@ def get_documents():
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute(
                     """
-                    SELECT id, company_id, uploaded_by, raw_format, raw_filename, 
-                           document_name, image_filename, content_type, status, predicted_accuracy, 
-                           is_training, created_at, updated_at
-                    FROM documents
-                    WHERE company_id = %s
-                    ORDER BY created_at DESC
+                    SELECT d.id, d.company_id, d.uploaded_by, d.raw_format, d.raw_filename, 
+                           d.document_name, d.image_filename, d.content_type, d.status, d.predicted_accuracy, 
+                           d.is_training, d.created_at, d.updated_at,
+                           ds.status_name
+                    FROM documents d
+                    LEFT JOIN document_status ds ON d.status = ds.status_key
+                    WHERE d.company_id = %s
+                    ORDER BY d.created_at DESC
                     """,
                     (company_id,)
                 )

@@ -1,121 +1,128 @@
 # Invoice Scanner
 
-An automated invoice scanning and analysis solution with React frontend and Flask backend.
+Document processing system with Cloud Functions architecture.
 
-## Features
+## 🚀 Quick Start
 
-- 📤 **Drag and drop** file upload for invoices (PDF, JPG, PNG)
-- 📊 **Document management** - View, edit, and track scanned invoices
-- 🔐 **User authentication** and company roles
-- 💳 **Subscriptions and billing** for different plan types
-- 👨‍💼 **Admin panel** for company administration
-- 📝 **Invoice automation** - Extract and analyze invoice data
-
-## Start the full stack
-
-1. Build and start both backend and frontend:
-
+### Start Local Development
 ```bash
-cd /Users/rickardelmqvist/Development/invoice.scanner
-docker compose up --build
+./dev-start.sh
 ```
 
-2. Frontend is accessible at:
-   - http://localhost:5173
+This starts everything needed:
+- 4 Docker services (API, Frontend with Vite hot-reload, Database, Redis)
+- Cloud Functions Framework in new Terminal (:9000)
 
-3. Backend API is accessible at:
-   - http://localhost:8000
+### Services & URLs
+- **API:** http://localhost:5001
+- **Frontend:** http://localhost:8080 (Vite dev-server with hot-reload)
+- **Database:** localhost:5432
+- **Redis:** localhost:6379
+- **Cloud Functions Framework:** http://localhost:9000 (in separate Terminal)
 
-## Architecture
+## 📋 Architecture
 
-- **Frontend**: React with Vite, runs in Docker on port 5173
-- **Backend**: Flask, PostgreSQL, runs in Docker on port 8000
-- **Database**: PostgreSQL for storing users, companies, invoices, and document statuses
+**Unified Cloud Functions approach:**
+- Same code runs locally (functions-framework) and in GCP (Cloud Functions)
+- 5-stage processing pipeline (preprocess → OCR → LLM → extraction → evaluation)
+- Pub/Sub message chaining for orchestration
+- Cloud SQL for persistence
+- GCS for document storage (cloud only)
 
-## Project Structure
+See [SYSTEM_PROMPT.md](SYSTEM_PROMPT.md) for detailed architecture documentation.
+
+## 📁 Project Structure
 
 ```
 invoice.scanner/
-├── invoice.scanner.api/          # Flask backend
-│   ├── main.py                   # Main application
-│   ├── db_config.py              # Database configuration
-│   ├── db_utils.py               # Database utilities
-│   ├── defines.py                # Global constants
-│   ├── documents/                # Document storage
-│   │   ├── raw/                  # Original unmodified files
-│   │   └── processed/            # Processed files
-│   ├── lib/                      # Libraries
-│   │   ├── email_service.py      # Email handling
-│   │   └── llm/                  # LLM integration
-│   └── requirements.txt          # Python dependencies
-│
-└── invoice.scanner.frontend.react/  # React frontend
-    ├── src/
-    │   ├── components/           # React components
-    │   │   ├── Dashboard.jsx     # Main dashboard
-    │   │   ├── ScanInvoice.jsx   # File upload
-    │   │   ├── DocumentDetail.jsx # Invoice editor
-    │   │   ├── Admin.jsx         # Admin panel
-    │   │   └── ...
-    │   ├── contexts/             # React Context
-    │   └── App.jsx               # Main app
-    └── package.json
+├── dev-start.sh                           # ⭐ START HERE (starts docker + Cloud Functions)
+├── docker-compose.yml                     # Local infrastructure (4 services)
+├── invoice.scanner.api/                   # Flask REST API
+├── invoice.scanner.frontend.react/        # React UI
+├── invoice.scanner.db/                    # Database initialization
+├── invoice.scanner.cloud.functions/       # 5 Cloud Functions
+│   ├── main.py                            # Function implementations
+│   ├── local_server.sh                    # Run locally (:9000)
+│   ├── deploy.sh                          # Deploy to GCP
+│   └── requirements.txt                   # Dependencies
+└── SYSTEM_PROMPT.md                       # Full documentation
 ```
 
-## API Endpoints
+## 🧪 Testing
 
-### Document Management
-- `POST /auth/documents/upload` - Upload new document
-- `GET /auth/documents` - Get all documents for company
-- `PUT /auth/documents/<id>` - Update invoice data
-
-## Common Commands
-
+### Local
 ```bash
-# Start the stack
-docker compose up --build
-
-# Stop the stack
-docker compose down
-
-# View logs
-docker compose logs -f
-
-# Start only backend
-docker compose up backend
-
-# Start only frontend
-docker compose up frontend
+./dev-start.sh
 ```
 
-## Environment Variables
+This opens 2 things:
+- Docker services in background (API, Frontend, Database, Redis)
+- New Terminal window with Cloud Functions Framework logs
 
-Backend requires `.env` file in `invoice.scanner.api/.env`:
-```
-DATABASE_URL=postgresql://user:password@db:5432/invoice_scanner
-SMTP_SERVER=smtp.gmail.com
-SMTP_PORT=587
-# ...
-```
-
-## Development
-
-### Backend
+### Upload & Process Document
 ```bash
-cd invoice.scanner.api
-pip install -r requirements.txt
-python main.py
+# 1. Login
+curl -X POST http://localhost:5001/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "user@example.com", "password": "password"}' \
+    -c /tmp/cookies.txt
+
+# 2. Upload
+curl -X POST http://localhost:5001/auth/documents/upload \
+    -b /tmp/cookies.txt \
+    -F "file=@/path/to/document.pdf"
+
+# 3. Check Status
+curl -X GET http://localhost:5001/auth/documents/{doc_id}/status \
+    -b /tmp/cookies.txt
 ```
 
-### Frontend
+## ☁️ Deploy to GCP
+
+### TEST Environment
 ```bash
-cd invoice.scanner.frontend.react
-npm install
-npm run dev
+cd invoice.scanner.cloud.functions
+./deploy.sh strawbayscannertest europe-west1
 ```
 
----
+### PRODUCTION
+```bash
+cd invoice.scanner.cloud.functions
+./deploy.sh strawbayscannerprod europe-west1
+```
 
-**Last updated**: December 20, 2025
+## 📚 Documentation
 
-## CI/CD Pipeline Test - Thu Dec 25 18:40:40 CET 2025
+- [SYSTEM_PROMPT.md](SYSTEM_PROMPT.md) - Full architecture & guidelines
+- [invoice.scanner.cloud.functions/README.md](invoice.scanner.cloud.functions/README.md) - Cloud Functions details
+
+## 🔧 Development
+
+### Requirements
+- Docker & Docker Compose
+- Python 3.11+
+- Node.js 18+ (for frontend development)
+- GCP credentials (for cloud deployment)
+
+### Key Files
+- `invoice.scanner.api/main.py` - API entry point
+- `invoice.scanner.api/lib/processing_backend.py` - Processing abstraction
+- `invoice.scanner.cloud.functions/main.py` - Cloud Functions implementations
+- `docker-compose.yml` - Local infrastructure
+
+### Environment Variables
+See `.env` files in respective service folders. For GCP, use Secret Manager.
+
+## 📝 Notes
+
+- All changes to docker-compose.yml, GitHub Actions, or config must be approved first
+- Same code runs locally and in GCP (environment-aware)
+- Database: Cloud SQL (local via docker, cloud via Private IP)
+- Storage: Local volumes (dev) or GCS (cloud)
+
+## 🤝 Contributing
+
+1. Test locally: `./dev-server.sh`
+2. Verify functionality before pushing
+3. Document changes in commit messages
+4. Follow existing code patterns

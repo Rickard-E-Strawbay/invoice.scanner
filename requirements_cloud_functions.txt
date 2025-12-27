@@ -1,4 +1,0 @@
-functions-framework==3.5.0
-google-cloud-pubsub==2.18.4
-google-cloud-sql-connector==1.4.5
-pg8000==1.30.5

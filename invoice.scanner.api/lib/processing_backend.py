@@ -2,26 +2,26 @@
 Processing Backend Abstraction Layer
 
 Provides environment-aware document processing backend selection.
-Supports both local (Celery + Redis) and cloud (Cloud Functions + Pub/Sub) deployments.
+Supports both local (Cloud Functions Framework) and cloud (Cloud Functions + Pub/Sub) deployments.
 
 ARCHITECTURE:
     API (same code for local and cloud)
          ↓
     ProcessingBackend (abstract interface)
          ↓
-    ┌─────────────────────┬─────────────────────┐
-    │                     │                     │
-    LOCAL                 CLOUD                 MOCK
-    └─────────────────────┴─────────────────────┘
-         │                     │                 │
-    Celery Task Queue    Cloud Functions     Testing
-    Redis Broker         Pub/Sub Topic      Offline mode
+    ┌──────────────────────────────┬─────────────────────┐
+    │                              │                     │
+    LOCAL                          CLOUD                 MOCK
+    └──────────────────────────────┴─────────────────────┘
+         │                              │                 │
+    functions-framework         Cloud Functions       Testing
+    (:9000)                     Pub/Sub Topic      Offline mode
 
 ENVIRONMENT VARIABLES:
     PROCESSING_BACKEND: 'local' | 'cloud_functions' | 'mock'
     
     For local:
-        PROCESSING_SERVICE_URL: HTTP endpoint (default: http://localhost:5002)
+        PROCESSING_SERVICE_URL: HTTP endpoint (default: http://localhost:9000)
     
     For cloud_functions:
         GCP_PROJECT_ID: GCP project ID
@@ -97,13 +97,13 @@ class ProcessingBackend(ABC):
         pass
 
 
-# ===== LOCAL CELERY BACKEND =====
+# ===== LOCAL CLOUD FUNCTIONS BACKEND =====
 
-class LocalCeleryBackend(ProcessingBackend):
+class LocalCloudFunctionsBackend(ProcessingBackend):
     """
-    Local Celery + Redis backend for docker-compose development.
+    Local Cloud Functions Framework backend for docker-compose development.
     
-    Uses HTTP POST to trigger tasks on local processing service.
+    Uses HTTP CloudEvents to trigger functions on local Cloud Functions Framework.
     Suitable for development, testing, and small deployments.
     """
     
@@ -111,66 +111,153 @@ class LocalCeleryBackend(ProcessingBackend):
     
     def __init__(self, processing_service_url: Optional[str] = None):
         """
-        Initialize local Celery backend.
+        Initialize local Cloud Functions Framework backend.
         
         Args:
             processing_service_url: HTTP URL to processing service
-                (default: from PROCESSING_SERVICE_URL env var or http://localhost:5002)
+                (default: from PROCESSING_SERVICE_URL env var or http://localhost:9000)
         """
         self.processing_url = processing_service_url or os.getenv(
             'PROCESSING_SERVICE_URL',
-            'http://localhost:5002'
+            'http://host.docker.internal:9000'
         )
-        logger.info(f"[LocalCeleryBackend] Initialized with URL: {self.processing_url}")
+        logger.info(f"[LocalCloudFunctionsBackend] Initialized with URL: {self.processing_url}")
     
-    def trigger_task(self, document_id: str, company_id: str) -> Dict[str, Any]:
+    def _check_service_available(self) -> bool:
         """
-        HTTP POST to local processing service /api/tasks/orchestrate endpoint.
+        Check if Cloud Functions Framework is running and accessible.
         
-        This queues a Celery task which will be picked up by Redis-backed workers.
-        
-        Flow:
-            API → HTTP POST → Processing HTTP Service → Celery → Redis → Workers
+        Returns:
+            True if service is reachable, False otherwise
         """
         import requests
         
         try:
+            response = requests.get(self.processing_url, timeout=2)
+            logger.info(f"[LocalCloudFunctionsBackend] ✅ Cloud Functions Framework is available")
+            return True
+        except requests.exceptions.ConnectionError:
+            logger.error(f"[LocalCloudFunctionsBackend] ❌ CLOUD FUNCTIONS FRAMEWORK NOT RUNNING")
+            logger.error(f"[LocalCloudFunctionsBackend] Cannot connect to {self.processing_url}")
+            logger.error(f"[LocalCloudFunctionsBackend] ⚠️  Please start Cloud Functions Framework:")
+            logger.error(f"[LocalCloudFunctionsBackend]    cd invoice.scanner.cloud.functions && ./local_server.sh")
+            return False
+        except Exception as e:
+            logger.error(f"[LocalCloudFunctionsBackend] ❌ Error checking service availability: {e}")
+            return False
+    
+    def trigger_task(self, document_id: str, company_id: str) -> Dict[str, Any]:
+        """
+        HTTP POST to local Cloud Functions Framework.
+        
+        First checks if Cloud Functions Framework is available.
+        If not available, returns error status that indicates failed_preprocessing.
+        
+        Flow:
+            API → Check service available
+                  → If available: HTTP POST → Cloud Functions Framework → Processing
+                  → If not available: Return error with status='service_unavailable'
+        """
+        import requests
+        import base64
+        
+        # First check if Cloud Functions Framework is running
+        if not self._check_service_available():
+            logger.error(f"[LocalCloudFunctionsBackend] ❌ Processing failed for doc={document_id}")
+            logger.error(f"[LocalCloudFunctionsBackend] Cloud Functions Framework is not running!")
+            return {
+                'task_id': None,
+                'status': 'service_unavailable',
+                'backend': self.backend_type,
+                'error': 'Cloud Functions Framework not running. Start with: cd invoice.scanner.cloud.functions && ./local_server.sh'
+            }
+        
+        try:
             logger.debug(
-                f"[LocalCeleryBackend] Triggering task: doc={document_id}, company={company_id}"
+                f"[LocalCloudFunctionsBackend] Triggering task: doc={document_id}, company={company_id}"
+            )
+            
+            # Format as CloudEvents HTTP Structured Content Mode
+            # This is what Cloud Functions Framework expects locally
+            pubsub_message = {
+                'document_id': document_id,
+                'company_id': company_id,
+                'stage': 'preprocess'
+            }
+            
+            # Encode as base64 like Pub/Sub does
+            message_json = json.dumps(pubsub_message).encode('utf-8')
+            encoded_message = base64.b64encode(message_json).decode('utf-8')
+            
+            # Format as CloudEvents HTTP Structured Content Mode
+            cloud_event = {
+                "specversion": "1.0",
+                "type": "google.cloud.pubsub.topic.publish",
+                "source": "//pubsub.googleapis.com/projects/local/topics/document-processing",
+                "id": f"local-{document_id}",
+                "time": "2025-12-27T00:00:00Z",
+                "datacontenttype": "application/json",
+                "data": {
+                    "message": {
+                        "data": encoded_message,
+                        "attributes": {
+                            "document_id": document_id,
+                            "company_id": company_id
+                        }
+                    }
+                }
+            }
+            
+            logger.info(
+                f"[LocalCloudFunctionsBackend] 📨 Sending CloudEvents HTTP to {self.processing_url}"
             )
             
             response = requests.post(
-                f"{self.processing_url}/api/tasks/orchestrate",
-                json={
-                    'document_id': document_id,
-                    'company_id': company_id
-                },
-                timeout=10
+                f"{self.processing_url}/",
+                json=cloud_event,
+                headers={"Content-Type": "application/cloudevents+json"},
+                timeout=30
             )
             
-            if response.status_code == 202:
-                data = response.json()
-                task_id = data.get('task_id')
+            if response.status_code == 200 or response.status_code == 202:
                 logger.info(
-                    f"[LocalCeleryBackend] Task queued successfully: {task_id}"
+                    f"[LocalCloudFunctionsBackend] ✅ Task triggered successfully: doc={document_id}"
                 )
                 return {
-                    'task_id': task_id,
+                    'task_id': document_id,  # Use document_id as task_id for local
                     'status': 'queued',
                     'backend': self.backend_type
                 }
             else:
-                error_msg = f"Processing service returned {response.status_code}"
-                logger.error(f"[LocalCeleryBackend] {error_msg}")
-                raise Exception(error_msg)
+                error_msg = f"Cloud Functions returned {response.status_code}"
+                logger.error(f"[LocalCloudFunctionsBackend] ❌ {error_msg}")
+                logger.error(f"[LocalCloudFunctionsBackend] Response: {response.text}")
+                return {
+                    'task_id': None,
+                    'status': 'service_error',
+                    'backend': self.backend_type,
+                    'error': error_msg
+                }
         
-        except requests.exceptions.ConnectionError as e:
-            error_msg = f"Cannot connect to processing service at {self.processing_url}"
-            logger.error(f"[LocalCeleryBackend] {error_msg}: {e}")
-            raise Exception(error_msg)
+        except requests.exceptions.Timeout:
+            error_msg = f"Cloud Functions Framework timeout at {self.processing_url}"
+            logger.error(f"[LocalCloudFunctionsBackend] ❌ {error_msg}")
+            return {
+                'task_id': None,
+                'status': 'service_unavailable',
+                'backend': self.backend_type,
+                'error': error_msg
+            }
         except Exception as e:
-            logger.error(f"[LocalCeleryBackend] Error triggering task: {e}")
-            raise
+            logger.error(f"[LocalCloudFunctionsBackend] ❌ Error triggering task: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'task_id': None,
+                'status': 'service_error',
+                'backend': self.backend_type,
+                'error': str(e)
+            }
     
     def get_task_status(self, task_id: str) -> Dict[str, Any]:
         """
@@ -189,13 +276,13 @@ class LocalCeleryBackend(ProcessingBackend):
             if response.status_code == 200:
                 return response.json()
             else:
-                logger.warning(f"[LocalCeleryBackend] Status endpoint returned {response.status_code}")
+                logger.warning(f"[LocalCloudFunctionsBackend] Status endpoint returned {response.status_code}")
                 return {
                     'task_id': task_id,
                     'status': 'UNKNOWN'
                 }
         except Exception as e:
-            logger.error(f"[LocalCeleryBackend] Error getting task status: {e}")
+            logger.error(f"[LocalCloudFunctionsBackend] Error getting task status: {e}")
             return {
                 'task_id': task_id,
                 'status': 'UNKNOWN',
@@ -393,7 +480,7 @@ def get_processing_backend() -> ProcessingBackend:
     logger.info(f"[ProcessingBackend] Initializing backend: {backend_name}")
     
     if backend_name == 'local':
-        return LocalCeleryBackend()
+        return LocalCloudFunctionsBackend()
     elif backend_name == 'cloud_functions':
         return CloudFunctionsBackend()
     elif backend_name == 'mock':

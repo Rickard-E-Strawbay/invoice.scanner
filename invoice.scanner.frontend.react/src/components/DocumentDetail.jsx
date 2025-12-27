@@ -58,7 +58,7 @@ function DocumentDetail({ document, onClose, onSave }) {
       }));
 
       // Load preview if status allows it
-      const allowedStatuses = ["uploaded", "preprocessing", "preprocess_error"];
+      const allowedStatuses = ["uploaded", "preprocessing", "preprocess_error", "failed_preprocessing"];
       if (allowedStatuses.includes(document.status)) {
         setPreviewLoading(true);
         fetch(`${API_BASE_URL}/auth/documents/${document.id}/preview`, {

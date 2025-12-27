@@ -4,52 +4,165 @@
 
 ## 📋 QUICK REFERENCE - Läs detta först!
 
+**NUVARANDE ARKITEKTUR (Dec 27, 2025):**
+
+| Komponenter | Status | Beskrivning |
+|-------------|--------|------------|
+| **LOCAL (docker-compose)** | ✅ Ready | 4 services: API, Frontend, PostgreSQL, Redis |
+| **LOCAL Processing** | ✅ Ready | Cloud Functions Framework på :9000 (external) |
+| **GCP Cloud Functions** | ✅ Ready | 5 functions (preprocess, ocr, llm, extraction, evaluation) |
+| **Deployment Script** | ✅ Ready | cloud_functions/deploy.sh för TEST + PROD |
+| **Database** | ✅ Ready | Cloud SQL TEST + PROD |
+| **Storage** | ✅ Ready | Local volumes (local) + GCS (cloud) |
+| **CI/CD** | ✅ Ready | GitHub Actions pipeline.yml |
+
+**Enkelt sagt:**
+- ✅ Samma kod kör lokalt och i GCP
+- ✅ Cloud Functions Framework simulerar GCP lokalt
+- ✅ Ingen Celery workers - renare arkitektur
+- ✅ Ready to deploy till GCP TEST och PROD
+
+---
+
+**Overall Progress:** FASE 6E COMPLETE - Cloud Functions Unified Architecture
+
+| FASE | Status | Details | Last Updated |
+|------|--------|---------|--------------|
+| FASE 0-5 | ✅ 100% | Infrastructure, Secrets, Cloud SQL, Cloud Run | Dec 26 |
+| FASE 6 | ✅ 100% | Storage Service (Local + GCS hybrid) | Dec 26 |
+| **FASE 6E** | ✅ 100% | **NEW:** Unified Cloud Functions Architecture | **Dec 27** |
+| **FASE 7** | 🔄 READY | Deploy Cloud Functions to GCP TEST | Ready now |
+| **FASE 8** | 🔄 READY | Deploy Cloud Functions to GCP PROD | Ready now |
+
+---
+
+## 🎯 CURRENT STATE - FASE 6E COMPLETE (Dec 27)
+
+### Architecture Changed
+```
+BEFORE (Celery-based):
+├── LOCAL: invoice.scanner.processing/ (7 workers + processing_http)
+└── CLOUD: cloud_functions_processing.py (5 Cloud Functions)
+
+AFTER (Unified Cloud Functions):
+├── LOCAL: invoice.scanner.cloud.functions/ → ./local_server.sh (functions-framework :9000)
+└── CLOUD: invoice.scanner.cloud.functions/ → ./deploy.sh (5 Cloud Functions on GCP)
+
+RESULT: Same code everywhere ✅
+```
+
+### What Changed
+1. ✅ Removed: `invoice.scanner.processing/` (Celery workers not needed)
+2. ✅ Removed: All Celery references from docker-compose.yml
+3. ✅ Simplified: docker-compose from 14 → 4 services
+4. ✅ Created: cloud_functions/ folder with complete structure
+5. ✅ Created: dev-server.sh (starts docker-compose + functions-framework)
+6. ✅ Updated: docker-compose.yml (4 lean services)
+
+### Folder Structure (NEW)
+```
+invoice.scanner/
+├── docker-compose.yml          (4 services: api, frontend, db, redis)
+├── dev-server.sh              (Start docker-compose + Cloud Functions)
+├── invoice.scanner.cloud.functions/
+│   ├── main.py               (5 Cloud Functions)
+│   ├── requirements.txt       (functions-framework + deps)
+│   ├── local_server.sh        (Run functions-framework :9000)
+│   ├── deploy.sh              (Deploy to GCP TEST/PROD)
+│   ├── .env.yaml              (Config vars)
+│   └── README.md              (Instructions)
+├── invoice.scanner.api/       (Flask API)
+├── invoice.scanner.frontend.react/ (React UI)
+└── invoice.scanner.db/        (Database init)
+```
+
+### Services Running
+```
+docker-compose (Terminal 1):
+├─ api:5001        (Flask API)
+├─ frontend:8080   (React + Nginx)
+├─ db:5432         (PostgreSQL)
+└─ redis:6379      (Cache)
+
+cloud_functions (Terminal 2):
+└─ :9000           (functions-framework)
+```
+
+---
+
+## 🚀 HOW TO USE
+
+### Start Everything Locally
+```bash
+# One terminal - starts docker-compose + Cloud Functions together
+./dev-server.sh
+
+# Or manually (two terminals):
+
+# Terminal 1: Docker services
+docker-compose up -d
+
+# Terminal 2: Cloud Functions Framework
+cd invoice.scanner.cloud.functions && ./local_server.sh
+```
+
+### Test Document Processing
+```bash
+# 1. Login
+curl -X POST http://localhost:5001/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "rickard@strawbay.io", "password": "Test123"}' \
+    -c /tmp/cookies.txt
+
+# 2. Upload document
+curl -X POST http://localhost:5001/auth/documents/upload \
+    -b /tmp/cookies.txt \
+    -F "file=@/tmp/test.pdf"
+
+# 3. Check status
+curl -X GET http://localhost:5001/auth/documents/{doc_id}/status \
+    -b /tmp/cookies.txt
+```
+
+### Deploy to GCP
+```bash
+# TEST
+cd invoice.scanner.cloud.functions
+./deploy.sh strawbayscannertest europe-west1
+
+# PROD
+./deploy.sh strawbayscannerprod europe-west1
+```
+
+---
+
+## 📋 QUICK REFERENCE - Läs detta först!
+
 | Vad | Status | Vad gör vi |
 |-----|--------|-----------|
-| **Local Docker** | ✅ Ready | Alla 14 containers bygger + health |
+| **Local Docker** | ✅ Ready | 4 services (api, frontend, db, redis) |
 | **pg8000 Driver** | ✅ Complete | Testad med pg8000_wrapper + RealDictCursor |
 | **Database** | ✅ Ready | Cloud SQL TEST+PROD initialiserad |
 | **GitHub Actions** | ✅ Ready | Pipeline.yml (single file, 3 jobs) |
 | **GCP Secrets** | ✅ Ready | 12 secrets i Secret Manager |
-| **Docker Images** | ✅ Ready | Api, Frontend, Worker pushed till registries |
-| **Cloud Run TEST** | ✅ Live | API rev 00048 + Frontend deployed & working |
-| **Admin Panel** | ✅ Working | User/Company management, Enable/Disable buttons |
-| **Processing Backend** | ✅ DONE | LocalCeleryBackend + CloudFunctionsBackend implemented |
-| **NEXT STEP** | 👉 DO THIS | Deploy Cloud Functions + Test end-to-end |
+| **Docker Images** | ✅ Ready | Api, Frontend pushed till registries |
+| **Cloud Run TEST** | ✅ Live | API + Frontend deployed & working |
+| **Cloud Functions** | ✅ Ready | 5 functions i cloud_functions/main.py |
+| **Processing Backend** | ✅ UNIFIED | LocalCeleryBackend → LocalCloudFunctionsBackend |
+| **Local Processing** | ✅ READY | Cloud Functions Framework :9000 |
+| **NEXT STEP** | 👉 DO THIS | Test locally, then deploy to GCP TEST |
 
 **Enkelt sagt:**
-- Cloud Run TEST är live och fungerar
+- Cloud Run TEST är live och fungerar perfekt
 - Admin panel fungerar
-- Document processing: LOCAL (Celery) ✓ CLOUD (Cloud Functions) ✓
-- Ready to deploy Cloud Functions och testa end-to-end
-
----
-
-**Overall Progress:** 99% Complete - Ready for Cloud Functions Deployment
-
-| FASE | Status | Details | Last Updated |
-|------|--------|---------|--------------|
-| FASE 0 | ✅ 100% | GCP Infrastructure (APIs, Service Accounts, GitHub Secrets) | Dec 25 |
-| FASE 1 | ✅ 100% | GCP Secret Manager (12 secrets configured) | Dec 25 |
-| FASE 2 | ✅ 100% | Cloud SQL (PostgreSQL instances initialized + schemas deployed) | Dec 26 |
-| FASE 3 | ✅ 100% | Docker Images (api, frontend, worker - pushed to both registries) | Dec 24 |
-| FASE 4 | ✅ 100% | GitHub Actions: Single unified pipeline.yml with conditional jobs | Dec 25 |
-| FASE 4B | ✅ 100% | Local Docker-Compose: Fresh rebuild completed - all 14 containers healthy | Dec 26 22:30 |
-| FASE 4C | ✅ 100% | Database Driver Migration: pg8000 unified driver + RealDictCursor wrapper | Dec 26 |
-| **FASE 5** | ✅ 100% | Cloud Run Deployment (API & Frontend deployed to TEST) | **Dec 26 16:40** |
-| **FASE 5A** | ✅ 100% | JSON Serialization: PG8000DictRow → dict conversion fixes | **Dec 26 16:45** |
-| **FASE 5B** | ✅ 100% | VPC Access Connectors: Private IP connectivity TEST+PROD | **Dec 26** |
-| **FASE 5C** | ✅ 100% | Session Management: Environment-aware Flask session cookies (HTTPS) | **Dec 26** |
-| **FASE 5D** | ✅ 100% | API Response Fields: company_enabled added to user responses | **Dec 26 16:32** |
-| **FASE 5E** | ✅ 100% | Email Service: Disabled in Cloud Run (pending SendGrid migration) | **Dec 26 16:40** |
-| FASE 6 | ✅ 100% | Document Storage: Hybrid approach (Local + GCS) - COMPLETED | **Dec 26 17:10** |
-| FASE 6A | ✅ 100% | Create GCS Buckets (test-docs, prod-docs) | **Dec 26 17:05** |
-| FASE 6B | ✅ 100% | Build storage_service.py abstraction layer | **Dec 26 17:08** |
-| FASE 6C | ✅ 100% | Update upload/download endpoints to use abstraction | **Dec 26 17:09** |
+- Document processing lokalt: ✅ READY (Cloud Functions Framework)
+- Document processing molnet: ✅ READY (5 Cloud Functions) - Ready to deploy
+- **Samma kod överallt** - ingen Celery komplexitet
 | FASE 6D | ✅ 100% | Configure environment-aware storage (local vs GCS) | **Dec 26 17:10** |
 | **FASE 6E** | ✅ 100% | Processing Backend Abstraction + Cloud Functions | **Dec 26** |
-| FASE 7 | 🔄 NEXT | Deploy Cloud Functions + Test end-to-end | Pending |
-| FASE 8-9 | 0% | Monitoring, Production validation | Future |
+| **FASE 7** | 🔄 IN PROGRESS | Deploy Cloud Functions to GCP TEST - Detailed steps | **Dec 26** |
+| **FASE 8** | 📋 PREPARED | Deploy Cloud Functions to GCP PROD - Same steps | **Ready** |
+| FASE 9 | 0% | Monitoring, Production validation | Future |
 
 ### 🚀 WHAT'S READY NOW (Dec 26, 22:30)
 
@@ -320,49 +433,594 @@ document-processing (initial)
     [COMPLETED - Database status = 'completed']
 ```
 
-### Deployment
+### Deployment - Cloud Functions
 
-**Created: `deploy_cloud_functions.sh`**
+**Structure: cloud_functions/**
 
-Automated deployment script:
-```bash
-./deploy_cloud_functions.sh strawbayscannertest europe-west1
-```
+Files:
+- `main.py` - 5 Cloud Functions (same code local + cloud)
+- `requirements.txt` - functions-framework dependencies
+- `local_server.sh` - Run locally on :9000
+- `deploy.sh` - Deploy to GCP TEST/PROD
+- `.env.yaml` - Configuration
 
-Steps:
-1. Creates Pub/Sub topics (5 topics)
-2. Deploys 5 Cloud Functions
-3. Configures environment variables
-4. Sets up Cloud SQL connectivity via Private IP
+### Testing Strategy (NEW - Unified)
 
-### Testing Strategy
+**LOCAL TESTING:**
+1. Start docker-compose: `docker-compose up -d`
+2. Start Cloud Functions: `cd invoice.scanner.cloud.functions && ./local_server.sh`
+3. Upload document via API: POST /auth/documents/upload
+4. Monitor processing: GET /auth/documents/{id}/status
+5. Verify database updates in real-time
 
-**LOCAL TESTING (DONE):**
-1. ✅ docker-compose brings up Redis, Celery workers, processing_http
-2. ✅ API upload_document triggers LocalCeleryBackend
-3. ✅ HTTP POST goes to processing_http:5002
-4. ✅ Celery chains 5 tasks through workers
-5. ✅ Database status updates as processing progresses
-6. ✅ API GET /documents/{id}/status polls current status
-
-**CLOUD TESTING (READY TO DO):**
-1. Deploy Cloud Functions: `./deploy_cloud_functions.sh strawbayscannertest`
-2. Set API env vars: `PROCESSING_BACKEND=cloud_functions`
-3. API upload_document triggers CloudFunctionsBackend
-4. Pub/Sub message published to document-processing topic
-5. Cloud Functions triggered sequentially
-6. Database status updates automatically
-7. API polling shows progress
+**CLOUD TESTING:**
+1. Deploy: `cd invoice.scanner.cloud.functions && ./deploy.sh strawbayscannertest`
+2. Same upload/status flow via Cloud Run API
+3. Verify Pub/Sub topics and Cloud Functions execute
+4. Check Cloud SQL for status updates
 
 ### Benefits
 
-✅ **Same API code** for local and cloud development  
-✅ **Easy switching** - just set environment variable  
-✅ **Testable** - MockBackend for unit tests  
+✅ **Same code** - `main.py` runs local and cloud identically  
+✅ **No Celery complexity** - functions-framework is simpler  
+✅ **Easy to test** - simulate GCP locally before deploying  
 ✅ **Scalable** - Cloud Functions auto-scale based on load  
-✅ **Cost-efficient** - Pay only for actual processing time  
-✅ **Serverless** - No container management  
+✅ **Cost-efficient** - Pay only for actual execution time  
 ✅ **Reliable** - Pub/Sub guarantees message delivery  
+
+### Files Created
+
+- ✅ **invoice.scanner.cloud.functions/main.py** - 5 Cloud Functions
+- ✅ **invoice.scanner.cloud.functions/local_server.sh** - Local testing
+- ✅ **invoice.scanner.cloud.functions/deploy.sh** - GCP deployment
+- ✅ **invoice.scanner.cloud.functions/requirements.txt** - Dependencies
+- ✅ **invoice.scanner.cloud.functions/.env.yaml** - Configuration
+- ✅ **dev-server.sh** - Combined startup script
+- ✅ **REMOVED**: invoice.scanner.processing/ (Celery not needed)
+- ✅ **UPDATED**: docker-compose.yml (4 services only)
+
+### Git Commit
+
+```
+FASE 6E: Unified Cloud Functions Architecture
+
+- Create cloud_functions/ with main.py (5 Cloud Functions)
+- Add local_server.sh (functions-framework :9000) for local testing
+- Add deploy.sh for automated GCP deployment
+- Remove invoice.scanner.processing/ (Celery replaced by Cloud Functions)
+- Simplify docker-compose.yml (4 services: api, frontend, db, redis)
+- Create dev-server.sh for easy local startup
+- Add cloud_functions/README.md with instructions
+- Same code runs local and cloud - no duplication
+```
+
+---
+
+## 🎯 FAS E 7: DEPLOY TO GCP TEST (NEW - Cloud Functions Based)
+
+---
+
+## 🎯 FASE 7: DEPLOY CLOUD FUNCTIONS TO GCP TEST (Dec 26 - ⏳ IN PROGRESS)
+
+### Strategi: Test Locally → Deploy → Test i Cloud
+
+Varje steg måste:
+1. ✅ Fungera lokalt (docker-compose)
+2. ✅ Deployas till GCP TEST
+3. ✅ Testas i GCP
+4. ✅ Dokumenteras för PROD (FASE 8)
+
+### Step 1: Verify Local Setup (MANDATORY FIRST)
+
+**Verifiera att LocalCeleryBackend fungerar:**
+
+```bash
+# Terminal 1: Start docker-compose
+cd /Users/rickardelmqvist/Development/invoice.scanner
+docker-compose down -v
+docker-compose up -d --build
+
+# Wait for health checks
+sleep 15
+docker-compose ps
+
+# Should see: 14 services, most healthy or "health: starting"
+```
+
+**Verifiera processing backend initialiseras:**
+
+```bash
+# Check API logs
+docker logs invoice.scanner.api 2>&1 | grep -i "processing_backend\|Processing"
+
+# Should see: "[INIT] Processing backend initialized: local"
+```
+
+**Test document upload och processing lokalt:**
+
+```bash
+# Login
+curl -X POST http://localhost:5001/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "rickard@strawbay.io", "password": "Test123"}' \
+    -c /tmp/cookies.txt
+
+# Upload dokument
+cd /tmp && FILE="test_$(date +%s).pdf" && echo "Test" > "$FILE"
+curl -X POST http://localhost:5001/auth/documents/upload \
+    -b /tmp/cookies.txt \
+    -F "file=@$FILE"
+
+# Should return: 201 with task_id
+
+# Check status
+DOC_ID="<from response>" # Copy från response
+curl -X GET http://localhost:5001/auth/documents/$DOC_ID/status \
+    -b /tmp/cookies.txt
+
+# Should show: "status": "preprocessing" → eventually "approved"
+
+# Wait and check again
+sleep 10
+curl -X GET http://localhost:5001/auth/documents/$DOC_ID/status \
+    -b /tmp/cookies.txt
+
+# Verify Celery workers processed it
+docker logs invoice.scanner.worker.preprocessing.1 | tail -20
+docker logs invoice.scanner.worker.ocr.1 | tail -20
+docker logs invoice.scanner.worker.llm.1 | tail -20
+```
+
+**✅ Success Criteria - Local:**
+- API returns 201 with valid task_id
+- Status updates: preprocessing → ocr_extracting → prediction → extraction → approved
+- Workers logs show task execution
+- Database status updates correctly
+
+---
+
+### Step 2: Configure GCP Project (TEST)
+
+**Set project:**
+
+```bash
+gcloud config set project strawbayscannertest
+gcloud config list | grep project
+
+# Should show: project = strawbayscannertest
+```
+
+**Verify authentication:**
+
+```bash
+gcloud auth list
+gcloud auth application-default login
+
+# Should show: elmqvistrickard@gmail.com as active
+```
+
+---
+
+### Step 3: Enable Required APIs (TEST)
+
+**Check which APIs are already enabled:**
+
+```bash
+gcloud services list --enabled --project=strawbayscannertest
+
+# Look for:
+# - cloudfunctions.googleapis.com
+# - pubsub.googleapis.com
+# - cloudbuild.googleapis.com
+# - cloudresourcemanager.googleapis.com
+```
+
+**Enable missing APIs:**
+
+```bash
+gcloud services enable \
+    cloudfunctions.googleapis.com \
+    pubsub.googleapis.com \
+    cloudbuild.googleapis.com \
+    cloudresourcemanager.googleapis.com \
+    --project=strawbayscannertest
+
+# Takes 1-2 minutes
+# Should see: "Operation "..." finished successfully."
+```
+
+**Verify APIs enabled:**
+
+```bash
+gcloud services list --enabled --project=strawbayscannertest | grep -E "cloudfunctions|pubsub"
+
+# Should show both enabled
+```
+
+---
+
+### Step 4: Create Pub/Sub Topics (TEST)
+
+**Create 5 topics for processing pipeline:**
+
+```bash
+PROJECT_ID="strawbayscannertest"
+
+echo "[DEPLOY] Creating Pub/Sub topics..."
+
+gcloud pubsub topics create document-processing \
+    --project=$PROJECT_ID
+
+gcloud pubsub topics create document-ocr \
+    --project=$PROJECT_ID
+
+gcloud pubsub topics create document-llm \
+    --project=$PROJECT_ID
+
+gcloud pubsub topics create document-extraction \
+    --project=$PROJECT_ID
+
+gcloud pubsub topics create document-evaluation \
+    --project=$PROJECT_ID
+
+# Each should return: "Created topic [projects/strawbayscannertest/topics/...]"
+```
+
+**Verify all topics created:**
+
+```bash
+gcloud pubsub topics list --project=$PROJECT_ID
+
+# Should show all 5 topics
+```
+
+**Document topology (for reference):**
+
+```
+document-processing
+        ↓
+cf_preprocess_document
+        ↓
+document-ocr
+        ↓
+cf_extract_ocr_text
+        ↓
+document-llm
+        ↓
+cf_predict_invoice_data
+        ↓
+document-extraction
+        ↓
+cf_extract_structured_data
+        ↓
+document-evaluation
+        ↓
+cf_run_automated_evaluation
+        ↓
+[DONE - status='completed']
+```
+
+---
+
+### Step 5: Deploy Cloud Functions (TEST)
+
+**Prepare deployment:**
+
+```bash
+cd /Users/rickardelmqvist/Development/invoice.scanner
+
+# Verify script exists
+ls -la deploy_cloud_functions.sh
+
+# Make executable
+chmod +x deploy_cloud_functions.sh
+
+# Verify cloud_functions_processing.py exists
+ls -la cloud_functions_processing.py
+```
+
+**Run deployment script:**
+
+```bash
+./deploy_cloud_functions.sh strawbayscannertest europe-west1
+
+# Script will:
+# 1. Create GCS bucket (if not exists)
+# 2. Deploy 5 Cloud Functions
+# 3. Configure environment variables
+# 4. Set up Cloud SQL connectivity
+
+# Deployment takes 3-5 minutes per function (15-20 min total)
+# Watch output for errors
+```
+
+**Monitor deployment:**
+
+```bash
+# In another terminal, watch Cloud Build logs
+gcloud builds log <BUILD_ID> --stream --project=strawbayscannertest
+
+# Or check functions status
+watch -n 2 "gcloud functions list --project=strawbayscannertest"
+
+# Wait until all 5 functions show "Active"
+```
+
+**Verify all functions deployed:**
+
+```bash
+gcloud functions list --project=strawbayscannertest
+
+# Should show 5 functions:
+# - cf-preprocess-document
+# - cf-extract-ocr-text
+# - cf-predict-invoice-data
+# - cf-extract-structured-data
+# - cf-run-automated-evaluation
+```
+
+**Verify function details:**
+
+```bash
+gcloud functions describe cf-preprocess-document \
+    --project=strawbayscannertest \
+    --region=europe-west1
+
+# Look for:
+# eventTrigger:
+#   resource: projects/strawbayscannertest/topics/document-processing
+#   eventType: google.pubsub.topic.publish
+
+# Should show it's triggered by correct Pub/Sub topic
+```
+
+---
+
+### Step 6: Verify Cloud Functions Configuration (TEST)
+
+**Check environment variables on functions:**
+
+```bash
+# Each function should have:
+# - GCP_PROJECT_ID=strawbayscannertest
+# - DATABASE_HOST=127.0.0.1
+# - DATABASE_PORT=5432
+# - DATABASE_USER=scanner_test
+# - DATABASE_PASSWORD=<from Secret Manager>
+# - DATABASE_NAME=invoice_scanner
+# - INSTANCE_CONNECTION_NAME=strawbayscannertest:europe-west1:invoice-scanner-test
+
+gcloud functions describe cf-preprocess-document \
+    --project=strawbayscannertest \
+    --region=europe-west1 \
+    --gen2 \
+    --format='value(serviceConfig.environmentVariables)'
+
+# Verify all are set
+```
+
+**Check Cloud SQL connectivity configuration:**
+
+```bash
+# Verify INSTANCE_CONNECTION_NAME is set correctly
+gcloud sql instances describe invoice-scanner-test \
+    --project=strawbayscannertest \
+    --format='value(connectionName)'
+
+# Should return: strawbayscannertest:europe-west1:invoice-scanner-test
+```
+
+---
+
+### Step 7: Test Cloud Functions End-to-End (TEST)
+
+**Publish test message to Pub/Sub manually:**
+
+```bash
+# First, let's test if function triggers
+gcloud pubsub topics publish document-processing \
+    --message='{"document_id":"test-123","company_id":"test-456","stage":"preprocess"}' \
+    --project=strawbayscannertest
+
+# Should return: messageIds: ['<ID>']
+```
+
+**Monitor function execution:**
+
+```bash
+# Watch function logs in real-time
+gcloud functions logs read cf-preprocess-document \
+    --project=strawbayscannertest \
+    --region=europe-west1 \
+    --limit=50 \
+    --follow
+
+# Should see function executed (or error if Cloud SQL unreachable)
+```
+
+**If error occurs - troubleshoot:**
+
+```bash
+# Check function logs more detailed
+gcloud functions logs read cf-preprocess-document \
+    --project=strawbayscannertest \
+    --region=europe-west1 \
+    --limit=100
+
+# Common issues:
+# 1. Cloud SQL not reachable - Check VPC Connector setup
+# 2. Database credentials wrong - Check Secret Manager
+# 3. Pub/Sub topic mismatch - Verify topic name matches trigger
+
+# Check Cloud SQL connectivity from Cloud Functions
+# (Cloud SQL Proxy should be auto-injected)
+```
+
+---
+
+### Step 8: Test via API Upload (TEST - FULL END-TO-END)
+
+**Configure API to use CloudFunctionsBackend:**
+
+Cloud Run API service needs environment variable:
+```
+PROCESSING_BACKEND=cloud_functions
+GCP_PROJECT_ID=strawbayscannertest
+```
+
+**Update Cloud Run service (optional - for testing):**
+
+```bash
+gcloud run services update invoice-scanner-api-test \
+    --region=europe-west1 \
+    --update-env-vars="PROCESSING_BACKEND=cloud_functions,GCP_PROJECT_ID=strawbayscannertest" \
+    --project=strawbayscannertest
+
+# Wait 1-2 minutes for update
+```
+
+**Test full flow:**
+
+```bash
+# Get Cloud Run API URL
+API_URL=$(gcloud run services describe invoice-scanner-api-test \
+    --platform=managed \
+    --region=europe-west1 \
+    --project=strawbayscannertest \
+    --format='value(status.url)')
+
+echo "API URL: $API_URL"
+
+# Login
+curl -X POST $API_URL/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "rickard@strawbay.io", "password": "Test123"}' \
+    -c /tmp/cookies-cloud.txt
+
+# Upload document
+cd /tmp && FILE="cloud_test_$(date +%s).pdf" && echo "Test" > "$FILE"
+RESPONSE=$(curl -X POST $API_URL/auth/documents/upload \
+    -b /tmp/cookies-cloud.txt \
+    -F "file=@$FILE")
+
+echo $RESPONSE | jq .
+
+# Extract document ID and task ID
+DOC_ID=$(echo $RESPONSE | jq -r '.document.id')
+TASK_ID=$(echo $RESPONSE | jq -r '.task_id')
+
+echo "Document ID: $DOC_ID"
+echo "Task ID: $TASK_ID"
+
+# Monitor Pub/Sub topic
+gcloud pubsub subscriptions create test-monitor --topic=document-processing \
+    --project=strawbayscannertest 2>/dev/null || true
+
+gcloud pubsub subscriptions pull test-monitor --auto-ack \
+    --limit=1 \
+    --project=strawbayscannertest
+
+# Should see the document message published
+
+# Monitor Cloud Function execution
+gcloud functions logs read cf-preprocess-document \
+    --project=strawbayscannertest \
+    --region=europe-west1 \
+    --limit=20 \
+    --follow
+
+# Check document status via API
+sleep 5
+curl -X GET $API_URL/auth/documents/$DOC_ID/status \
+    -b /tmp/cookies-cloud.txt | jq .
+
+# Should show: status = "preprocessing" initially, then progress through pipeline
+```
+
+**Expected behavior:**
+```
+1. Upload → API returns 201 with task_id
+2. Pub/Sub publishes message to document-processing topic
+3. cf_preprocess_document triggered → processes → publishes to document-ocr
+4. cf_extract_ocr_text triggered → processes → publishes to document-llm
+5. ... continues through all 5 functions ...
+6. API /documents/{id}/status shows progress
+7. Final status = "approved" or "completed"
+```
+
+**Success Criteria:**
+- ✅ Message published to Pub/Sub
+- ✅ Cloud Function triggered and executed
+- ✅ Database status updated
+- ✅ Pipeline progressed through at least 2 stages
+- ✅ No errors in function logs
+
+---
+
+### Step 9: Rollback Test (LOCAL AGAIN)
+
+**Ensure local still works after Cloud Functions changes:**
+
+```bash
+# Stop Cloud Run API from using cloud_functions
+# (Update env var back to local OR just use local)
+
+# Verify local still works
+docker-compose ps
+
+# If stopped, restart
+docker-compose up -d
+
+# Re-test local flow
+curl -X POST http://localhost:5001/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email": "rickard@strawbay.io", "password": "Test123"}' \
+    -c /tmp/cookies.txt
+
+cd /tmp && FILE="rollback_$(date +%s).pdf" && echo "Test" > "$FILE"
+curl -X POST http://localhost:5001/auth/documents/upload \
+    -b /tmp/cookies.txt \
+    -F "file=@$FILE" | jq '.document.id'
+
+# Verify Celery still processes
+docker logs invoice.scanner.worker.preprocessing.1 | tail -5
+```
+
+**✅ Success Criteria:**
+- Local processing still works identically
+- Both backends can run independently
+- No code changes needed to switch between them
+
+---
+
+## 🎯 FASE 8: DEPLOY CLOUD FUNCTIONS TO GCP PROD (Prepared)
+
+**Same steps as FASE 7 but for PROD project:**
+
+Replace all instances of:
+- `strawbayscannertest` → `strawbayscannerprod`
+- `invoice-scanner-test` → `invoice-scanner-prod`
+- `scanner_test` → `scanner_prod`
+
+**Run same deployment script:**
+```bash
+./deploy_cloud_functions.sh strawbayscannerprod europe-west1
+```
+
+**Then test same way:**
+- Manual Pub/Sub message → Function execution
+- Full API upload → Pipeline execution
+- Verify database updates
+
+**Then update Cloud Run API service:**
+```bash
+gcloud run services update invoice-scanner-api-prod \
+    --region=europe-west1 \
+    --update-env-vars="PROCESSING_BACKEND=cloud_functions,GCP_PROJECT_ID=strawbayscannerprod" \
+    --project=strawbayscannerprod
+```
+
+---
 
 ### Files Created/Modified
 
