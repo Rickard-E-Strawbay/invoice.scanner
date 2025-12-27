@@ -320,32 +320,50 @@ class CloudFunctionsBackend(ProcessingBackend):
             PUBSUB_TOPIC_ID: Pub/Sub topic name (default: 'document-processing')
             GOOGLE_APPLICATION_CREDENTIALS: Path to service account JSON
         """
+        print(f"[CloudFunctionsBackend] Starting initialization...")
+        
         try:
+            print(f"[CloudFunctionsBackend] Attempting to import google-cloud-pubsub...")
             from google.cloud import pubsub_v1
             from google.oauth2 import service_account
-        except ImportError:
-            raise ImportError(
+            print(f"[CloudFunctionsBackend] ✅ google-cloud-pubsub imported successfully")
+        except ImportError as import_error:
+            error_msg = (
                 "google-cloud-pubsub required for Cloud Functions backend. "
-                "Install: pip install google-cloud-pubsub"
+                f"Install: pip install google-cloud-pubsub. Error: {import_error}"
             )
+            print(f"[CloudFunctionsBackend] ❌ {error_msg}")
+            raise ImportError(error_msg)
         
         self.project_id = os.getenv('GCP_PROJECT_ID')
         self.topic_id = os.getenv('PUBSUB_TOPIC_ID', 'document-processing')
         
+        print(f"[CloudFunctionsBackend] Environment: GCP_PROJECT_ID={self.project_id}, PUBSUB_TOPIC_ID={self.topic_id}")
+        
         if not self.project_id:
-            raise ValueError(
+            error_msg = (
                 "GCP_PROJECT_ID environment variable not set. "
                 "Required for Cloud Functions backend."
             )
+            print(f"[CloudFunctionsBackend] ❌ {error_msg}")
+            raise ValueError(error_msg)
         
-        # Initialize Pub/Sub publisher
-        self.publisher = pubsub_v1.PublisherClient()
-        self.topic_path = self.publisher.topic_path(self.project_id, self.topic_id)
+        try:
+            print(f"[CloudFunctionsBackend] Initializing Pub/Sub publisher...")
+            # Initialize Pub/Sub publisher
+            self.publisher = pubsub_v1.PublisherClient()
+            self.topic_path = self.publisher.topic_path(self.project_id, self.topic_id)
+            print(f"[CloudFunctionsBackend] ✅ Pub/Sub publisher initialized, topic_path={self.topic_path}")
+        except Exception as pubsub_error:
+            error_msg = f"Failed to initialize Pub/Sub publisher: {pubsub_error}"
+            print(f"[CloudFunctionsBackend] ❌ {error_msg}")
+            raise
         
         logger.info(
-            f"[CloudFunctionsBackend] Initialized for project={self.project_id}, "
+            f"[CloudFunctionsBackend] ✅ Initialized for project={self.project_id}, "
             f"topic={self.topic_id}"
         )
+        print(f"[CloudFunctionsBackend] ✅ Initialization complete")
     
     def trigger_task(self, document_id: str, company_id: str) -> Dict[str, Any]:
         """

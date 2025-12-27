@@ -2,6 +2,53 @@
 
 ---
 
+## ⚠️ AI-ASSISTENTENS KRITISKA INSTRUKTIONER
+
+### ÖVERSTA PRIORITET - Läs innan du gör något
+1. **LÄSA DENNA FIL** innan någon operation
+2. **FRÅGA innan komplexitet** - inte bara implementera
+3. **RESPEKTERA befintliga decisions** - inte överskriv
+4. **TESTA lokalt innan Cloud** - docker-compose först
+
+### REGLER SOM MÅSTE FÖLJAS
+- ✅ **ALDRIG** skapa docker-compose files utan att fråga
+- ✅ **ALDRIG** ändra .github/workflows/pipeline.yml utan att fråga
+- ✅ **ALDRIG** manuellt deploy till Cloud Run (pipeline gör det)
+- ✅ **ALDRIG** manuellt build till GCP registries (pipeline gör det)
+- ✅ **FRÅGA FÖRST** innan ändringar i GCP Secret Manager
+- ✅ **FRÅGA FÖRST** innan ändringar i Cloud SQL config
+
+### VÅR PROCESS (ej pipeline)
+1. Läs vad som redan finns (`ls`, `grep`, `git log`)
+2. Förstå arkitekturen
+3. Fråga användaren: "Vill du att jag ska [X] eller [Y]?"
+4. Plan + dokumentera
+5. Test lokalt (docker-compose)
+6. Verifiera git diff
+7. Commit med kontext
+
+### BEFINTLIGA DECISIONS - RESPEKTERA
+| Decision | Varför | Ändra INTE |
+|----------|--------|----------|
+| pg8000 driver | Cloud SQL Connector krävs | Inte psycopg2 |
+| DATABASE_* vars | Standardiserad naming | Inte DB_* mix |
+| Single pipeline.yml | Clean + maintainable | Inte 3 files |
+| Cloud SQL Private IP | Säkerhet | Inte public |
+| RealDictCursor wrapper | Backward compatibility | Inte raw pg8000 |
+| docker-compose.yml | Source of truth | Inte .local variant |
+
+### VID PROBLEM
+Ordning: Logs (GitHub Actions) → Logs (Cloud Run) → Logs (Cloud SQL) → FIX KOD → RE-PUSH
+
+### Användarens Preferenser
+- Vill ha ENKLA lösningar först
+- Vill att jag ska FRÅGA innan komplexitet
+- Gillar TYDLIGA instruktioner
+- Vill FÖRSTÅ vad som görs, inte bara att det görs
+- **VIKTIGAST:** Trust the pipeline - det är korrekt konfigurerat
+
+---
+
 ## 📋 QUICK REFERENCE - Läs detta först!
 
 **NUVARANDE ARKITEKTUR (Dec 27, 2025):**
@@ -30,9 +77,10 @@
 |------|--------|---------|--------------|
 | FASE 0-5 | ✅ 100% | Infrastructure, Secrets, Cloud SQL, Cloud Run | Dec 26 |
 | FASE 6 | ✅ 100% | Storage Service (Local + GCS hybrid) | Dec 26 |
-| **FASE 6E** | ✅ 100% | **NEW:** Unified Cloud Functions Architecture | **Dec 27** |
-| **FASE 7** | 🔄 READY | Deploy Cloud Functions to GCP TEST | Ready now |
-| **FASE 8** | 🔄 READY | Deploy Cloud Functions to GCP PROD | Ready now |
+| **FASE 6E** | ✅ 100% | Unified Cloud Functions Architecture | **Dec 27** |
+| **FASE 7** | 🚀 IN PROGRESS | Deploy to GCP TEST - Local → Cloud deploy → Cloud test | **Dec 27** |
+| **FASE 7** | � IN PROGRESS | Deploy Cloud Functions to GCP TEST | **Dec 27 - STARTING NOW** |
+| **FASE 8** | 🔄 READY | Deploy Cloud Functions to GCP PROD | Ready after FASE 7 ✅ |
 
 ---
 
@@ -56,14 +104,14 @@ RESULT: Same code everywhere ✅
 2. ✅ Removed: All Celery references from docker-compose.yml
 3. ✅ Simplified: docker-compose from 14 → 4 services
 4. ✅ Created: cloud_functions/ folder with complete structure
-5. ✅ Created: dev-server.sh (starts docker-compose + functions-framework)
+5. ✅ Created: dev-start.sh (starts docker-compose + Cloud Functions Framework in new Terminal)
 6. ✅ Updated: docker-compose.yml (4 lean services)
 
 ### Folder Structure (NEW)
 ```
 invoice.scanner/
 ├── docker-compose.yml          (4 services: api, frontend, db, redis)
-├── dev-server.sh              (Start docker-compose + Cloud Functions)
+├── dev-start.sh               (Start docker-compose + Cloud Functions Framework)
 ├── invoice.scanner.cloud.functions/
 │   ├── main.py               (5 Cloud Functions)
 │   ├── requirements.txt       (functions-framework + deps)
@@ -94,8 +142,8 @@ cloud_functions (Terminal 2):
 
 ### Start Everything Locally
 ```bash
-# One terminal - starts docker-compose + Cloud Functions together
-./dev-server.sh
+# Starts everything: docker-compose + Cloud Functions Framework in new Terminal
+./dev-start.sh
 
 # Or manually (two terminals):
 
@@ -182,22 +230,26 @@ cd invoice.scanner.cloud.functions
 
 ---
 
-## 🎯 FOKUS JUST NU - December 26, 2025 (17:45)
+## 🎯 FOKUS JUST NU - December 27, 2025 (15:00)
 
-**FASE 6E: Testing Storage Service End-to-End** 🔄
+**FASE 6E: COMPLETE ✅ | FASE 7: STARTED 🚀 Deploy Cloud Functions to GCP TEST** Dec 27
 
-### Strategi: 3-steg approach
-1. ✅ **Local (docker-compose)**: Verifiera upload → docker volume fungerar
-2. 🔄 **Cloud RUN TEST**: Verifiera upload → GCS bucket fungerar
-3. 📋 **Cloud Tasks (FASE 7)**: Processing i Cloud (deferred)
+### Status December 27, 2025 ✅
+1. ✅ Frontend visar `status_name` från databas (inte `status_key`)
+2. ✅ API returnerar `status_name` via LEFT JOIN med `document_status` tabell
+3. ✅ Cloud Functions har `PROCESSING_SLEEP_TIME` miljövariabel (default 1.0s)
+4. ✅ Local Pub/Sub simulator implementerat - end-to-end testning fungerar
+5. ✅ `dev-start.sh` startar Cloud Functions i nytt Terminal-fönster
+6. ✅ Alla 19 möjliga statuser från `document_status`-tabellen displayas
+7. ✅ API timeout ökat till 30 sekunder för pålitlig processering
+8. ✅ `.gitignore` uppdaterad - genererade filer uteslutna från git
 
 ### Vad som är gjort ✅
-- ✅ storage_service.py med LocalStorageService + GCSStorageService
-- ✅ API endpoints updated för storage service (upload_document, get_document_preview)
-- ✅ Docker-compose konfigurerad: STORAGE_TYPE=local
-- ✅ GCS buckets skapade (test-docs, prod-docs)
-- ✅ Pipeline.yml simplified (bara API + Frontend, inget processing deployment)
-- ✅ preprocessing_tasks.py integrated storage service detection
+- ✅ Unified Cloud Functions arkitektur (samma kod lokalt och i GCP)
+- ✅ Local Pub/Sub simulator för end-to-end lokal testning
+- ✅ Frontend visar mänskliga status-namn från databas
+- ✅ Dokumentbearbetning fungerar lokalt komplett (preprocessing → ocr → llm → extraction → evaluation → completed)
+- ✅ Alla statusalternativ implementerade och testade
 - ✅ Frontend fixed (fullscreen violation)
 
 ### Pipeline status
@@ -475,7 +527,7 @@ Files:
 - ✅ **invoice.scanner.cloud.functions/deploy.sh** - GCP deployment
 - ✅ **invoice.scanner.cloud.functions/requirements.txt** - Dependencies
 - ✅ **invoice.scanner.cloud.functions/.env.yaml** - Configuration
-- ✅ **dev-server.sh** - Combined startup script
+- ✅ **dev-start.sh** - Combined startup script (docker-compose + functions-framework in new Terminal)
 - ✅ **REMOVED**: invoice.scanner.processing/ (Celery not needed)
 - ✅ **UPDATED**: docker-compose.yml (4 services only)
 
@@ -500,7 +552,7 @@ FASE 6E: Unified Cloud Functions Architecture
 
 ---
 
-## 🎯 FASE 7: DEPLOY CLOUD FUNCTIONS TO GCP TEST (Dec 26 - ⏳ IN PROGRESS)
+## 🎯 FASE 7: DEPLOY CLOUD FUNCTIONS TO GCP TEST (Dec 27 - 🚀 IN PROGRESS)
 
 ### Strategi: Test Locally → Deploy → Test i Cloud
 
@@ -1042,53 +1094,6 @@ FASE 6E: Processing Backend Abstraction + Cloud Functions
 - Maintain same API code for both local and cloud deployments
 - Add deployment script for Cloud Functions setup
 ```
-
----
-
-## ⚠️ AI-ASSISTENTENS KRITISKA INSTRUKTIONER
-
-### ÖVERSTA PRIORITET - Läs innan du gör något
-1. **LÄSA DENNA FIL** innan någon operation
-2. **FRÅGA innan komplexitet** - inte bara implementera
-3. **RESPEKTERA befintliga decisions** - inte överskriv
-4. **TESTA lokalt innan Cloud** - docker-compose först
-
-### REGLER SOM MÅSTE FÖLJAS
-- ✅ **ALDRIG** skapa docker-compose files utan att fråga
-- ✅ **ALDRIG** ändra .github/workflows/pipeline.yml utan att fråga
-- ✅ **ALDRIG** manuellt deploy till Cloud Run (pipeline gör det)
-- ✅ **ALDRIG** manuellt build till GCP registries (pipeline gör det)
-- ✅ **FRÅGA FÖRST** innan ändringar i GCP Secret Manager
-- ✅ **FRÅGA FÖRST** innan ändringar i Cloud SQL config
-
-### VÅR PROCESS (ej pipeline)
-1. Läs vad som redan finns (`ls`, `grep`, `git log`)
-2. Förstå arkitekturen
-3. Fråga användaren: "Vill du att jag ska [X] eller [Y]?"
-4. Plan + dokumentera
-5. Test lokalt (docker-compose)
-6. Verifiera git diff
-7. Commit med kontext
-
-### BEFINTLIGA DECISIONS - RESPEKTERA
-| Decision | Varför | Ändra INTE |
-|----------|--------|-----------|
-| pg8000 driver | Cloud SQL Connector krävs | Inte psycopg2 |
-| DATABASE_* vars | Standardiserad naming | Inte DB_* mix |
-| Single pipeline.yml | Clean + maintainable | Inte 3 files |
-| Cloud SQL Private IP | Säkerhet | Inte public |
-| RealDictCursor wrapper | Backward compatibility | Inte raw pg8000 |
-| docker-compose.yml | Source of truth | Inte .local variant |
-
-### VID PROBLEM
-Ordning: Logs (GitHub Actions) → Logs (Cloud Run) → Logs (Cloud SQL) → FIX KOD → RE-PUSH
-
-## Användarens Preferenser
-- Vill ha ENKLA lösningar först
-- Vill att jag ska FRÅGA innan komplexitet
-- Gillar TYDLIGA instruktioner
-- Vill FÖRSTÅ vad som görs, inte bara att det görs
-- **VIKTIGAST:** Trust the pipeline - det är korrekt konfigurerat
 
 ---
 
