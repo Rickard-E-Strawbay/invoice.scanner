@@ -141,44 +141,53 @@ DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD', 'password')
 DATABASE_PORT = int(os.getenv('DATABASE_PORT', 5432))
 PROCESSING_SLEEP_TIME = float(os.getenv('PROCESSING_SLEEP_TIME', '1.0'))  # seconds
 
-# Global Cloud SQL Connector (lazy-loaded)
-_connector = None
-
-def get_connector():
-    """Get or create Cloud SQL Connector instance."""
-    global _connector
-    if _connector is None:
-        from cloud_sql_python_connector import Connector
-        _connector = Connector()
-    return _connector
+# Global Cloud SQL Connector instance
+_connector_instance = None
 
 def get_db_connection():
     """
-    Get PostgreSQL connection using Cloud SQL Connector (for GCP).
-    Falls back to direct pg8000 connection for local development.
+    Get PostgreSQL connection using Cloud SQL Connector with pg8000 driver.
+    
+    Cloud SQL Connector handles authentication and secure connection to Cloud SQL.
+    Falls back to direct pg8000 for local development.
     """
+    global _connector_instance
+    
     try:
-        # Try Cloud SQL Connector first (GCP)
+        # Try Cloud SQL Connector first (GCP with Cloud SQL)
         if CLOUD_SQL_CONN and PROJECT_ID:
             try:
-                logger.info(f"[DB] Using Cloud SQL Connector for {CLOUD_SQL_CONN}")
-                connector = get_connector()
-                conn = connector.connect(
-                    CLOUD_SQL_CONN,
-                    "pg8000",
-                    user=DATABASE_USER,
-                    password=DATABASE_PASSWORD,
-                    db=DATABASE_NAME,
-                    timeout=10
+                logger.info(f"[DB] Attempting Cloud SQL Connector for {CLOUD_SQL_CONN}")
+                
+                from cloud_sql_python_connector import Connector
+                
+                # Initialize connector once and reuse (connection pooling)
+                if _connector_instance is None:
+                    logger.info(f"[DB] Initializing Cloud SQL Connector")
+                    _connector_instance = Connector()
+                
+                # Connect using pg8000 driver through Cloud SQL Connector
+                # Cloud SQL Connector handles IAM authentication automatically
+                logger.info(f"[DB] Opening pg8000 connection via Cloud SQL Connector")
+                conn = _connector_instance.connect(
+                    CLOUD_SQL_CONN,           # "project:region:instance"
+                    "pg8000",                  # Driver
+                    user=DATABASE_USER,        # Cloud SQL user
+                    password=DATABASE_PASSWORD, # Cloud SQL password
+                    database=DATABASE_NAME     # Database name
                 )
-                logger.info(f"[DB] ✓ Connected via Cloud SQL Connector")
+                logger.info(f"[DB] ✓ Connected via Cloud SQL Connector + pg8000")
                 return conn
-            except ImportError:
-                logger.warning(f"[DB] cloud-sql-python-connector not available, falling back to direct connection")
+                
+            except ImportError as e:
+                logger.warning(f"[DB] cloud-sql-python-connector not installed: {e}")
+                logger.warning(f"[DB] Install with: pip install cloud-sql-python-connector")
             except Exception as e:
-                logger.warning(f"[DB] Cloud SQL Connector failed ({e}), trying direct connection")
+                logger.error(f"[DB] Cloud SQL Connector failed: {type(e).__name__}: {e}")
+                import traceback
+                logger.error(f"[DB] Traceback:\n{traceback.format_exc()}")
         
-        # Fall back to direct pg8000 connection (local dev)
+        # Fall back to direct pg8000 connection (local development)
         logger.info(f"[DB] Using direct pg8000 connection to {DATABASE_HOST}:{DATABASE_PORT}")
         import pg8000
         
@@ -194,7 +203,9 @@ def get_db_connection():
         return conn
         
     except Exception as e:
-        logger.error(f"[DB] Connection failed: {e}")
+        logger.error(f"[DB] All connection attempts failed: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(f"[DB] Traceback:\n{traceback.format_exc()}")
         return None
 
 
