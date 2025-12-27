@@ -1,22 +1,32 @@
 """
 Database utilities and connection management
+
+Migrated from psycopg2 to pg8000 (Pure Python PostgreSQL driver)
 """
-import psycopg2
-from psycopg2.extras import RealDictCursor
 import os
 from db_config import DB_CONFIG
+from shared.pg8000_wrapper import (
+    get_connection as get_pg8000_connection,
+    PG8000DictCursor
+)
 
 class DatabaseConnection:
-    """Manage PostgreSQL database connections"""
+    """Manage PostgreSQL database connections using pg8000"""
     
     def __init__(self):
         self.connection = None
     
     def connect(self):
-        """Establish database connection"""
+        """Establish database connection (pg8000-based)"""
         try:
-            self.connection = psycopg2.connect(**DB_CONFIG)
-            print(f"Connected to PostgreSQL database: {DB_CONFIG['database']}")
+            self.connection = get_pg8000_connection(
+                host=DB_CONFIG.get('host'),
+                port=DB_CONFIG.get('port', 5432),
+                user=DB_CONFIG.get('user'),
+                password=DB_CONFIG.get('password'),
+                database=DB_CONFIG.get('database')
+            )
+            print(f"Connected to PostgreSQL database: {DB_CONFIG.get('database')}")
             return self.connection
         except Exception as e:
             print(f"Error connecting to database: {e}")
@@ -34,9 +44,11 @@ class DatabaseConnection:
             self.connect()
         
         try:
-            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute(query, params or ())
-                return cursor.fetchall()
+            cursor = self.connection.cursor()
+            cursor.execute(query, params or ())
+            results = cursor.fetchall()
+            cursor.close()
+            return results
         except Exception as e:
             print(f"Error executing query: {e}")
             return None
@@ -47,10 +59,12 @@ class DatabaseConnection:
             self.connect()
         
         try:
-            with self.connection.cursor() as cursor:
-                cursor.execute(query, params or ())
-                self.connection.commit()
-                return cursor.rowcount
+            cursor = self.connection.cursor()
+            cursor.execute(query, params or ())
+            rowcount = cursor.rowcount
+            self.connection.commit()
+            cursor.close()
+            return rowcount
         except Exception as e:
             self.connection.rollback()
             print(f"Error executing update: {e}")

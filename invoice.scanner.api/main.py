@@ -9,12 +9,13 @@ import threading
 import time
 import uuid
 import secrets
-import psycopg2
-from psycopg2.extras import RealDictCursor
+from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from db_config import DB_CONFIG
+from db_config import DB_CONFIG, get_connection, RealDictCursor
 import os
 from dotenv import load_dotenv
+from lib.storage_service import init_storage_service
+from lib.processing_backend import init_processing_backend
 from lib.email_service import (
     send_company_registration_pending_email,
     send_user_registration_pending_email,
@@ -27,13 +28,34 @@ from lib.password_validator import validate_password_strength
 
 load_dotenv()
 
+# Initialize storage service (LOCAL or GCS based on STORAGE_TYPE env var)
+try:
+    storage_service = init_storage_service()
+    print(f"[INIT] Storage service initialized: STORAGE_TYPE={os.environ.get('STORAGE_TYPE', 'local')}")
+except Exception as e:
+    print(f"[INIT] Error initializing storage service: {e}")
+    storage_service = None
+
+# Initialize processing backend (LOCAL Celery or CLOUD Functions based on env)
+try:
+    processing_backend = init_processing_backend()
+    print(f"[INIT] Processing backend initialized: {processing_backend.backend_type}")
+except Exception as e:
+    print(f"[INIT] Error initializing processing backend: {e}")
+    processing_backend = None
+
 # =============
 # Database Helper
 # =============
 def get_db_connection():
-    """Get a database connection."""
+    """Get a database connection.
+    
+    Routes to appropriate connection method:
+    - Cloud Run: Cloud SQL Connector (from get_connection in db_config)
+    - Local: psycopg2 TCP (from get_connection in db_config)
+    """
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
+        conn = get_connection()
         return conn
     except Exception as e:
         print(f"Database connection error: {e}")
@@ -126,11 +148,24 @@ def get_cors_origins():
 # App & Config
 # =============
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', secrets.token_hex(32))
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', os.getenv('SECRET_KEY', secrets.token_hex(32)))
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-# Use Lax for development (same-site redirects), None requires Secure (HTTPS)
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = False
+
+# Session cookie configuration - environment aware
+# Cloud Run uses HTTPS, so we need Secure=True and SameSite=None
+# Local development uses HTTP, so we need Secure=False and SameSite=Lax
+IS_CLOUD_RUN = os.getenv('K_SERVICE') is not None
+if IS_CLOUD_RUN:
+    # Cloud Run: HTTPS environment
+    app.config['SESSION_COOKIE_SECURE'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+    print("[config] Session cookies: SECURE=True, SAMESITE=None (Cloud Run HTTPS)")
+else:
+    # Local development: HTTP environment
+    app.config['SESSION_COOKIE_SECURE'] = False
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    print("[config] Session cookies: SECURE=False, SAMESITE=Lax (Local HTTP)")
+
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 CORS(app, supports_credentials=True, origins=get_cors_origins())
 
@@ -533,7 +568,7 @@ def search_companies():
             )
             companies = cursor.fetchall()
             print(f"[search-companies] Found {len(companies)} companies: {companies}")
-            return jsonify({"companies": companies}), 200
+            return jsonify({"companies": [dict(company) for company in companies]}), 200
     except Exception as e:
         print(f"[search-companies] Error searching companies: {e}")
         return jsonify({"error": "Search failed"}), 500
@@ -609,7 +644,9 @@ def get_all_companies():
             """)
             companies = cursor.fetchall()
             print(f"[get_all_companies] Found {len(companies)} companies")
-            return jsonify({"companies": companies}), 200
+            # Convert PG8000DictRow objects to dictionaries for JSON serialization
+            companies_list = [dict(company) for company in companies]
+            return jsonify({"companies": companies_list}), 200
     except Exception as e:
         print(f"[get_all_companies] Error fetching companies: {e}")
         return jsonify({"error": "Failed to fetch companies"}), 500
@@ -993,6 +1030,12 @@ def create_user():
             new_user = cursor.fetchone()
             conn.commit()
             
+            # Get company_enabled status
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("SELECT company_enabled FROM users_company WHERE id = %s", (company_id,))
+                company = cursor.fetchone()
+                company_enabled = company["company_enabled"] if company else False
+            
             print(f"[create_user] User {email} created by admin {user_id}")
             
             return jsonify({
@@ -1002,6 +1045,7 @@ def create_user():
                     "name": new_user["name"],
                     "role_key": new_user["role_key"],
                     "user_enabled": new_user["user_enabled"],
+                    "company_enabled": company_enabled,
                     "created_at": new_user["created_at"],
                     "updated_at": new_user["updated_at"]
                 }
@@ -1148,6 +1192,12 @@ def update_user(user_id):
             
             print(f"[update_user] User {user_id} updated by admin {admin_id}")
             
+            # Get company_enabled status
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("SELECT company_enabled FROM users_company WHERE id = %s", (updated_user["company_id"],))
+                company = cursor.fetchone()
+                company_enabled = company["company_enabled"] if company else False
+            
             return jsonify({
                 "user": {
                     "id": str(updated_user["id"]),
@@ -1155,6 +1205,7 @@ def update_user(user_id):
                     "name": updated_user["name"],
                     "role_key": updated_user["role_key"],
                     "user_enabled": updated_user["user_enabled"],
+                    "company_enabled": company_enabled,
                     "company_name": company_name,
                     "created_at": updated_user["created_at"],
                     "updated_at": updated_user["updated_at"]
@@ -1929,10 +1980,17 @@ def upload_document():
         # ========== SAVE FILE ==========
         doc_id = str(uuid.uuid4())
         unique_filename = f"{doc_id}.{file_ext}"
-        file_path = DOCUMENTS_RAW_DIR / unique_filename
         
-        file.save(str(file_path))
-        print(f"[upload_document] File saved: {file_path}")
+        # Use storage service (LOCAL or GCS)
+        if not storage_service:
+            return jsonify({"error": "Storage service not initialized"}), 500
+        
+        try:
+            file_path = storage_service.save(f"raw/{unique_filename}", file)
+            print(f"[upload_document] File saved: {file_path}")
+        except Exception as save_error:
+            print(f"[upload_document] Storage error: {save_error}")
+            return jsonify({"error": "Failed to save file"}), 500
         
         # ========== CREATE DATABASE RECORD ==========
         conn = get_db_connection()
@@ -1961,56 +2019,52 @@ def upload_document():
                 print(f"[upload_document] Document record created: {doc_id}")
                 
                 # ========== TRIGGER ASYNC PROCESSING ==========
+                task_id = None
+                processing_error = None
                 try:
-                    import requests
-                    
-                    # Call processing service via HTTP to trigger task
-                    processing_url = os.environ.get('PROCESSING_SERVICE_URL', 'http://localhost:5002')
-                    
-                    task_id = None
-                    try:
-                        response = requests.post(
-                            f'{processing_url}/api/tasks/orchestrate',
-                            json={
-                                'document_id': str(doc_id),
-                                'company_id': str(company_id)
-                            },
-                            timeout=10
-                        )
+                    if processing_backend:
+                        result = processing_backend.trigger_task(str(doc_id), str(company_id))
+                        task_id = result.get('task_id')
+                        backend_status = result.get('status')
                         
-                        if response.status_code == 202:
-                            task_id = response.json().get('task_id', 'processing-queued')
-                            print(f"[upload_document] Processing task queued: {task_id}")
+                        # Check if processing backend returned an error
+                        if backend_status in ['service_unavailable', 'service_error']:
+                            processing_error = result.get('error', 'Unknown error')
+                            print(f"[upload_document] ❌ PROCESSING ERROR: {processing_error}")
+                            
+                            # Update document status to failed_preprocessing
+                            try:
+                                with conn.cursor() as cursor:
+                                    cursor.execute(
+                                        "UPDATE documents SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                                        ('failed_preprocessing', doc_id)
+                                    )
+                                    conn.commit()
+                                    print(f"[upload_document] ✅ Document status updated to failed_preprocessing")
+                            except Exception as update_error:
+                                print(f"[upload_document] Error updating document status: {update_error}")
                         else:
-                            print(f"[upload_document] Processing service returned {response.status_code}")
-                            task_id = None
-                    except requests.exceptions.RequestException as e:
-                        print(f"[upload_document] Could not reach processing service: {str(e)}")
+                            print(f"[upload_document] ✅ Processing task queued via {processing_backend.backend_type}")
+                    else:
+                        print(f"[upload_document] ⚠️  Processing backend not initialized")
                         task_id = None
-                    
-                    return jsonify({
-                        "message": "Document uploaded and queued for processing",
-                        "document": dict(document) if document else {
-                            "id": doc_id,
-                            "raw_filename": filename,
-                            "status": "preprocessing",
-                            "created_at": datetime.utcnow().isoformat()
-                        },
-                        "task_id": task_id
-                    }), 201
-                    
                 except Exception as task_error:
-                    print(f"[upload_document] Warning: Could not trigger processing task: {task_error}")
-                    # Fortfarande returneraSuccess, men processing kanske inte startas
-                    return jsonify({
-                        "message": "Document uploaded (processing may start shortly)",
-                        "document": dict(document) if document else {
-                            "id": doc_id,
-                            "raw_filename": filename,
-                            "status": "preprocessing"
-                        },
-                        "warning": "Processing may be delayed"
-                    }), 201
+                    print(f"[upload_document] ❌ Error triggering processing: {task_error}")
+                    processing_error = str(task_error)
+                    task_id = None
+                
+                return jsonify({
+                    "message": "Document uploaded" + (" and queued for processing" if not processing_error else " but processing unavailable"),
+                    "document": {
+                        "id": str(doc_id),
+                        "raw_filename": filename,
+                        "status": "failed_preprocessing" if processing_error else "preprocessing",
+                        "processing_error": processing_error if processing_error else None,
+                        "created_at": datetime.utcnow().isoformat()
+                    },
+                    "task_id": task_id,
+                    "processing_error": processing_error
+                }), 201 if not processing_error else 202
                 
         except Exception as db_error:
             conn.rollback()
@@ -2273,12 +2327,14 @@ def get_documents():
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute(
                     """
-                    SELECT id, company_id, uploaded_by, raw_format, raw_filename, 
-                           document_name, image_filename, content_type, status, predicted_accuracy, 
-                           is_training, created_at, updated_at
-                    FROM documents
-                    WHERE company_id = %s
-                    ORDER BY created_at DESC
+                    SELECT d.id, d.company_id, d.uploaded_by, d.raw_format, d.raw_filename, 
+                           d.document_name, d.image_filename, d.content_type, d.status, d.predicted_accuracy, 
+                           d.is_training, d.created_at, d.updated_at,
+                           ds.status_name
+                    FROM documents d
+                    LEFT JOIN document_status ds ON d.status = ds.status_key
+                    WHERE d.company_id = %s
+                    ORDER BY d.created_at DESC
                     """,
                     (company_id,)
                 )
@@ -2450,21 +2506,22 @@ def get_document_preview(doc_id):
                         "error": f"Preview not available for status: {doc['status']}"
                     }), 400
                 
-                # Build file path using document ID
-                from defines import DOCUMENTS_RAW_DIR
-                # Files are stored with their UUID as filename + original extension
+                # Get file using storage service
                 _, ext = os.path.splitext(doc["raw_filename"])
-                file_path = os.path.join(DOCUMENTS_RAW_DIR, f"{doc['id']}{ext}")
+                file_storage_path = f"raw/{doc['id']}{ext}"
                 
-                # Check if file exists
-                if not os.path.exists(file_path):
-                    return jsonify({"error": "File not found"}), 404
+                if not storage_service:
+                    return jsonify({"error": "Storage service not initialized"}), 500
+                
+                file_content = storage_service.get(file_storage_path)
+                if file_content is None:
+                    return jsonify({"error": "File not found in storage"}), 404
                 
                 # Read and serve the file
                 from flask import send_file
+                from io import BytesIO
                 
                 # Determine MIME type based on file extension
-                _, ext = os.path.splitext(doc["raw_filename"])
                 mime_type = "application/octet-stream"
                 if ext.lower() in [".pdf"]:
                     mime_type = "application/pdf"
@@ -2476,9 +2533,10 @@ def get_document_preview(doc_id):
                     mime_type = "image/tiff"
                 
                 return send_file(
-                    file_path,
+                    BytesIO(file_content),
                     mimetype=mime_type,
-                    as_attachment=False
+                    as_attachment=False,
+                    download_name=doc["raw_filename"]
                 )
         
         except Exception as e:

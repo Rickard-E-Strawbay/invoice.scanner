@@ -1,6 +1,7 @@
 # ============================================================
 # INVOICE SCANNER - DOCKER COMPOSE CONFIGURATION
-# Separate services: API, Processing Workers, Database, etc
+# Minimal local stack: API, Frontend, Database, Redis
+# Processing: Cloud Functions Framework (external)
 # ============================================================
 
 version: '3.8'
@@ -54,8 +55,8 @@ services:
 
   api:
     build:
-      context: ./invoice.scanner.api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./invoice.scanner.api/Dockerfile
     container_name: invoice.scanner.api
     ports:
       - "5001:5000"
@@ -68,11 +69,15 @@ services:
       - DATABASE_USER=scanner
       - DATABASE_PASSWORD=scanner
       - DATABASE_NAME=invoice_scanner
+      - STORAGE_TYPE=local
       - DOCUMENTS_RAW_DIR=/app/documents/raw
       - DOCUMENTS_PROCESSED_DIR=/app/documents/processed
       - FLASK_ENV=development
       - FRONTEND_URL=http://localhost:8080
-      - PROCESSING_SERVICE_URL=http://processing_http:5002
+      # Processing Backend: Cloud Functions Framework (localhost:9000)
+      # External to docker-compose (starts separately on host machine)
+      - PROCESSING_BACKEND=local
+      - PROCESSING_SERVICE_URL=http://host.docker.internal:9000
       # LLM API Keys (from .env or environment)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
@@ -90,169 +95,20 @@ services:
     restart: unless-stopped
 
   # ============================================================
-  # SERVICE 2: DOCUMENT PROCESSING (invoice.scanner.processing)
-  # Celery workers for async document processing
-  # ============================================================
-
-  # Base processing service (coordinator)
-  processing:
-    build:
-      context: ./invoice.scanner.processing
-      dockerfile: Dockerfile
-    image: invoice.scanner.processing:latest
-    container_name: invoice.scanner.processing
-    environment:
-      - PYTHONUNBUFFERED=1
-      - CELERY_LOG_LEVEL=${CELERY_LOG_LEVEL:-info}
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
-      - DATABASE_URL=postgresql://scanner:scanner@db:5432/invoice_scanner
-      - DATABASE_HOST=db
-      - DATABASE_PORT=5432
-      - DATABASE_USER=scanner
-      - DATABASE_PASSWORD=scanner
-      - DATABASE_NAME=invoice_scanner
-      - DOCUMENTS_RAW_DIR=/app/documents/raw
-      - DOCUMENTS_PROCESSED_DIR=/app/documents/processed
-      # LLM Configuration
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_MODEL=gpt-4o
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
-      - GEMINI_MODEL=gemini-2.0-flash
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./invoice.scanner.processing:/app
-      - ./documents:/app/documents
-    networks:
-      - invoice.scanner
-    restart: unless-stopped
-    command: celery -A tasks.celery_app worker -l ${CELERY_LOG_LEVEL:-info} --hostname=main@%h
-
-  # Processing HTTP Service - Provides REST API for triggering tasks
-  processing_http:
-    extends:
-      service: processing
-    container_name: invoice.scanner.processing_http
-    ports:
-      - "5002:5002"
-    command: python http_service.py
-    environment:
-      PYTHONUNBUFFERED: 1
-
-  # ===== PREPROCESSING WORKERS =====
-  # Lightweight image processing workers (multiple can run in parallel)
-
-  worker_preprocessing_1:
-    extends:
-      service: processing
-    container_name: invoice.scanner.worker.preprocessing.1
-    ports: []
-    command: celery -A tasks.celery_app worker -Q preprocessing -l ${CELERY_LOG_LEVEL:-info} -c 4 --hostname=preprocessing-1@%h
-    environment:
-      WORKER_TYPE: preprocessing
-
-  worker_preprocessing_2:
-    extends:
-      service: processing
-    container_name: invoice.scanner.worker.preprocessing.2
-    ports: []
-    command: celery -A tasks.celery_app worker -Q preprocessing -l ${CELERY_LOG_LEVEL:-info} -c 4 --hostname=preprocessing-2@%h
-    environment:
-      WORKER_TYPE: preprocessing
-
-  # ===== OCR WORKERS =====
-  # Heavy compute OCR workers (CPU based)
-  # For GPU acceleration, build with: docker-compose build --build-arg BASE_IMAGE=nvidia/cuda:12.1.1-devel-ubuntu22.04
-
-  worker_ocr_1:
-    extends:
-      service: processing
-    container_name: invoice.scanner.worker.ocr.1
-    ports: []
-    command: celery -A tasks.celery_app worker -Q ocr -l ${CELERY_LOG_LEVEL:-info} -c 2 --hostname=ocr-1@%h
-    environment:
-      WORKER_TYPE: ocr
-    # Uncomment för GPU support:
-    # runtime: nvidia
-    # environment:
-    #   NVIDIA_VISIBLE_DEVICES: 0
-    #   PADDLE_DEVICE: gpu
-
-  # ===== LLM WORKERS =====
-  # API call workers (OpenAI/Gemini/Anthropic)
-
-  worker_llm_1:
-    extends:
-      service: processing
-    container_name: invoice.scanner.worker.llm.1
-    ports: []
-    command: celery -A tasks.celery_app worker -Q llm -l ${CELERY_LOG_LEVEL:-info} -c 1 --hostname=llm-1@%h
-    environment:
-      WORKER_TYPE: llm
-
-  # ===== EXTRACTION WORKERS =====
-  # Data structuring and validation
-
-  worker_extraction_1:
-    extends:
-      service: processing
-    container_name: invoice.scanner.worker.extraction.1
-    ports: []
-    command: celery -A tasks.celery_app worker -Q extraction -l ${CELERY_LOG_LEVEL:-info} -c 3 --hostname=extraction-1@%h
-    environment:
-      WORKER_TYPE: extraction
-
-  # ===== EVALUATION WORKERS =====
-  # Quality assessment and final validation
-
-  worker_evaluation_1:
-    extends:
-      service: processing
-    container_name: invoice.scanner.worker.evaluation.1
-    ports: []
-    command: celery -A tasks.celery_app worker -Q evaluation -l ${CELERY_LOG_LEVEL:-info} -c 2 --hostname=evaluation-1@%h
-    environment:
-      WORKER_TYPE: evaluation
-
-  # ===== MONITORING DASHBOARD =====
-  # Flower - Real-time Celery monitoring
-
-  flower:
-    image: mher/flower
-    container_name: invoice.scanner.flower
-    ports:
-      - "5555:5555"
-    environment:
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - invoice.scanner
-    restart: unless-stopped
-
-  # ============================================================
-  # SERVICE 3: FRONTEND (invoice.scanner.frontend.react)
+  # SERVICE 2: FRONTEND (invoice.scanner.frontend.react)
   # React web application
   # ============================================================
 
   frontend:
     build:
       context: ./invoice.scanner.frontend.react
+      dockerfile: Dockerfile.dev
     container_name: invoice.scanner.frontend
     ports:
       - "8080:8080"
-      - "5173:5173"
     environment:
       - VITE_API_URL=http://localhost:5001
+      - VITE_DEV_SERVER_HOST=0.0.0.0
     volumes:
       - ./invoice.scanner.frontend.react:/app
       - /app/node_modules
@@ -277,20 +133,20 @@ volumes:
 # Start all services:
 #   docker-compose up -d
 #
+# Start Cloud Functions Framework (separate terminal):
+#   cd invoice.scanner.cloud.functions && ./local_server.sh
+#
 # Services and URLs:
-#   API:                http://localhost:5000
-#   Frontend:           http://localhost:3000
-#   Flower (Monitor):   http://localhost:5555
+#   API:                http://localhost:5001
+#   Frontend (Vite):    http://localhost:8080  (hot-reload enabled)
 #   PostgreSQL:         localhost:5432
 #   Redis:              localhost:6379
+#   Cloud Functions:    http://localhost:9000 (external, from host.docker.internal)
 #
 # View logs:
 #   docker-compose logs -f                    # All services
 #   docker-compose logs -f api                # API only
-#   docker-compose logs -f worker_ocr_1       # Specific worker
-#
-# Scale workers:
-#   docker-compose up -d --scale worker_preprocessing_1=4  # Add more workers
+#   docker-compose logs -f db                 # Database
 #
 # Stop services:
 #   docker-compose down                       # Stop all
@@ -301,8 +157,8 @@ volumes:
 #   GOOGLE_API_KEY=AIza...
 #   ANTHROPIC_API_KEY=sk-ant-...
 #
-# GPU Support:
-#   1. Uncomment "runtime: nvidia" in worker_ocr_1
-#   2. Install nvidia-docker: https://github.com/NVIDIA/nvidia-docker
-#   3. Rebuild: docker-compose build worker_ocr_1
-#   4. Check: docker-compose exec worker_ocr_1 nvidia-smi
+# Processing Backend:
+#   Local Cloud Functions Framework runs OUTSIDE docker-compose
+#   API connects via host.docker.internal:9000
+#   This simulates cloud deployment exactly
+#

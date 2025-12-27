@@ -96,40 +96,53 @@ while viewing the "Scanned Invoices" tab.
 
 === STATUS PIPELINE ===
 
-The full status progression is:
-1. uploaded         - Initial state after file upload
-2. preprocessing    - Image preprocessing (animated spinner)
-3. preprocessed     - Preprocessing complete
-4. ocr              - OCR extraction in progress (animated spinner)
-5. llm_extraction   - LLM processing in progress (animated spinner)
-6. extraction       - Data extraction in progress (animated spinner)
-7. evaluation       - Quality evaluation in progress (animated spinner)
-8. completed        - All processing done (green checkmark)
-9. approved         - Final approved state (green checkmark)
+Dokumentet går genom dessa statuser:
+1. uploaded           - Initialtillstånd efter filuppladdning
+2. preprocessing     - Bildförbehandling pågår (animated spinner)
+3. preprocessed      - Förbehandling klar
+4. ocr_extracting    - OCR-extrahering pågår (animated spinner)
+5. ocr_complete      - OCR-extrahering klar  
+6. llm_predicting    - LLM-förutsägelse pågår (animated spinner)
+7. llm_complete      - LLM-förutsägelse klar
+8. extraction        - Dataextrahering pågår (animated spinner)
+9. extraction_complete - Dataextrahering klar
+10. evaluation        - Automatisk bedömning pågår (animated spinner)
+11. completed        - Alla steg klara (grön bockmark)
+12. approved         - Godkänd för export (grön bockmark)
+13. exporting        - Exportering pågår (animated spinner)
+14. exported         - Exporterad (grön bockmark)
+15. manual_review    - Kräver manuell granskning (varningsikon)
 
-Error states at any stage:
-- preprocess_error   - Failed during preprocessing
-- ocr_error         - Failed during OCR
-- llm_error         - Failed during LLM processing
-- extraction_error  - Failed during extraction
-- evaluation_error  - Failed during evaluation
-
-Manual review state:
-- manual_review     - Requires human review (warning icon)
+Felstatus på valfritt steg:
+- preprocess_error - Fel under förbehandling
+- ocr_error - Fel under OCR
+- predict_error - Fel under LLM-förutsägelse
+- extraction_error - Fel under dataextrahering
+- automated_evaluation_error - Fel under automatisk bedömning
+- manual_review_error - Fel under manuell granskning
+- export_error - Fel under export
+- failed_preprocessing - Förbehandlingen misslyckades (visar röd X)
 
 === PERFORMANCE CONSIDERATIONS ===
 
-Polling Strategy:
-- 2-second interval: Good balance between responsiveness and server load
+Polling Strategy (updated December 27, 2025):
+- 4-second interval: Good balance between responsiveness and server load
 - Only active when user is viewing the tab
 - Reuses existing fetchDocuments() function
-- No unnecessary re-renders (setState only if data changed)
+- Smart diffing: Only re-renders if data actually changed
 
-Future Optimizations:
-- Could implement WebSocket for true real-time updates
-- Could add more intelligent polling (longer intervals if no processing happening)
-- Could batch multiple status updates
-- Could cache and diff to prevent unnecessary re-renders
+Optimizations completed:
+- Frontend displays status_name from database instead of hardcoded status_key
+- API endpoint updated to return status_name via LEFT JOIN with document_status
+- PROCESSING_SLEEP_TIME parameter in Cloud Functions for quick local testing
+- API timeout increased to 30 seconds for reliable processing
+- Local Pub/Sub simulator enables complete end-to-end local testing
+- status_name fetched dynamically from document_status table (19 possible statuses)
+
+Possible future improvements:
+- WebSocket for true real-time instead of polling
+- Server-sent events (SSE) for more efficient streaming
+- Longer polling intervals when no processing is active
 
 === USER EXPERIENCE ===
 

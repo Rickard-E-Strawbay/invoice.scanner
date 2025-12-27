@@ -1,3 +1,0 @@
-"""
-Monitoring package initialization
-"""
