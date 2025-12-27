@@ -92,13 +92,13 @@ jobs:
           echo "🏷️  SHA: ${{ github.sha }}"
 
   # =====================
-  # DEPLOY CLOUD FUNCTIONS TO TEST
+  # DEPLOY CLOUD FUNCTIONS TO TEST (OPTIONAL - Manual trigger only)
   # =====================
   deploy-cloud-functions-test:
     needs: build
     if: |
       github.ref == 'refs/heads/re_deploy_start' && 
-      (github.event_name == 'push' || github.event.inputs.deploy_cloud_functions == 'true')
+      github.event.inputs.deploy_cloud_functions == 'true'
     runs-on: ubuntu-latest
     environment: test
     
@@ -131,10 +131,10 @@ jobs:
           gcloud functions list --gen2 --project=strawbayscannertest --format='table(name,status)'
 
   # =====================
-  # DEPLOY TO TEST
+  # DEPLOY TO TEST (API + Frontend)
   # =====================
   deploy-test:
-    needs: [build, deploy-cloud-functions-test]
+    needs: build
     if: github.ref == 'refs/heads/re_deploy_start'
     runs-on: ubuntu-latest
     environment: test
@@ -261,13 +261,13 @@ jobs:
           echo "🌍 Region:      europe-west1"
 
   # =====================
-  # DEPLOY CLOUD FUNCTIONS TO PROD
+  # DEPLOY CLOUD FUNCTIONS TO PROD (OPTIONAL - Manual trigger only)
   # =====================
   deploy-cloud-functions-prod:
     needs: build
     if: |
       github.ref == 'refs/heads/main' && 
-      (github.event_name == 'push' || github.event.inputs.deploy_cloud_functions == 'true')
+      github.event.inputs.deploy_cloud_functions == 'true'
     runs-on: ubuntu-latest
     environment: production
     
@@ -297,13 +297,13 @@ jobs:
           echo "🌍 Region:  europe-west1"
           echo ""
           echo "Deployed functions:"
-          gcloud functions list --gen2 --project=strawbayscannerprod --format='table(name,status)'
+          gcloud functions list --v2 --project=strawbayscannerprod --format='table(name,status)'
 
   # =====================
-  # DEPLOY TO PROD
+  # DEPLOY TO PROD (API + Frontend)
   # =====================
   deploy-prod:
-    needs: [build, deploy-cloud-functions-prod]
+    needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
