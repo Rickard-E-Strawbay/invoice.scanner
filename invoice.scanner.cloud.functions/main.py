@@ -50,8 +50,10 @@ import logging
 import os
 import atexit
 from google.cloud import pubsub_v1
+from google.cloud import secretmanager
 from datetime import datetime
 from typing import Dict, Any
+from functools import lru_cache
 
 # Optional imports for Cloud SQL
 try:
@@ -142,10 +144,33 @@ PROJECT_ID = os.getenv('GCP_PROJECT_ID')
 CLOUD_SQL_CONN = os.getenv('CLOUD_SQL_CONN')  # Format: project:region:instance
 DATABASE_HOST = os.getenv('DATABASE_HOST', 'localhost')
 DATABASE_NAME = os.getenv('DATABASE_NAME', 'invoice_scanner')
-DATABASE_USER = os.getenv('DATABASE_USER', 'scanner')
-DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD', 'password')
 DATABASE_PORT = int(os.getenv('DATABASE_PORT', 5432))
 PROCESSING_SLEEP_TIME = float(os.getenv('PROCESSING_SLEEP_TIME', '1.0'))  # seconds
+
+@lru_cache(maxsize=1)
+def get_secret(secret_name: str) -> str:
+    """
+    Fetch secret from Google Cloud Secret Manager.
+    Cached to avoid repeated API calls.
+    """
+    if not PROJECT_ID:
+        logger.warning(f"[SECRET] No PROJECT_ID set, returning empty string for {secret_name}")
+        return ""
+    
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        name = f"projects/{PROJECT_ID}/secrets/{secret_name}/versions/latest"
+        response = client.access_secret_version(request={"name": name})
+        secret_value = response.payload.data.decode("UTF-8")
+        logger.info(f"[SECRET] ✓ Retrieved {secret_name} from Secret Manager")
+        return secret_value
+    except Exception as e:
+        logger.warning(f"[SECRET] Could not fetch {secret_name}: {e}")
+        return ""
+
+# Get database credentials from Secret Manager or environment fallback
+DATABASE_USER = get_secret('db_user_test') or os.getenv('DATABASE_USER', 'scanner')
+DATABASE_PASSWORD = get_secret('db_password_test') or os.getenv('DATABASE_PASSWORD', 'password')
 
 # Global Cloud SQL Connector instance (connection pooling)
 _connector = None

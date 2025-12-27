@@ -36,7 +36,22 @@ CLOUD_SQL_CONN=$(gcloud sql instances describe "$CLOUD_SQL_INSTANCE" --project="
 echo "[DEPLOY] Cloud SQL connection: $CLOUD_SQL_CONN"
 echo ""
 
-# Environment variables for all functions
+# Get the default service account for Cloud Functions
+SERVICE_ACCOUNT=$(gcloud iam service-accounts list --project="$PROJECT_ID" --format='value(email)' --filter='displayName:"Cloud Functions Service Account"' | head -1)
+if [ -z "$SERVICE_ACCOUNT" ]; then
+    SERVICE_ACCOUNT="${PROJECT_ID}@appspot.gserviceaccount.com"
+fi
+echo "[DEPLOY] Service Account: $SERVICE_ACCOUNT"
+echo ""
+
+# Grant Secret Manager access to service account
+echo "[DEPLOY] Granting Secret Manager access to service account..."
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$SERVICE_ACCOUNT" \
+    --role="roles/secretmanager.secretAccessor" \
+    --quiet 2>/dev/null || echo "  ✓ Secret Manager access already granted"
+echo ""
+# Note: DATABASE_USER and DATABASE_PASSWORD are fetched from Secret Manager, not passed as env vars
 # Note: DATABASE_HOST and DATABASE_PORT removed - Cloud SQL Connector uses CLOUD_SQL_CONN only
 ENV_VARS="GCP_PROJECT_ID=$PROJECT_ID,CLOUD_SQL_CONN=$CLOUD_SQL_CONN,DATABASE_NAME=invoice_scanner,STORAGE_TYPE=gcs,GCS_BUCKET_NAME=invoice-scanner-test-docs,PUBSUB_TOPIC_PREFIX=document-,OPENAI_MODEL=gpt-4o,GOOGLE_MODEL=gemini-2.0-flash,ANTHROPIC_MODEL=claude-3-5-sonnet-20241022,FUNCTION_LOG_LEVEL=INFO,PYTHONUNBUFFERED=1"
 
