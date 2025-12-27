@@ -55,10 +55,11 @@ from typing import Dict, Any
 
 # Optional imports for Cloud SQL
 try:
-    from google.cloud.sql.connector import Connector
+    from google.cloud.sql.connector import Connector, IPTypes
     HAS_CLOUD_SQL_CONNECTOR = True
 except ImportError:
     HAS_CLOUD_SQL_CONNECTOR = False
+    IPTypes = None
 
 logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv('FUNCTION_LOG_LEVEL', 'DEBUG'))
@@ -155,7 +156,7 @@ def get_connector():
         raise ImportError("google.cloud.sql.connector not installed")
     global _connector
     if _connector is None:
-        _connector = Connector()
+        _connector = Connector(ip_type=IPTypes.PRIVATE)
     return _connector
 
 def get_db_connection():
@@ -182,9 +183,11 @@ def get_db_connection():
         except Exception as e:
             logger.exception("[DB] Cloud SQL connection failed")
     
-    # Fallback: Direct pg8000 (local development)
+    # Fallback: Direct pg8000 (local development only)
+    # Note: This won't work in Cloud Functions (no public IP or proxy)
+    # In GCP, always use Cloud SQL Connector above
     try:
-        logger.info(f"[DB] Using direct pg8000: {DATABASE_HOST}:{DATABASE_PORT}")
+        logger.info(f"[DB] Fallback: Using direct pg8000 to {DATABASE_HOST}:{DATABASE_PORT}")
         import pg8000
         conn = pg8000.connect(
             host=DATABASE_HOST,
