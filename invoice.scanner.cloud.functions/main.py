@@ -147,12 +147,18 @@ DATABASE_NAME = os.getenv('DATABASE_NAME', 'invoice_scanner')
 DATABASE_PORT = int(os.getenv('DATABASE_PORT', 5432))
 PROCESSING_SLEEP_TIME = float(os.getenv('PROCESSING_SLEEP_TIME', '1.0'))  # seconds
 
+# Cached secret values (lazy loading)
+_SECRET_CACHE = {}
+
 @lru_cache(maxsize=1)
 def get_secret(secret_name: str) -> str:
     """
     Fetch secret from Google Cloud Secret Manager.
     Cached to avoid repeated API calls.
     """
+    if secret_name in _SECRET_CACHE:
+        return _SECRET_CACHE[secret_name]
+    
     if not PROJECT_ID:
         logger.warning(f"[SECRET] No PROJECT_ID set, returning empty string for {secret_name}")
         return ""
@@ -162,15 +168,22 @@ def get_secret(secret_name: str) -> str:
         name = f"projects/{PROJECT_ID}/secrets/{secret_name}/versions/latest"
         response = client.access_secret_version(request={"name": name})
         secret_value = response.payload.data.decode("UTF-8")
+        _SECRET_CACHE[secret_name] = secret_value
         logger.info(f"[SECRET] ✓ Retrieved {secret_name} from Secret Manager")
         return secret_value
     except Exception as e:
         logger.warning(f"[SECRET] Could not fetch {secret_name}: {e}")
         return ""
 
-# Get database credentials from Secret Manager or environment fallback
-DATABASE_USER = get_secret('db_user_test') or os.getenv('DATABASE_USER', 'scanner')
-DATABASE_PASSWORD = get_secret('db_password_test') or os.getenv('DATABASE_PASSWORD', 'password')
+def get_database_user() -> str:
+    """Get database user from Secret Manager or environment fallback."""
+    secret_value = get_secret('db_user_test')
+    return secret_value or os.getenv('DATABASE_USER', 'scanner')
+
+def get_database_password() -> str:
+    """Get database password from Secret Manager or environment fallback."""
+    secret_value = get_secret('db_password_test')
+    return secret_value or os.getenv('DATABASE_PASSWORD', 'password')
 
 # Global Cloud SQL Connector instance (connection pooling)
 _connector = None
@@ -191,6 +204,10 @@ def get_db_connection():
     GCP: Uses Cloud SQL Connector (Private IP safe)
     Local: Falls back to direct pg8000
     """
+    # Get credentials lazily
+    db_user = get_database_user()
+    db_password = get_database_password()
+    
     # Try Cloud SQL Connector for GCP
     if CLOUD_SQL_CONN and PROJECT_ID and HAS_CLOUD_SQL_CONNECTOR:
         try:
@@ -199,8 +216,8 @@ def get_db_connection():
             conn = connector.connect(
                 CLOUD_SQL_CONN,
                 driver="pg8000",
-                user=DATABASE_USER,
-                password=DATABASE_PASSWORD,
+                user=db_user,
+                password=db_password,
                 db=DATABASE_NAME,
             )
             logger.info("[DB] ✓ Connected via Cloud SQL Connector")
@@ -218,8 +235,8 @@ def get_db_connection():
             host=DATABASE_HOST,
             port=DATABASE_PORT,
             database=DATABASE_NAME,
-            user=DATABASE_USER,
-            password=DATABASE_PASSWORD,
+            user=db_user,
+            password=db_password,
             timeout=10
         )
         logger.info("[DB] ✓ Connected via pg8000")
