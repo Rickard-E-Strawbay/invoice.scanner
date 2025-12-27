@@ -133,6 +133,7 @@ def simulate_pubsub_message(topic_name: str, message_data: Dict[str, Any]) -> No
 
 # Get configuration from environment
 PROJECT_ID = os.getenv('GCP_PROJECT_ID')
+CLOUD_SQL_CONN = os.getenv('CLOUD_SQL_CONN')  # Format: project:region:instance
 DATABASE_HOST = os.getenv('DATABASE_HOST', 'localhost')
 DATABASE_NAME = os.getenv('DATABASE_NAME', 'invoice_scanner')
 DATABASE_USER = os.getenv('DATABASE_USER', 'scanner')
@@ -140,10 +141,45 @@ DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD', 'password')
 DATABASE_PORT = int(os.getenv('DATABASE_PORT', 5432))
 PROCESSING_SLEEP_TIME = float(os.getenv('PROCESSING_SLEEP_TIME', '1.0'))  # seconds
 
+# Global Cloud SQL Connector (lazy-loaded)
+_connector = None
+
+def get_connector():
+    """Get or create Cloud SQL Connector instance."""
+    global _connector
+    if _connector is None:
+        from cloud_sql_python_connector import Connector
+        _connector = Connector()
+    return _connector
 
 def get_db_connection():
-    """Get PostgreSQL connection using Cloud SQL Proxy (Cloud Run)."""
+    """
+    Get PostgreSQL connection using Cloud SQL Connector (for GCP).
+    Falls back to direct pg8000 connection for local development.
+    """
     try:
+        # Try Cloud SQL Connector first (GCP)
+        if CLOUD_SQL_CONN and PROJECT_ID:
+            try:
+                logger.info(f"[DB] Using Cloud SQL Connector for {CLOUD_SQL_CONN}")
+                connector = get_connector()
+                conn = connector.connect(
+                    CLOUD_SQL_CONN,
+                    "pg8000",
+                    user=DATABASE_USER,
+                    password=DATABASE_PASSWORD,
+                    db=DATABASE_NAME,
+                    timeout=10
+                )
+                logger.info(f"[DB] ✓ Connected via Cloud SQL Connector")
+                return conn
+            except ImportError:
+                logger.warning(f"[DB] cloud-sql-python-connector not available, falling back to direct connection")
+            except Exception as e:
+                logger.warning(f"[DB] Cloud SQL Connector failed ({e}), trying direct connection")
+        
+        # Fall back to direct pg8000 connection (local dev)
+        logger.info(f"[DB] Using direct pg8000 connection to {DATABASE_HOST}:{DATABASE_PORT}")
         import pg8000
         
         conn = pg8000.connect(
@@ -154,18 +190,27 @@ def get_db_connection():
             password=DATABASE_PASSWORD,
             timeout=10
         )
+        logger.info(f"[DB] ✓ Connected via direct pg8000")
         return conn
+        
     except Exception as e:
         logger.error(f"[DB] Connection failed: {e}")
         return None
 
 
 def update_document_status(document_id: str, status: str, error: str = None) -> bool:
-    """Update document status in database."""
+    """
+    Update document status in database.
+    
+    NOTE: This is a best-effort operation. If Cloud SQL connection fails,
+    we log the error but continue processing. The API layer handles
+    initial status updates (e.g., 'preprocessing' when document uploaded).
+    This Cloud Function status update is for visibility only.
+    """
     logger.info(f"[DB] 🔗 Connecting to database...")
     conn = get_db_connection()
     if not conn:
-        logger.error(f"[DB] ❌ Connection failed!")
+        logger.warning(f"[DB] ⚠️  Could not connect to database for status update (non-critical, continuing)")
         return False
     
     logger.info(f"[DB] ✓ Connected. Updating document {document_id} to status '{status}'")
