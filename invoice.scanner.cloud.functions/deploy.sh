@@ -54,7 +54,6 @@ gcloud functions deploy cf-preprocess-document \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
-    --add-cloudsql-instances="$CLOUD_SQL_CONN" \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -70,7 +69,6 @@ gcloud functions deploy cf-extract-ocr-text \
     --region "$REGION" \
     --memory 1024MB \
     --timeout 300 \
-    --add-cloudsql-instances="$CLOUD_SQL_CONN" \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -86,7 +84,6 @@ gcloud functions deploy cf-predict-invoice-data \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
-    --add-cloudsql-instances="$CLOUD_SQL_CONN" \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -102,7 +99,6 @@ gcloud functions deploy cf-extract-structured-data \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
-    --add-cloudsql-instances="$CLOUD_SQL_CONN" \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -118,7 +114,6 @@ gcloud functions deploy cf-run-automated-evaluation \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
-    --add-cloudsql-instances="$CLOUD_SQL_CONN" \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
