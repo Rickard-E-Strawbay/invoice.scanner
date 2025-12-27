@@ -37,11 +37,16 @@ except Exception as e:
     storage_service = None
 
 # Initialize processing backend (LOCAL Celery or CLOUD Functions based on env)
+print(f"[INIT] Attempting to initialize processing backend...")
+print(f"[INIT] PROCESSING_BACKEND env: {os.getenv('PROCESSING_BACKEND', 'not set')}")
+print(f"[INIT] GCP_PROJECT_ID env: {os.getenv('GCP_PROJECT_ID', 'not set')}")
 try:
     processing_backend = init_processing_backend()
-    print(f"[INIT] Processing backend initialized: {processing_backend.backend_type}")
+    print(f"[INIT] ✅ Processing backend initialized: {processing_backend.backend_type}")
 except Exception as e:
-    print(f"[INIT] Error initializing processing backend: {e}")
+    import traceback
+    print(f"[INIT] ❌ Error initializing processing backend: {e}")
+    print(f"[INIT] Traceback: {traceback.format_exc()}")
     processing_backend = None
 
 # =============
