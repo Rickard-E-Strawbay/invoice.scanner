@@ -27,10 +27,23 @@ jobs:
       registry: ${{ steps.set-vars.outputs.registry }}
       gcp_project: ${{ steps.set-vars.outputs.gcp_project }}
       environment: ${{ steps.set-vars.outputs.environment }}
+      deploy_cloud_functions: ${{ steps.check-cf-flag.outputs.deploy_cf }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Check for [deploy-cf] flag in commit message
+        id: check-cf-flag
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if [[ "$COMMIT_MSG" == *"[deploy-cf]"* ]]; then
+            echo "deploy_cf=true" >> $GITHUB_OUTPUT
+            echo "✅ Found [deploy-cf] flag - Cloud Functions will be deployed"
+          else
+            echo "deploy_cf=false" >> $GITHUB_OUTPUT
+            echo "⏭️  No [deploy-cf] flag - skipping Cloud Functions deployment"
+          fi
 
       - name: Set environment variables based on branch
         id: set-vars
@@ -92,13 +105,13 @@ jobs:
           echo "🏷️  SHA: ${{ github.sha }}"
 
   # =====================
-  # DEPLOY CLOUD FUNCTIONS TO TEST (OPTIONAL - Manual trigger only)
+  # DEPLOY CLOUD FUNCTIONS TO TEST (Triggered by [deploy-cf] in commit message)
   # =====================
   deploy-cloud-functions-test:
     needs: build
     if: |
       github.ref == 'refs/heads/re_deploy_start' && 
-      github.event.inputs.deploy_cloud_functions == 'true'
+      needs.build.outputs.deploy_cloud_functions == 'true'
     runs-on: ubuntu-latest
     environment: test
     
@@ -128,7 +141,7 @@ jobs:
           echo "🌍 Region:  europe-west1"
           echo ""
           echo "Deployed functions:"
-          gcloud functions list --gen2 --project=strawbayscannertest --format='table(name,status)'
+          gcloud functions list --v2 --project=strawbayscannertest --format='table(name,status)'
 
   # =====================
   # DEPLOY TO TEST (API + Frontend)
@@ -261,13 +274,13 @@ jobs:
           echo "🌍 Region:      europe-west1"
 
   # =====================
-  # DEPLOY CLOUD FUNCTIONS TO PROD (OPTIONAL - Manual trigger only)
+  # DEPLOY CLOUD FUNCTIONS TO PROD (Triggered by [deploy-cf] in commit message)
   # =====================
   deploy-cloud-functions-prod:
     needs: build
     if: |
       github.ref == 'refs/heads/main' && 
-      github.event.inputs.deploy_cloud_functions == 'true'
+      needs.build.outputs.deploy_cloud_functions == 'true'
     runs-on: ubuntu-latest
     environment: production
     
