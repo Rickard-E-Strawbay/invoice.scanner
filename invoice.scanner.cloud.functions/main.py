@@ -264,7 +264,8 @@ def update_document_status(document_id: str, status: str) -> bool:
     logger.info(f"[DB] ✓ Connected. Updating document {document_id} to status '{status}'")
     
     try:
-        with conn.cursor() as cursor:
+        cursor = conn.cursor()
+        try:
             cursor.execute(
                 """
                 UPDATE documents
@@ -276,6 +277,8 @@ def update_document_status(document_id: str, status: str) -> bool:
             conn.commit()
             logger.info(f"[DB] ✓ Document {document_id} status updated -> {status}")
             return True
+        finally:
+            cursor.close()
     except Exception as e:
         logger.error(f"[DB] ❌ Error updating status: {type(e).__name__}: {e}")
         import traceback
