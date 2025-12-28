@@ -11,7 +11,6 @@
 #     * Changes reflect immediately without rebuild
 #   - API: Flask on http://localhost:5001
 #   - Database: PostgreSQL on localhost:5432
-#   - Redis: Cache on localhost:6379
 #   - Cloud Functions Framework: Processing backend on localhost:9000
 #
 # For GCP Deployment:
@@ -27,7 +26,7 @@ echo "🚀 Invoice Scanner - Local Development Server"
 echo "============================================="
 echo ""
 echo "This script will start:"
-echo "  1. Docker Compose (API, Frontend, Database, Redis)"
+echo "  1. Docker Compose (API, Frontend, Database)"
 echo "     • Frontend: Vite dev-server with hot-reload"
 echo "  2. Cloud Functions Framework (processing backend)"
 echo ""
@@ -89,7 +88,6 @@ echo "✅ Docker services started:"
 echo "   API:                http://localhost:5001"
 echo "   Frontend (Vite):    http://localhost:8080  (hot-reload enabled)"
 echo "   Database:           localhost:5432"
-echo "   Redis:              localhost:6379"
 echo ""
 echo "Frontend Development:"
 echo "  • Changes to JSX/CSS files reflect instantly"
@@ -124,7 +122,6 @@ echo "📍 Services are running:"
 echo "   API:                http://localhost:5001"
 echo "   Frontend (Vite):    http://localhost:8080  (hot-reload enabled)"
 echo "   Database:           localhost:5432"
-echo "   Redis:              localhost:6379"
 echo "   Cloud Functions:    http://localhost:9000  (new Terminal window)"
 echo ""
 echo "Frontend Development:"

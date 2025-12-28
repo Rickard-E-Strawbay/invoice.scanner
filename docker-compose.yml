@@ -17,8 +17,8 @@ services:
     image: postgres:16-alpine
     container_name: invoice.scanner.db
     environment:
-      POSTGRES_USER: scanner
-      POSTGRES_PASSWORD: scanner
+      POSTGRES_USER: scanner_local
+      POSTGRES_PASSWORD: scanner_local
       POSTGRES_DB: invoice_scanner
     ports:
       - "5432:5432"
@@ -28,7 +28,7 @@ services:
     networks:
       - invoice.scanner
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U scanner -d invoice_scanner"]
+      test: ["CMD-SHELL", "pg_isready -U scanner_local -d invoice_scanner"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,18 +40,18 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: ./invoice.scanner.api/Dockerfile
+      context: ./invoice.scanner.api
+      dockerfile: Dockerfile
     container_name: invoice.scanner.api
     ports:
       - "5001:5000"
     environment:
       - PYTHONUNBUFFERED=1
-      - DATABASE_URL=postgresql://scanner:scanner@db:5432/invoice_scanner
+      - DATABASE_URL=postgresql://scanner_local:scanner_local@db:5432/invoice_scanner
       - DATABASE_HOST=db
       - DATABASE_PORT=5432
-      - DATABASE_USER=scanner
-      - DATABASE_PASSWORD=scanner
+      - DATABASE_USER=scanner_local
+      - DATABASE_PASSWORD=scanner_local
       - DATABASE_NAME=invoice_scanner
       - STORAGE_TYPE=local
       - DOCUMENTS_RAW_DIR=/app/documents/raw
@@ -86,8 +86,10 @@ services:
       context: ./invoice.scanner.frontend.react
       dockerfile: Dockerfile.dev
     container_name: invoice.scanner.frontend
+    command: npm run dev -- --host 0.0.0.0 --port 8080
     ports:
       - "8080:8080"
+      - "5173:5173"
     environment:
       - VITE_API_URL=http://localhost:5001
       - VITE_DEV_SERVER_HOST=0.0.0.0

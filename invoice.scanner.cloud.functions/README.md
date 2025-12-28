@@ -21,7 +21,7 @@ invoice.scanner.cloud.functions/
 ```
 
 Detta startar automatiskt:
-- Docker-tjänster (API, Frontend, Database, Redis)
+- Docker-tjänster (API, Frontend, Database)
 - Cloud Functions Framework på port 9000 (i nytt Terminal-fönster)
 
 **Alternativ:** Starta manuellt:
