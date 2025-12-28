@@ -4,7 +4,7 @@ import "./Settings.css";
 import { API_BASE_URL } from "../utils/api";
 
 function Settings() {
-  const { user, isAdmin } = useContext(AuthContext);
+  const { user, isAdmin, checkAuth } = useContext(AuthContext);
   const [activeTab, setActiveTab] = React.useState("profile");
 
   // Check for stored tab preference (from PlansAndBilling navigation)
@@ -16,11 +16,28 @@ function Settings() {
     }
   }, []);
 
+  // Update form data when user context changes
+  React.useEffect(() => {
+    if (user) {
+      setFormData((prev) => ({
+        ...prev,
+        name: user.name || "",
+        email: user.email || "",
+        receive_notifications: user.receive_notifications !== undefined ? user.receive_notifications : true,
+        weekly_summary: user.weekly_summary !== undefined ? user.weekly_summary : true,
+        marketing_opt_in: user.marketing_opt_in !== undefined ? user.marketing_opt_in : true,
+      }));
+    }
+  }, [user]);
+
   const [formData, setFormData] = React.useState({
     name: user?.name || "",
     email: user?.email || "",
     company_name: user?.company_name || "",
     organization_id: user?.organization_id || "",
+    receive_notifications: user?.receive_notifications ?? true,
+    weekly_summary: user?.weekly_summary ?? true,
+    marketing_opt_in: user?.marketing_opt_in ?? true,
   });
 
   const [billingData, setBillingData] = React.useState({
@@ -136,10 +153,10 @@ function Settings() {
   }, []);
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: type === "checkbox" ? checked : value,
     }));
   };
 
@@ -209,9 +226,45 @@ function Settings() {
   };
 
   const handleSaveProfile = async () => {
-    // TODO: Implement API call to save profile
-    console.log("Saving profile:", formData);
-    alert("Profil uppdaterad!");
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ 
+          name: formData.name,
+          receive_notifications: formData.receive_notifications,
+          weekly_summary: formData.weekly_summary,
+          marketing_opt_in: formData.marketing_opt_in
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Update local form data and AuthContext
+        setFormData((prev) => ({
+          ...prev,
+          name: data.user.name,
+          receive_notifications: data.user.receive_notifications,
+          weekly_summary: data.user.weekly_summary,
+          marketing_opt_in: data.user.marketing_opt_in
+        }));
+        // Refresh user data in AuthContext
+        await checkAuth();
+        alert("Profil uppdaterad!");
+      } else {
+        const error = await response.json();
+        setError(error.error || "Failed to update profile");
+      }
+    } catch (err) {
+      console.error("Error updating profile:", err);
+      setError("Error updating profile");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleChangePassword = async () => {
@@ -282,17 +335,35 @@ function Settings() {
                 </div>
 
                 <div className="form-group checkbox">
-                  <input type="checkbox" id="notifications" defaultChecked />
+                  <input 
+                    type="checkbox" 
+                    id="notifications" 
+                    name="receive_notifications"
+                    checked={formData.receive_notifications}
+                    onChange={handleInputChange}
+                  />
                   <label htmlFor="notifications">Notifications</label>
                 </div>
 
                 <div className="form-group checkbox">
-                  <input type="checkbox" id="weekly" defaultChecked />
+                  <input 
+                    type="checkbox" 
+                    id="weekly" 
+                    name="weekly_summary"
+                    checked={formData.weekly_summary}
+                    onChange={handleInputChange}
+                  />
                   <label htmlFor="weekly">Weekly Report</label>
                 </div>
 
                 <div className="form-group checkbox">
-                  <input type="checkbox" id="productInfo" defaultChecked />
+                  <input 
+                    type="checkbox" 
+                    id="productInfo" 
+                    name="marketing_opt_in"
+                    checked={formData.marketing_opt_in}
+                    onChange={handleInputChange}
+                  />
                   <label htmlFor="productInfo">Product Information</label>
                 </div>
 

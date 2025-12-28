@@ -80,6 +80,7 @@ def refresh_user_session(user_id):
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             cursor.execute("""
                 SELECT u.id, u.email, u.name, u.role_key, u.company_id,
+                       u.receive_notifications, u.weekly_summary, u.marketing_opt_in,
                        ur.role_name,
                        uc.company_name, uc.organization_id, uc.price_plan_key
                 FROM users u
@@ -103,6 +104,9 @@ def refresh_user_session(user_id):
             session["price_plan_key"] = user["price_plan_key"] or 10
             session["role_key"] = user["role_key"] or 10
             session["role_name"] = user["role_name"] or "User"
+            session["receive_notifications"] = user["receive_notifications"] if user["receive_notifications"] is not None else True
+            session["weekly_summary"] = user["weekly_summary"] if user["weekly_summary"] is not None else True
+            session["marketing_opt_in"] = user["marketing_opt_in"] if user["marketing_opt_in"] is not None else True
             
             print(f"[refresh_user_session] Session refreshed with data: email={user['email']}, company={user['company_name']}, role={user['role_name']}, price_plan_key={user['price_plan_key']}")
             
@@ -115,7 +119,10 @@ def refresh_user_session(user_id):
                 "organization_id": user["organization_id"] or "",
                 "price_plan_key": user["price_plan_key"] or 10,
                 "role_key": user["role_key"] or 10,
-                "role_name": user["role_name"] or "User"
+                "role_name": user["role_name"] or "User",
+                "receive_notifications": user["receive_notifications"] if user["receive_notifications"] is not None else True,
+                "weekly_summary": user["weekly_summary"] if user["weekly_summary"] is not None else True,
+                "marketing_opt_in": user["marketing_opt_in"] if user["marketing_opt_in"] is not None else True
             }
     except Exception as e:
         print(f"[refresh_user_session] Error: {e}")
@@ -542,6 +549,94 @@ def get_current_user():
     print(f"[get_current_user] ✅ Returning user data: {user_data}")
     print(f"[get_current_user] ========== END REQUEST ==========")
     return jsonify(user_data), 200
+
+
+@blp_auth.route("/profile", methods=["PUT"])
+def update_profile():
+    """Update current user's profile (name and notification preferences)."""
+    if "user_id" not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    user_id = session.get("user_id")
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    
+    # Extract fields
+    name = data.get("name")
+    receive_notifications = data.get("receive_notifications")
+    weekly_summary = data.get("weekly_summary")
+    marketing_opt_in = data.get("marketing_opt_in")
+    
+    # At least name is required
+    if not name or not name.strip():
+        return jsonify({"error": "Name is required"}), 400
+    
+    try:
+        conn = get_db_connection()
+        
+        # Build update query dynamically
+        update_fields = ["name = %s"]
+        update_values = [name.strip()]
+        
+        if receive_notifications is not None:
+            update_fields.append("receive_notifications = %s")
+            update_values.append(receive_notifications)
+        
+        if weekly_summary is not None:
+            update_fields.append("weekly_summary = %s")
+            update_values.append(weekly_summary)
+        
+        if marketing_opt_in is not None:
+            update_fields.append("marketing_opt_in = %s")
+            update_values.append(marketing_opt_in)
+        
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        update_values.append(user_id)
+        
+        query = f"""
+            UPDATE users
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+            RETURNING id, email, name, role_key, company_id, receive_notifications, weekly_summary, marketing_opt_in
+        """
+        
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(query, tuple(update_values))
+            
+            updated_user = cursor.fetchone()
+            conn.commit()
+            
+            if not updated_user:
+                conn.close()
+                return jsonify({"error": "User not found"}), 404
+            
+            # Update session with new name
+            session["name"] = updated_user["name"]
+            
+            print(f"[update_profile] User {user_id} updated profile: name={updated_user['name']}")
+            
+            return jsonify({
+                "message": "Profile updated successfully",
+                "user": {
+                    "id": str(updated_user["id"]),
+                    "email": updated_user["email"],
+                    "name": updated_user["name"],
+                    "role_key": updated_user["role_key"],
+                    "receive_notifications": updated_user["receive_notifications"],
+                    "weekly_summary": updated_user["weekly_summary"],
+                    "marketing_opt_in": updated_user["marketing_opt_in"]
+                }
+            }), 200
+    
+    except Exception as e:
+        conn.rollback()
+        print(f"[update_profile] Error updating profile: {e}")
+        return jsonify({"error": "Failed to update profile"}), 500
+    finally:
+        conn.close()
+
 
 
 @blp_auth.route("/search-companies", methods=["GET"])
