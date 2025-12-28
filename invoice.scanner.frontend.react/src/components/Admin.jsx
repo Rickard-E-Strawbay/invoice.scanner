@@ -44,6 +44,7 @@ function Admin() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState(null);
   const [companyToDelete, setCompanyToDelete] = useState(null);
+  const [allPlans, setAllPlans] = useState([]);
   const [passwordResetDialog, setPasswordResetDialog] = useState({
     open: false,
     message: "",
@@ -57,8 +58,9 @@ function Admin() {
   const canAccessUserAdmin = isAdmin();
 
   useEffect(() => {
-    // Fetch roles on component mount
+    // Fetch roles and plans on component mount
     fetchRoles();
+    fetchAllPlans();
     // Fetch data based on active tab
     if (activeTab === "user-admin" && (canAccessUserAdmin || canAccessCompanyAdmin)) {
       setUsers([]);
@@ -138,6 +140,35 @@ function Admin() {
       console.error("Error fetching roles:", err);
     } finally {
       setRolesLoading(false);
+    }
+  };
+
+  const fetchAllPlans = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/plans`, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch plans");
+      }
+
+      const data = await response.json();
+      const plans = data.plans || [];
+      setAllPlans(plans);
+      
+      // Also update plan name cache
+      const cache = {};
+      plans.forEach(plan => {
+        cache[plan.price_plan_key] = plan.plan_name;
+      });
+      setPlanNameCache(cache);
+    } catch (err) {
+      console.error("Error fetching plans:", err);
     }
   };
 
@@ -1291,10 +1322,12 @@ function Admin() {
                         cursor: "pointer",
                       }}
                     >
-                      <option value="10">Starter</option>
-                      <option value="30">Medium</option>
-                      <option value="40">Enterprise</option>
-                      <option value="1000">Admin</option>
+                      <option value="">-- Select Plan --</option>
+                      {allPlans.map((plan) => (
+                        <option key={plan.price_plan_key} value={plan.price_plan_key}>
+                          {plan.plan_name}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
