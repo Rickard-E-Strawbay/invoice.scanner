@@ -62,6 +62,10 @@ services:
       # External to docker-compose (starts separately on host machine)
       - PROCESSING_BACKEND=local
       - PROCESSING_SERVICE_URL=http://host.docker.internal:9000
+      # Email Configuration (LOCAL: Gmail SMTP)
+      - ENVIRONMENT=local
+      - GMAIL_SENDER=${GMAIL_SENDER:-}
+      - GMAIL_PASSWORD=${GMAIL_PASSWORD:-}
       # LLM API Keys (from .env or environment)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}

@@ -806,7 +806,53 @@ gcloud functions logs read cf_preprocess_document \
 
 ---
 
+## ⚠️ TODO - Email Configuration (Pending)
+
+**Status:** Email system implemented but secrets not yet created
+
+**Required Setup:**
+
+1. Create SendGrid account:
+   ```
+   Visit: https://sendgrid.com
+   Sign up → Get API key
+   ```
+
+2. Create GCP Secret Manager secrets:
+   ```bash
+   # TEST - Create SendGrid API key secret
+   echo "SG.xxxxx..." | gcloud secrets create sendgrid_api_key_test \
+     --project=strawbayscannertest \
+     --replication-policy="automatic" \
+     --data-file=-
+
+   # PROD - Create SendGrid API key secret  
+   echo "SG.xxxxx..." | gcloud secrets create sendgrid_api_key_prod \
+     --project=strawbayscannerprod \
+     --replication-policy="automatic" \
+     --data-file=-
+   ```
+
+3. Add Gmail credentials to LOCAL .env file:
+   ```
+   GMAIL_SENDER=your-email@gmail.com
+   GMAIL_PASSWORD=your-app-specific-password
+   ```
+
+**Email Flow:**
+- LOCAL (docker-compose): Gmail SMTP ✅ Configured
+- TEST (Cloud Run): SendGrid API ⏳ Awaiting secret creation
+- PROD (Cloud Run): SendGrid API ⏳ Awaiting secret creation
+
+---
+
 ## 📝 Changelog
+
+**December 28, 2025 - EMAIL SYSTEM IMPLEMENTED**
+- ✅ email_service.py: Smart environment-based routing
+- ✅ docker-compose.yml: ENVIRONMENT variable added
+- ✅ pipeline.yml: TEST and PROD deployments updated
+- ⏳ TODO: Create SendGrid API key secrets in GCP
 
 **December 28, 2025 - PROD DEPLOYMENT COMPLETE**
 - ✅ Production environment fully operational

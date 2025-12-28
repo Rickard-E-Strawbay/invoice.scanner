@@ -3,40 +3,63 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 from dotenv import load_dotenv
+import requests
 
 # Load environment variables immediately when module is imported
 load_dotenv()
 
 from .email_templates_loader import render_email_template
 
+# Detect environment
+ENVIRONMENT = os.getenv("ENVIRONMENT", "local").lower()  # local, test, or prod
 
-def send_email(to_email, subject, html_body, text_body=None):
+
+def _get_sendgrid_api_key():
     """
-    Send email via Gmail SMTP.
-    
-    Args:
-        to_email (str): Recipient email address
-        subject (str): Email subject
-        html_body (str): Email body in HTML format
-        text_body (str, optional): Plain text fallback. Defaults to None.
+    Fetch SendGrid API key from environment variable or GCP Secret Manager.
     
     Returns:
-        bool: True if email sent successfully, False otherwise
-        
-    Environment variables required:
-        - GMAIL_SENDER: Gmail address to send from
-        - GMAIL_PASSWORD: Gmail app-specific password
-        - TEST_EMAIL (optional): If set, all emails are sent to this address instead
-    
-    TODO: Replace Gmail SMTP with SendGrid API or similar cloud-native email service.
-    Cloud Run cannot reach external SMTP servers due to network restrictions.
+        str: API key if found, None otherwise
     """
-    # TODO: TEMP FIX - Return success without sending to avoid blocking requests
-    print(f"[email_service] ⏸️  EMAIL DISABLED IN TEST - Would send to: {to_email}")
-    print(f"[email_service] Subject: {subject}")
-    return True
+    # First try direct environment variable (for local development or manual override)
+    api_key = os.getenv("SENDGRID_API_KEY")
+    if api_key:
+        return api_key
     
-    # Original code below - to be replaced with SendGrid/Mailgun API
+    # If in GCP environment and no env var, try to fetch from Secret Manager
+    if ENVIRONMENT in ["test", "prod"]:
+        try:
+            from google.cloud import secretmanager
+            
+            project_id = os.getenv("GCP_PROJECT")
+            secret_name = f"sendgrid_api_key_{ENVIRONMENT}"  # sendgrid_api_key_test or sendgrid_api_key_prod
+            
+            if not project_id:
+                print(f"[email_service] ⚠️  WARNING: GCP_PROJECT not set, cannot fetch SendGrid API key from Secret Manager")
+                return None
+            
+            client = secretmanager.SecretManagerServiceClient()
+            secret_path = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+            
+            try:
+                response = client.access_secret_version(request={"name": secret_path})
+                api_key = response.payload.data.decode('UTF-8').strip()
+                return api_key
+            except Exception as e:
+                print(f"[email_service] ⚠️  WARNING: Failed to fetch {secret_name} from GCP Secret Manager")
+                print(f"[email_service] ⚠️  Error: {str(e)}")
+                print(f"[email_service] ⚠️  Please create the secret with:")
+                print(f"[email_service] ⚠️    gcloud secrets create {secret_name} --project={project_id} --data-file=-")
+                return None
+        except ImportError:
+            print(f"[email_service] ⚠️  WARNING: google-cloud-secretmanager not available")
+            return None
+    
+    return None
+
+
+def _send_via_gmail_smtp(to_email, subject, html_body, text_body):
+    """Send email via Gmail SMTP (for local development)"""
     try:
         sender_email = os.getenv("GMAIL_SENDER")
         sender_password = os.getenv("GMAIL_PASSWORD")
@@ -45,26 +68,14 @@ def send_email(to_email, subject, html_body, text_body=None):
             print("[email_service] ❌ Missing Gmail credentials (GMAIL_SENDER or GMAIL_PASSWORD)")
             return False
         
-        # Check for test email override
-        test_email = os.getenv("TEST_EMAIL")
-        actual_to_email = test_email if test_email else to_email
-        
-        # Debug: Always log what's happening
-        print(f"[email_service] DEBUG: TEST_EMAIL env var = {test_email}")
-        print(f"[email_service] DEBUG: Original to_email = {to_email}")
-        print(f"[email_service] DEBUG: Actual to_email = {actual_to_email}")
-        
-        if test_email:
-            print(f"[email_service] ℹ️  TEST MODE: Sending to {test_email} instead of {to_email}")
-        
-        # Clean password - remove non-ASCII characters and extra spaces
+        # Clean password
         sender_password = sender_password.encode('ascii', 'ignore').decode('ascii').strip()
         
         # Create message
         message = MIMEMultipart("alternative")
         message["Subject"] = subject
         message["From"] = sender_email
-        message["To"] = actual_to_email
+        message["To"] = to_email
         
         # Attach text version if provided (fallback)
         if text_body:
@@ -74,12 +85,12 @@ def send_email(to_email, subject, html_body, text_body=None):
         message.attach(MIMEText(html_body, "html", _charset="utf-8"))
         
         # Send via Gmail SMTP
-        print(f"[email_service] Connecting to Gmail SMTP...")
+        print(f"[email_service] 📧 [LOCAL] Sending via Gmail SMTP to {to_email}")
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(sender_email, sender_password)
-            server.sendmail(sender_email, actual_to_email, message.as_string())
+            server.sendmail(sender_email, to_email, message.as_string())
         
-        print(f"[email_service] ✅ Email sent successfully to {actual_to_email}")
+        print(f"[email_service] ✅ Email sent successfully to {to_email}")
         return True
         
     except smtplib.SMTPAuthenticationError:
@@ -90,6 +101,97 @@ def send_email(to_email, subject, html_body, text_body=None):
         return False
     except Exception as e:
         print(f"[email_service] ❌ Error sending email: {e}")
+        return False
+
+
+def _send_via_sendgrid(to_email, subject, html_body, text_body):
+    """Send email via SendGrid API (for GCP test/prod)"""
+    try:
+        # Get API key from environment or Secret Manager
+        api_key = _get_sendgrid_api_key()
+        
+        if not api_key:
+            print(f"[email_service] ❌ [{ENVIRONMENT.upper()}] Cannot send email - SendGrid API key not configured")
+            print(f"[email_service] ❌ Email to {to_email} was NOT sent")
+            return False
+        
+        url = "https://api.sendgrid.com/v3/mail/send"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        # Get sender email
+        sender_email = os.getenv("SENDGRID_FROM_EMAIL", "noreply@strawbay.io")
+        
+        payload = {
+            "personalizations": [{"to": [{"email": to_email}]}],
+            "from": {"email": sender_email},
+            "subject": subject,
+            "content": [
+                {"type": "text/plain", "value": text_body or ""},
+                {"type": "text/html", "value": html_body}
+            ]
+        }
+        
+        print(f"[email_service] 📧 [{ENVIRONMENT.upper()}] Sending via SendGrid to {to_email}")
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        
+        if response.status_code == 202:
+            print(f"[email_service] ✅ Email sent successfully to {to_email}")
+            return True
+        else:
+            print(f"[email_service] ❌ SendGrid error ({response.status_code}): {response.text}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        print(f"[email_service] ❌ Request error: {e}")
+        return False
+    except Exception as e:
+        print(f"[email_service] ❌ Error sending email: {e}")
+        return False
+
+
+def send_email(to_email, subject, html_body, text_body=None):
+    """
+    Send email via environment-appropriate method.
+    
+    - **local**: Gmail SMTP
+    - **test**: SendGrid API (with graceful fallback if key not configured)
+    - **prod**: SendGrid API (with graceful fallback if key not configured)
+    
+    Args:
+        to_email (str): Recipient email address
+        subject (str): Email subject
+        html_body (str): Email body in HTML format
+        text_body (str, optional): Plain text fallback. Defaults to None.
+    
+    Returns:
+        bool: True if email sent successfully, False otherwise
+        
+    Environment variables:
+        - ENVIRONMENT: "local", "test", or "prod" (default: "local")
+        
+        For LOCAL (Gmail SMTP):
+        - GMAIL_SENDER: Gmail address (e.g., your-email@gmail.com)
+        - GMAIL_PASSWORD: Gmail app-specific password
+        
+        For TEST/PROD (SendGrid):
+        - SENDGRID_API_KEY: SendGrid API key (env var or GCP Secret Manager)
+        - SENDGRID_FROM_EMAIL: Sender email (default: noreply@strawbay.io)
+        - GCP_PROJECT: Project ID for Secret Manager lookup
+    """
+    
+    if ENVIRONMENT == "local":
+        # Local development: Use Gmail SMTP
+        return _send_via_gmail_smtp(to_email, subject, html_body, text_body)
+    
+    elif ENVIRONMENT in ["test", "prod"]:
+        # GCP environments: Use SendGrid API
+        return _send_via_sendgrid(to_email, subject, html_body, text_body)
+    
+    else:
+        print(f"[email_service] ❌ Unknown environment: {ENVIRONMENT}")
         return False
 
 
