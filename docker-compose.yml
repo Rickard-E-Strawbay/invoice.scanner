@@ -1,32 +1,17 @@
 # ============================================================
 # INVOICE SCANNER - DOCKER COMPOSE CONFIGURATION
-# Minimal local stack: API, Frontend, Database, Redis
+# Minimal local stack: API, Frontend, Database
 # Processing: Cloud Functions Framework (external)
 # ============================================================
+# NOTE: Celery and Redis removed - using Cloud Functions instead
 
 version: '3.8'
 
 services:
 
   # ============================================================
-  # INFRASTRUCTURE - Redis, PostgreSQL (Shared)
+  # INFRASTRUCTURE - PostgreSQL
   # ============================================================
-
-  redis:
-    image: redis:7-alpine
-    container_name: invoice.scanner.redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    networks:
-      - invoice.scanner
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
 
   db:
     image: postgres:16-alpine
@@ -62,7 +47,6 @@ services:
       - "5001:5000"
     environment:
       - PYTHONUNBUFFERED=1
-      - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://scanner:scanner@db:5432/invoice_scanner
       - DATABASE_HOST=db
       - DATABASE_PORT=5432
@@ -84,8 +68,6 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     depends_on:
       db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     volumes:
       - ./invoice.scanner.api:/app
@@ -124,7 +106,6 @@ networks:
 
 volumes:
   invoice_scanner_data:
-  redis_data:
 
 # ============================================================
 # USAGE
@@ -140,7 +121,6 @@ volumes:
 #   API:                http://localhost:5001
 #   Frontend (Vite):    http://localhost:8080  (hot-reload enabled)
 #   PostgreSQL:         localhost:5432
-#   Redis:              localhost:6379
 #   Cloud Functions:    http://localhost:9000 (external, from host.docker.internal)
 #
 # View logs:
