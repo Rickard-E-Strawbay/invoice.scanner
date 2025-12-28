@@ -477,7 +477,7 @@ def login():
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             # Get user and check if company is enabled
             cursor.execute("""
-                SELECT u.id, u.email, u.password_hash, u.company_id,
+                SELECT u.id, u.email, u.password_hash, u.company_id, u.user_enabled,
                        uc.company_enabled, uc.company_name
                 FROM users u
                 LEFT JOIN users_company uc ON u.company_id = uc.id
@@ -488,6 +488,14 @@ def login():
             if not user or not check_password_hash(user["password_hash"], password):
                 print(f"[login] Invalid credentials for email: {email}")
                 return jsonify({"error": "Invalid credentials"}), 401
+            
+            # Check if user is enabled
+            if not user["user_enabled"]:
+                print(f"[login] User account not enabled for user: {email}")
+                return jsonify({
+                    "error": "Account not enabled",
+                    "message": "Ditt konto är inte aktiverat. Kontakta administratör för att få tillgång."
+                }), 403
             
             # Check if company is enabled
             if user["company_id"] and not user["company_enabled"]:

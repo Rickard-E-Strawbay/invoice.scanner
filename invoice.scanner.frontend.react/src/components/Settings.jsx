@@ -1,5 +1,6 @@
 import React, { useContext, useEffect } from "react";
 import { AuthContext } from "../contexts/AuthContext";
+import MessageModal from "./MessageModal";
 import "./Settings.css";
 import { API_BASE_URL } from "../utils/api";
 
@@ -62,6 +63,12 @@ function Settings() {
   const [error, setError] = React.useState(null);
   const [billingError, setBillingError] = React.useState(null);
   const [billingSuccess, setBillingSuccess] = React.useState(null);
+  const [messageModal, setMessageModal] = React.useState({
+    show: false,
+    type: "success",
+    title: "",
+    message: ""
+  });
 
   // Fetch company information from backend
   React.useEffect(() => {
@@ -178,7 +185,7 @@ function Settings() {
 
   const validateBillingForm = () => {
     const errors = {};
-    const requiredFields = ["billing_contact_name", "billing_contact_email", "country", "city", "postal_code", "street_address"];
+    const requiredFields = ["billing_contact_name", "billing_contact_email", "country", "city", "postal_code", "street_address", "vat_number"];
     
     requiredFields.forEach(field => {
       if (!billingData[field] || !billingData[field].trim()) {
@@ -255,14 +262,29 @@ function Settings() {
         }));
         // Refresh user data in AuthContext
         await checkAuth();
-        alert("Profil uppdaterad!");
+        setMessageModal({
+          show: true,
+          type: "success",
+          title: "Profile Updated",
+          message: "Your profile has been updated successfully."
+        });
       } else {
         const error = await response.json();
-        setError(error.error || "Failed to update profile");
+        setMessageModal({
+          show: true,
+          type: "error",
+          title: "Update Failed",
+          message: error.error || "Failed to update profile"
+        });
       }
     } catch (err) {
       console.error("Error updating profile:", err);
-      setError("Error updating profile");
+      setMessageModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: "An error occurred while updating your profile"
+      });
     } finally {
       setLoading(false);
     }
@@ -270,15 +292,30 @@ function Settings() {
 
   const handleChangePassword = async () => {
     if (!currentPassword) {
-      alert("Nuvarande lösenord krävs!");
+      setMessageModal({
+        show: true,
+        type: "error",
+        title: "Validation Error",
+        message: "Nuvarande lösenord krävs!"
+      });
       return;
     }
     if (newPassword !== confirmPassword) {
-      alert("Lösenorden matchar inte!");
+      setMessageModal({
+        show: true,
+        type: "error",
+        title: "Validation Error",
+        message: "Lösenorden matchar inte!"
+      });
       return;
     }
     if (newPassword.length < 6) {
-      alert("Lösenordet måste vara minst 6 tecken långt!");
+      setMessageModal({
+        show: true,
+        type: "error",
+        title: "Validation Error",
+        message: "Lösenordet måste vara minst 6 tecken långt!"
+      });
       return;
     }
 
@@ -301,14 +338,29 @@ function Settings() {
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
-        alert("Lösenord uppdaterat!");
+        setMessageModal({
+          show: true,
+          type: "success",
+          title: "Password Changed",
+          message: "Lösenord uppdaterat!"
+        });
       } else {
         const error = await response.json();
-        setError(error.error || "Failed to change password");
+        setMessageModal({
+          show: true,
+          type: "error",
+          title: "Update Failed",
+          message: error.error || "Failed to change password"
+        });
       }
     } catch (err) {
       console.error("Error changing password:", err);
-      setError("Error changing password");
+      setMessageModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: "An error occurred while changing your password"
+      });
     } finally {
       setLoading(false);
     }
@@ -630,14 +682,18 @@ function Settings() {
                     </div>
 
                     <div className="form-group">
-                      <label>VAT Number</label>
+                      <label>VAT Number *</label>
                       <input
                         type="text"
                         name="vat_number"
                         value={billingData.vat_number || ""}
                         onChange={handleBillingInputChange}
-                        placeholder="VAT number (optional)"
+                        placeholder="VAT number"
+                        className={billingErrors.vat_number ? "error" : ""}
                       />
+                      {billingErrors.vat_number && (
+                        <p className="error-message">{billingErrors.vat_number}</p>
+                      )}
                     </div>
 
                     <div className="form-group">
@@ -667,6 +723,15 @@ function Settings() {
         )}
 
       </div>
+
+      {messageModal.show && (
+        <MessageModal
+          type={messageModal.type}
+          title={messageModal.title}
+          message={messageModal.message}
+          onClose={() => setMessageModal({ ...messageModal, show: false })}
+        />
+      )}
     </>
   );
 }
