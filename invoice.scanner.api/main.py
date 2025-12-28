@@ -638,6 +638,89 @@ def update_profile():
         conn.close()
 
 
+@blp_auth.route("/change-password", methods=["PUT"])
+def change_password():
+    """Change current user's password."""
+    if "user_id" not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    user_id = session.get("user_id")
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    
+    old_password = data.get("old_password")
+    new_password = data.get("new_password")
+    confirm_password = data.get("confirm_password")
+    
+    # Validate inputs
+    if not old_password:
+        return jsonify({"error": "Current password is required"}), 400
+    
+    if not new_password:
+        return jsonify({"error": "New password is required"}), 400
+    
+    if new_password != confirm_password:
+        return jsonify({"error": "Passwords do not match"}), 400
+    
+    if len(new_password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters long"}), 400
+    
+    try:
+        conn = get_db_connection()
+        
+        # Get current user's password hash
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("SELECT password_hash FROM users WHERE id = %s", (user_id,))
+            user = cursor.fetchone()
+            
+            if not user:
+                conn.close()
+                return jsonify({"error": "User not found"}), 404
+            
+            # Verify old password
+            if not check_password_hash(user["password_hash"], old_password):
+                conn.close()
+                print(f"[change_password] User {user_id} provided incorrect old password")
+                return jsonify({"error": "Current password is incorrect"}), 401
+        
+        # Hash new password
+        new_password_hash = generate_password_hash(new_password)
+        
+        # Update password
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute("""
+                UPDATE users
+                SET password_hash = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+                RETURNING id, email
+            """, (new_password_hash, user_id))
+            
+            updated_user = cursor.fetchone()
+            conn.commit()
+            
+            if not updated_user:
+                conn.close()
+                return jsonify({"error": "Failed to update password"}), 500
+            
+            print(f"[change_password] User {user_id} ({updated_user['email']}) changed password")
+            
+            return jsonify({
+                "message": "Password changed successfully",
+                "user": {
+                    "id": str(updated_user["id"]),
+                    "email": updated_user["email"]
+                }
+            }), 200
+    
+    except Exception as e:
+        conn.rollback()
+        print(f"[change_password] Error changing password: {e}")
+        return jsonify({"error": "Failed to change password"}), 500
+    finally:
+        conn.close()
+
 
 @blp_auth.route("/search-companies", methods=["GET"])
 def search_companies():

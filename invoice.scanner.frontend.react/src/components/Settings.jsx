@@ -54,6 +54,7 @@ function Settings() {
   const [paymentMethods, setPaymentMethods] = React.useState([]);
   const [billingErrors, setBillingErrors] = React.useState({});
   const [showPassword, setShowPassword] = React.useState(false);
+  const [currentPassword, setCurrentPassword] = React.useState("");
   const [newPassword, setNewPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const [loading, setLoading] = React.useState(true);
@@ -268,6 +269,10 @@ function Settings() {
   };
 
   const handleChangePassword = async () => {
+    if (!currentPassword) {
+      alert("Nuvarande lösenord krävs!");
+      return;
+    }
     if (newPassword !== confirmPassword) {
       alert("Lösenorden matchar inte!");
       return;
@@ -276,11 +281,37 @@ function Settings() {
       alert("Lösenordet måste vara minst 6 tecken långt!");
       return;
     }
-    // TODO: Implement API call to change password
-    console.log("Changing password");
-    setNewPassword("");
-    setConfirmPassword("");
-    alert("Lösenord uppdaterat!");
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          old_password: currentPassword,
+          new_password: newPassword,
+          confirm_password: confirmPassword
+        })
+      });
+
+      if (response.ok) {
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        alert("Lösenord uppdaterat!");
+      } else {
+        const error = await response.json();
+        setError(error.error || "Failed to change password");
+      }
+    } catch (err) {
+      console.error("Error changing password:", err);
+      setError("Error changing password");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -392,6 +423,16 @@ function Settings() {
             <section className="settings-section">
               <h2>Change Password</h2>
               <div className="settings-form">
+                <div className="form-group">
+                  <label>Current Password</label>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    placeholder="Enter current password"
+                  />
+                </div>
+
                 <div className="form-group">
                   <label>New Password</label>
                   <div className="password-input-group">
