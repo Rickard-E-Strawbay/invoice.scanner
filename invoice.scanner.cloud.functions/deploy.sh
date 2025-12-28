@@ -77,7 +77,6 @@ gcloud functions deploy cf-preprocess-document \
     --memory 512MB \
     --timeout 300 \
     --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
-    --vpc-connector-egress-settings=ALL_TRAFFIC \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -94,7 +93,6 @@ gcloud functions deploy cf-extract-ocr-text \
     --memory 1024MB \
     --timeout 300 \
     --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
-    --vpc-connector-egress-settings=ALL_TRAFFIC \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -111,7 +109,6 @@ gcloud functions deploy cf-predict-invoice-data \
     --memory 512MB \
     --timeout 300 \
     --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
-    --vpc-connector-egress-settings=ALL_TRAFFIC \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -128,7 +125,6 @@ gcloud functions deploy cf-extract-structured-data \
     --memory 512MB \
     --timeout 300 \
     --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
-    --vpc-connector-egress-settings=ALL_TRAFFIC \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -145,7 +141,6 @@ gcloud functions deploy cf-run-automated-evaluation \
     --memory 512MB \
     --timeout 300 \
     --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
-    --vpc-connector-egress-settings=ALL_TRAFFIC \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
