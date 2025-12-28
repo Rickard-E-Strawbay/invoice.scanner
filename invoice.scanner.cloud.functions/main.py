@@ -177,12 +177,16 @@ def get_secret(secret_name: str) -> str:
 
 def get_database_user() -> str:
     """Get database user from Secret Manager or environment fallback."""
-    secret_value = get_secret('db_user_test')
+    project_id = os.getenv('GCP_PROJECT_ID', 'strawbayscannertest')
+    secret_suffix = 'prod' if 'prod' in project_id else 'test'
+    secret_value = get_secret(f'db_user_{secret_suffix}')
     return secret_value or os.getenv('DATABASE_USER', 'scanner')
 
 def get_database_password() -> str:
     """Get database password from Secret Manager or environment fallback."""
-    secret_value = get_secret('db_password_test')
+    project_id = os.getenv('GCP_PROJECT_ID', 'strawbayscannertest')
+    secret_suffix = 'prod' if 'prod' in project_id else 'test'
+    secret_value = get_secret(f'db_password_{secret_suffix}')
     return secret_value or os.getenv('DATABASE_PASSWORD', 'password')
 
 # Global Cloud SQL Connector instance (connection pooling)

@@ -396,7 +396,7 @@ jobs:
   # DEPLOY TO PROD (API + Frontend)
   # =====================
   deploy-prod:
-    needs: [build-prod]
+    needs: [approval-gate, build-prod]
     runs-on: ubuntu-latest
     environment: production
     

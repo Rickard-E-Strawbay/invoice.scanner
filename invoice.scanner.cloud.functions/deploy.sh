@@ -53,7 +53,13 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
 echo ""
 # Note: DATABASE_USER and DATABASE_PASSWORD are fetched from Secret Manager, not passed as env vars
 # Note: DATABASE_HOST and DATABASE_PORT removed - Cloud SQL Connector uses CLOUD_SQL_CONN only
-ENV_VARS="GCP_PROJECT_ID=$PROJECT_ID,CLOUD_SQL_CONN=$CLOUD_SQL_CONN,DATABASE_NAME=invoice_scanner,STORAGE_TYPE=gcs,GCS_BUCKET_NAME=invoice-scanner-test-docs,PUBSUB_TOPIC_PREFIX=document-,OPENAI_MODEL=gpt-4o,GOOGLE_MODEL=gemini-2.0-flash,ANTHROPIC_MODEL=claude-3-5-sonnet-20241022,FUNCTION_LOG_LEVEL=INFO,PYTHONUNBUFFERED=1"
+# Determine GCS bucket based on project
+if [[ "$PROJECT_ID" == *"prod"* ]]; then
+    GCS_BUCKET="invoice-scanner-prod-docs"
+else
+    GCS_BUCKET="invoice-scanner-test-docs"
+fi
+ENV_VARS="GCP_PROJECT_ID=$PROJECT_ID,CLOUD_SQL_CONN=$CLOUD_SQL_CONN,DATABASE_NAME=invoice_scanner,STORAGE_TYPE=gcs,GCS_BUCKET_NAME=$GCS_BUCKET,PUBSUB_TOPIC_PREFIX=document-,OPENAI_MODEL=gpt-4o,GOOGLE_MODEL=gemini-2.0-flash,ANTHROPIC_MODEL=claude-3-5-sonnet-20241022,FUNCTION_LOG_LEVEL=INFO,PYTHONUNBUFFERED=1"
 
 # Deploy functions
 echo "[DEPLOY] Deploying 5 Cloud Functions..."
@@ -71,6 +77,7 @@ gcloud functions deploy cf-preprocess-document \
     --memory 512MB \
     --timeout 300 \
     --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
+    --vpc-connector-egress-settings=ALL_TRAFFIC \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -87,6 +94,7 @@ gcloud functions deploy cf-extract-ocr-text \
     --memory 1024MB \
     --timeout 300 \
     --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
+    --vpc-connector-egress-settings=ALL_TRAFFIC \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -103,6 +111,7 @@ gcloud functions deploy cf-predict-invoice-data \
     --memory 512MB \
     --timeout 300 \
     --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
+    --vpc-connector-egress-settings=ALL_TRAFFIC \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -119,6 +128,7 @@ gcloud functions deploy cf-extract-structured-data \
     --memory 512MB \
     --timeout 300 \
     --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
+    --vpc-connector-egress-settings=ALL_TRAFFIC \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -135,6 +145,7 @@ gcloud functions deploy cf-run-automated-evaluation \
     --memory 512MB \
     --timeout 300 \
     --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
+    --vpc-connector-egress-settings=ALL_TRAFFIC \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
