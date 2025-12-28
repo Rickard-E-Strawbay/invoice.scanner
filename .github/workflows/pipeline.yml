@@ -3,7 +3,6 @@ name: CI/CD Pipeline
 on:
   push:
     branches:
-      - re_deploy_start
       - main
   workflow_dispatch:
     inputs:
@@ -18,15 +17,14 @@ on:
 
 jobs:
   # =====================
-  # BUILD JOB (alltid)
+  # BUILD TEST
   # =====================
-  build:
+  build-test:
     runs-on: ubuntu-latest
     
     outputs:
       registry: ${{ steps.set-vars.outputs.registry }}
       gcp_project: ${{ steps.set-vars.outputs.gcp_project }}
-      environment: ${{ steps.set-vars.outputs.environment }}
       deploy_cloud_functions: ${{ steps.check-cf-flag.outputs.deploy_cf }}
     
     steps:
@@ -45,25 +43,17 @@ jobs:
             echo "⏭️  No [deploy-cf] flag - skipping Cloud Functions deployment"
           fi
 
-      - name: Set environment variables based on branch
+      - name: Set environment variables for TEST
         id: set-vars
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "gcp_project=strawbayscannerprod" >> $GITHUB_OUTPUT
-            echo "environment=prod" >> $GITHUB_OUTPUT
-            echo "registry=europe-west1-docker.pkg.dev/strawbayscannerprod/invoice-scanner" >> $GITHUB_OUTPUT
-            echo "sa_key=GCP_SA_KEY_PROD" >> $GITHUB_OUTPUT
-          else
-            echo "gcp_project=strawbayscannertest" >> $GITHUB_OUTPUT
-            echo "environment=test" >> $GITHUB_OUTPUT
-            echo "registry=europe-west1-docker.pkg.dev/strawbayscannertest/invoice-scanner" >> $GITHUB_OUTPUT
-            echo "sa_key=GCP_SA_KEY_TEST" >> $GITHUB_OUTPUT
-          fi
+          echo "gcp_project=strawbayscannertest" >> $GITHUB_OUTPUT
+          echo "environment=test" >> $GITHUB_OUTPUT
+          echo "registry=europe-west1-docker.pkg.dev/strawbayscannertest/invoice-scanner" >> $GITHUB_OUTPUT
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets[steps.set-vars.outputs.sa_key] }}
+          credentials_json: ${{ secrets.GCP_SA_KEY_TEST }}
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
@@ -98,9 +88,9 @@ jobs:
 
       - name: Build Summary
         run: |
-          echo "✅ Build Complete!"
+          echo "✅ TEST Build Complete!"
           echo "📦 Branch: ${{ github.ref }}"
-          echo "🌍 Environment: ${{ steps.set-vars.outputs.environment }}"
+          echo "🌍 Environment: test"
           echo "📍 Registry: ${{ steps.set-vars.outputs.registry }}"
           echo "🏷️  SHA: ${{ github.sha }}"
 
@@ -108,10 +98,8 @@ jobs:
   # DEPLOY CLOUD FUNCTIONS TO TEST (Triggered by [deploy-cf] in commit message)
   # =====================
   deploy-cloud-functions-test:
-    needs: build
-    if: |
-      github.ref == 'refs/heads/re_deploy_start' && 
-      needs.build.outputs.deploy_cloud_functions == 'true'
+    needs: build-test
+    if: needs.build-test.outputs.deploy_cloud_functions == 'true'
     runs-on: ubuntu-latest
     environment: test
     
@@ -147,8 +135,7 @@ jobs:
   # DEPLOY TO TEST (API + Frontend)
   # =====================
   deploy-test:
-    needs: build
-    if: github.ref == 'refs/heads/re_deploy_start'
+    needs: [build-test, deploy-cloud-functions-test]
     runs-on: ubuntu-latest
     environment: test
     
@@ -274,13 +261,106 @@ jobs:
           echo "🌍 Region:      europe-west1"
 
   # =====================
+  # APPROVAL GATE (Manual approval before PROD deployment)
+  # =====================
+  approval-gate:
+    needs: deploy-test
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - name: Awaiting Manual Approval
+        run: |
+          echo "⏸️  Waiting for manual approval to proceed with PRODUCTION deployment..."
+          echo ""
+          echo "Review completed TEST deployment before approving."
+          echo "Approval required in: GitHub Settings → Environments → production"
+
+  # =====================
+  # BUILD PROD
+  # =====================
+  build-prod:
+    needs: approval-gate
+    runs-on: ubuntu-latest
+    
+    outputs:
+      registry: ${{ steps.set-vars.outputs.registry }}
+      gcp_project: ${{ steps.set-vars.outputs.gcp_project }}
+      deploy_cloud_functions: ${{ steps.check-cf-flag.outputs.deploy_cf }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for [deploy-cf] flag in commit message
+        id: check-cf-flag
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          if [[ "$COMMIT_MSG" == *"[deploy-cf]"* ]]; then
+            echo "deploy_cf=true" >> $GITHUB_OUTPUT
+            echo "✅ Found [deploy-cf] flag - Cloud Functions will be deployed"
+          else
+            echo "deploy_cf=false" >> $GITHUB_OUTPUT
+            echo "⏭️  No [deploy-cf] flag - skipping Cloud Functions deployment"
+          fi
+
+      - name: Set environment variables for PROD
+        id: set-vars
+        run: |
+          echo "gcp_project=strawbayscannerprod" >> $GITHUB_OUTPUT
+          echo "environment=prod" >> $GITHUB_OUTPUT
+          echo "registry=europe-west1-docker.pkg.dev/strawbayscannerprod/invoice-scanner" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Configure Docker authentication
+        run: |
+          gcloud auth configure-docker europe-west1-docker.pkg.dev
+
+      - name: Build and Push API image
+        run: |
+          docker build -t ${{ steps.set-vars.outputs.registry }}/api:latest \
+                       -t ${{ steps.set-vars.outputs.registry }}/api:${{ github.sha }} \
+                       ./invoice.scanner.api
+          docker push ${{ steps.set-vars.outputs.registry }}/api:latest
+          docker push ${{ steps.set-vars.outputs.registry }}/api:${{ github.sha }}
+
+      - name: Build and Push Frontend image
+        run: |
+          docker build -t ${{ steps.set-vars.outputs.registry }}/frontend:latest \
+                       -t ${{ steps.set-vars.outputs.registry }}/frontend:${{ github.sha }} \
+                       ./invoice.scanner.frontend.react
+          docker push ${{ steps.set-vars.outputs.registry }}/frontend:latest
+          docker push ${{ steps.set-vars.outputs.registry }}/frontend:${{ github.sha }}
+
+      - name: Build and Push Worker image
+        run: |
+          docker build -t ${{ steps.set-vars.outputs.registry }}/worker:latest \
+                       -t ${{ steps.set-vars.outputs.registry }}/worker:${{ github.sha }} \
+                       ./invoice.scanner.worker 2>/dev/null || echo "Worker directory not found, skipping"
+          docker push ${{ steps.set-vars.outputs.registry }}/worker:latest 2>/dev/null || echo "Worker image skipped"
+          docker push ${{ steps.set-vars.outputs.registry }}/worker:${{ github.sha }} 2>/dev/null || echo "Worker image skipped"
+
+      - name: Build Summary
+        run: |
+          echo "✅ PROD Build Complete!"
+          echo "📦 Branch: ${{ github.ref }}"
+          echo "🌍 Environment: prod"
+          echo "📍 Registry: ${{ steps.set-vars.outputs.registry }}"
+          echo "🏷️  SHA: ${{ github.sha }}"
+
+  # =====================
   # DEPLOY CLOUD FUNCTIONS TO PROD (Triggered by [deploy-cf] in commit message)
   # =====================
   deploy-cloud-functions-prod:
-    needs: build
-    if: |
-      github.ref == 'refs/heads/main' && 
-      needs.build.outputs.deploy_cloud_functions == 'true'
+    needs: [build-prod]
+    if: needs.build-prod.outputs.deploy_cloud_functions == 'true'
     runs-on: ubuntu-latest
     environment: production
     
@@ -316,8 +396,7 @@ jobs:
   # DEPLOY TO PROD (API + Frontend)
   # =====================
   deploy-prod:
-    needs: build
-    if: github.ref == 'refs/heads/main'
+    needs: [build-prod, deploy-cloud-functions-prod]
     runs-on: ubuntu-latest
     environment: production
     
@@ -355,7 +434,7 @@ jobs:
             --max-instances=20 \
             --min-instances=1 \
             --set-env-vars "INSTANCE_CONNECTION_NAME=strawbayscannerprod:europe-west1:invoice-scanner-prod,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=$DB_PASSWORD,FLASK_SECRET_KEY=$SECRET_KEY,FLASK_ENV=production,EMAIL_SENDER=$GMAIL_SENDER,EMAIL_PASSWORD=$GMAIL_PASSWORD,OPENAI_API_KEY=$OPENAI_API_KEY,GCP_PROJECT=strawbayscannerprod,GCP_PROJECT_ID=strawbayscannerprod,GCP_REGION=europe-west1,STORAGE_TYPE=gcs,GCS_BUCKET=invoice-scanner-prod-docs,PROCESSING_BACKEND=cloud_functions" \
-            --service-account=447531332666-compute@developer.gserviceaccount.com
+            --service-account=527148217996-compute@developer.gserviceaccount.com
         env:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
           SECRET_KEY: ${{ env.SECRET_KEY }}

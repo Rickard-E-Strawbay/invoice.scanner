@@ -10,14 +10,13 @@ Document processing system with Cloud Functions architecture.
 ```
 
 This starts everything needed:
-- 4 Docker services (API, Frontend with Vite hot-reload, Database, Redis)
+- 3 Docker services (API, Frontend with Vite hot-reload, Database)
 - Cloud Functions Framework in new Terminal (:9000)
 
 ### Services & URLs
 - **API:** http://localhost:5001
 - **Frontend:** http://localhost:8080 (Vite dev-server with hot-reload)
 - **Database:** localhost:5432
-- **Redis:** localhost:6379
 - **Cloud Functions Framework:** http://localhost:9000 (in separate Terminal)
 
 ## 📋 Architecture
@@ -56,7 +55,7 @@ invoice.scanner/
 ```
 
 This opens 2 things:
-- Docker services in background (API, Frontend, Database, Redis)
+- Docker services in background (API, Frontend, Database)
 - New Terminal window with Cloud Functions Framework logs
 
 ### Upload & Process Document

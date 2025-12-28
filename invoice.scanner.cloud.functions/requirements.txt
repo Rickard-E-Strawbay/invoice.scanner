@@ -1,7 +1,21 @@
-functions-framework==3.5.0
-google-cloud-pubsub==1.7.0
+# Cloud Functions Framework (Gen2) with CloudEvents support
+functions-framework[cloudevents]==3.5.0
+
+# Google Cloud Libraries (Official versions from Google Cloud samples)
+google-cloud-pubsub==2.20.0
 google-cloud-secret-manager==2.16.0
-cloud-sql-python-connector==1.4.3
+google-cloud-logging==3.5.0
+
+# Database & ORM
+cloud-sql-python-connector==1.19.0
 pg8000==1.31.1
-protobuf==3.20.3
-six==1.16.0
+
+# Protocol Buffers
+protobuf==4.25.0
+
+# CloudEvents
+cloudevents==1.10.1
+
+# Utilities
+requests==2.31.0
+python-dotenv==1.0.0
