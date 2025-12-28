@@ -1,7 +1,7 @@
 # ===================
 # Imports and Globals
 # ===================
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, request, session, make_response
 from flask_cors import CORS
 from flask_smorest import Api, Blueprint
 from marshmallow import Schema, fields
@@ -141,7 +141,7 @@ def get_cors_origins():
     
     if env == 'production':
         # Production environment
-        origins.append('https://invoice-scanner-frontend-prod-wcpzrlxtjq-ew.a.run.app')
+        origins.append('https://invoice-scanner-frontend-prod-th3siqbveq-ew.a.run.app')
     else:
         # Development/Test environment
         origins.append('https://invoice-scanner-frontend-test-wcpzrlxtjq-ew.a.run.app')
@@ -172,6 +172,8 @@ else:
     print("[config] Session cookies: SECURE=False, SAMESITE=Lax (Local HTTP)")
 
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
+
+# CORS configuration using flask_cors
 CORS(app, supports_credentials=True, origins=get_cors_origins())
 
 # Flask-smorest + Swagger configuration

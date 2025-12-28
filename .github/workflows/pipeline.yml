@@ -200,7 +200,7 @@ jobs:
             --cpu=1 \
             --timeout=3600 \
             --max-instances=10 \
-            --set-env-vars "VITE_API_URL=https://invoice-scanner-api-test-wcpzrlxtjq-ew.a.run.app,ENVIRONMENT=test"
+            --set-env-vars "ENVIRONMENT=test"
 
       - name: Grant public access to Frontend
         run: |
@@ -463,7 +463,7 @@ jobs:
             --timeout=3600 \
             --max-instances=20 \
             --min-instances=1 \
-            --set-env-vars "VITE_API_URL=https://invoice-scanner-api-prod-wcpzrlxtjq-ew.a.run.app,ENVIRONMENT=production"
+            --set-env-vars "ENVIRONMENT=production"
 
       - name: Grant public access to Frontend
         run: |
