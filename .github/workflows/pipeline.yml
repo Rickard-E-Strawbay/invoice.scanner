@@ -135,7 +135,7 @@ jobs:
   # DEPLOY TO TEST (API + Frontend)
   # =====================
   deploy-test:
-    needs: [build-test, deploy-cloud-functions-test]
+    needs: build-test
     runs-on: ubuntu-latest
     environment: test
     
@@ -359,7 +359,7 @@ jobs:
   # DEPLOY CLOUD FUNCTIONS TO PROD (Triggered by [deploy-cf] in commit message)
   # =====================
   deploy-cloud-functions-prod:
-    needs: [build-prod]
+    needs: build-prod
     if: needs.build-prod.outputs.deploy_cloud_functions == 'true'
     runs-on: ubuntu-latest
     environment: production
@@ -396,7 +396,7 @@ jobs:
   # DEPLOY TO PROD (API + Frontend)
   # =====================
   deploy-prod:
-    needs: [build-prod, deploy-cloud-functions-prod]
+    needs: [build-prod]
     runs-on: ubuntu-latest
     environment: production
     
