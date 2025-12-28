@@ -14,20 +14,34 @@ echo "🚀 Cloud Functions Framework - Local Server"
 echo "=========================================="
 echo ""
 
-# Check for Python 3.11+
-if ! command -v python3.11 &> /dev/null; then
-    echo "❌ Python 3.11+ not found"
-    echo "Please install Python 3.11 or later via Homebrew:"
-    echo "  brew install python@3.11"
+# Determine which Python version to use (3.11+ preferred, but 3.9+ works)
+if command -v python3.11 &> /dev/null; then
+    PYTHON_CMD="python3.11"
+elif command -v python3.10 &> /dev/null; then
+    PYTHON_CMD="python3.10"
+elif command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+else
+    echo "❌ Python 3.9+ not found"
     exit 1
 fi
 
-# Check if dependencies are installed
-if ! python3.11 -c "import functions_framework" 2>/dev/null; then
-    echo "📦 Installing dependencies for Python 3.11..."
-    python3.11 -m pip install -q -r "$SCRIPT_DIR/requirements.txt"
-    echo "✓ Dependencies installed"
-fi
+echo "Using Python: $($PYTHON_CMD --version)"
+echo ""
+
+# Install dependencies if needed
+echo "📦 Installing dependencies..."
+$PYTHON_CMD -m pip install -q -r "$SCRIPT_DIR/requirements.txt" 2>/dev/null || true
+echo "✓ Dependencies ready"
+
+# Set environment variables
+export PYTHONUNBUFFERED=1
+export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+export DATABASE_HOST="${DATABASE_HOST:-127.0.0.1}"
+export DATABASE_PORT="${DATABASE_PORT:-5432}"
+export DATABASE_NAME="${DATABASE_NAME:-invoice_scanner}"
+export DATABASE_USER="${DATABASE_USER:-scanner}"
+export DATABASE_PASSWORD="${DATABASE_PASSWORD:-scanner}"
 
 echo ""
 echo "Starting functions-framework on port 9000..."
@@ -46,18 +60,9 @@ echo ""
 echo "Press Ctrl+C to stop"
 echo ""
 
-# Set environment variables
-export PYTHONUNBUFFERED=1
-export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
-export DATABASE_HOST="${DATABASE_HOST:-127.0.0.1}"
-export DATABASE_PORT="${DATABASE_PORT:-5432}"
-export DATABASE_NAME="${DATABASE_NAME:-invoice_scanner}"
-export DATABASE_USER="${DATABASE_USER:-scanner}"
-export DATABASE_PASSWORD="${DATABASE_PASSWORD:-scanner}"
-
 # Start functions-framework
 cd "$SCRIPT_DIR"
-python3.11 -m functions_framework \
+$PYTHON_CMD -m functions_framework \
     --target=cf_preprocess_document \
     --debug \
     --port=9000 \

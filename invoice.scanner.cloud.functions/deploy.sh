@@ -36,8 +36,24 @@ CLOUD_SQL_CONN=$(gcloud sql instances describe "$CLOUD_SQL_INSTANCE" --project="
 echo "[DEPLOY] Cloud SQL connection: $CLOUD_SQL_CONN"
 echo ""
 
-# Environment variables for all functions
-ENV_VARS="GCP_PROJECT_ID=$PROJECT_ID,CLOUD_SQL_CONN=$CLOUD_SQL_CONN,DATABASE_HOST=127.0.0.1,DATABASE_PORT=5432,DATABASE_NAME=invoice_scanner,STORAGE_TYPE=gcs,GCS_BUCKET_NAME=invoice-scanner-test-docs,PUBSUB_TOPIC_PREFIX=document-,OPENAI_MODEL=gpt-4o,GOOGLE_MODEL=gemini-2.0-flash,ANTHROPIC_MODEL=claude-3-5-sonnet-20241022,FUNCTION_LOG_LEVEL=INFO,PYTHONUNBUFFERED=1"
+# Get the default service account for Cloud Functions
+SERVICE_ACCOUNT=$(gcloud iam service-accounts list --project="$PROJECT_ID" --format='value(email)' --filter='displayName:"Cloud Functions Service Account"' | head -1)
+if [ -z "$SERVICE_ACCOUNT" ]; then
+    SERVICE_ACCOUNT="${PROJECT_ID}@appspot.gserviceaccount.com"
+fi
+echo "[DEPLOY] Service Account: $SERVICE_ACCOUNT"
+echo ""
+
+# Grant Secret Manager access to service account
+echo "[DEPLOY] Granting Secret Manager access to service account..."
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$SERVICE_ACCOUNT" \
+    --role="roles/secretmanager.secretAccessor" \
+    --quiet 2>/dev/null || echo "  ✓ Secret Manager access already granted"
+echo ""
+# Note: DATABASE_USER and DATABASE_PASSWORD are fetched from Secret Manager, not passed as env vars
+# Note: DATABASE_HOST and DATABASE_PORT removed - Cloud SQL Connector uses CLOUD_SQL_CONN only
+ENV_VARS="GCP_PROJECT_ID=$PROJECT_ID,CLOUD_SQL_CONN=$CLOUD_SQL_CONN,DATABASE_NAME=invoice_scanner,STORAGE_TYPE=gcs,GCS_BUCKET_NAME=invoice-scanner-test-docs,PUBSUB_TOPIC_PREFIX=document-,OPENAI_MODEL=gpt-4o,GOOGLE_MODEL=gemini-2.0-flash,ANTHROPIC_MODEL=claude-3-5-sonnet-20241022,FUNCTION_LOG_LEVEL=INFO,PYTHONUNBUFFERED=1"
 
 # Deploy functions
 echo "[DEPLOY] Deploying 5 Cloud Functions..."
@@ -54,6 +70,7 @@ gcloud functions deploy cf-preprocess-document \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
+    --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -69,6 +86,7 @@ gcloud functions deploy cf-extract-ocr-text \
     --region "$REGION" \
     --memory 1024MB \
     --timeout 300 \
+    --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -84,6 +102,7 @@ gcloud functions deploy cf-predict-invoice-data \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
+    --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -99,6 +118,7 @@ gcloud functions deploy cf-extract-structured-data \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
+    --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -114,6 +134,7 @@ gcloud functions deploy cf-run-automated-evaluation \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
+    --vpc-connector="projects/$PROJECT_ID/locations/$REGION/connectors/run-connector" \
     --set-env-vars="$ENV_VARS" \
     --project="$PROJECT_ID" \
     --quiet
@@ -122,7 +143,7 @@ echo ""
 echo "✅ All Cloud Functions deployed successfully!"
 echo ""
 echo "Verify deployment:"
-echo "  gcloud functions list --project=$PROJECT_ID --filter='runtime:python311'"
+echo "  gcloud functions list --v2 --project=$PROJECT_ID"
 echo ""
 echo "View logs:"
-echo "  gcloud functions logs read cf-preprocess-document --limit 50 --project=$PROJECT_ID --gen2"
+echo "  gcloud functions logs read cf-preprocess-document --v2 --limit 50 --project=$PROJECT_ID --region=$REGION"

@@ -48,9 +48,20 @@ import functions_framework
 import json
 import logging
 import os
+import atexit
 from google.cloud import pubsub_v1
+from google.cloud import secretmanager
 from datetime import datetime
 from typing import Dict, Any
+from functools import lru_cache
+
+# Optional imports for Cloud SQL
+try:
+    from google.cloud.sql.connector import Connector, IPTypes
+    HAS_CLOUD_SQL_CONNECTOR = True
+except ImportError:
+    HAS_CLOUD_SQL_CONNECTOR = False
+    IPTypes = None
 
 logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv('FUNCTION_LOG_LEVEL', 'DEBUG'))
@@ -127,51 +138,134 @@ def simulate_pubsub_message(topic_name: str, message_data: Dict[str, Any]) -> No
             traceback.print_exc()
     else:
         logger.warning(f"[LOCAL-PUBSUB] ⚠️  No function mapping for topic {topic_name}")
-    formatter = logging.Formatter('%(name)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
 
 # Get configuration from environment
 PROJECT_ID = os.getenv('GCP_PROJECT_ID')
+CLOUD_SQL_CONN = os.getenv('CLOUD_SQL_CONN')  # Format: project:region:instance
 DATABASE_HOST = os.getenv('DATABASE_HOST', 'localhost')
 DATABASE_NAME = os.getenv('DATABASE_NAME', 'invoice_scanner')
-DATABASE_USER = os.getenv('DATABASE_USER', 'scanner')
-DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD', 'password')
 DATABASE_PORT = int(os.getenv('DATABASE_PORT', 5432))
 PROCESSING_SLEEP_TIME = float(os.getenv('PROCESSING_SLEEP_TIME', '1.0'))  # seconds
 
+# Cached secret values (lazy loading)
+_SECRET_CACHE = {}
+
+@lru_cache(maxsize=1)
+def get_secret(secret_name: str) -> str:
+    """
+    Fetch secret from Google Cloud Secret Manager.
+    Cached to avoid repeated API calls.
+    """
+    if secret_name in _SECRET_CACHE:
+        return _SECRET_CACHE[secret_name]
+    
+    if not PROJECT_ID:
+        logger.warning(f"[SECRET] No PROJECT_ID set, returning empty string for {secret_name}")
+        return ""
+    
+    try:
+        client = secretmanager.SecretManagerServiceClient()
+        name = f"projects/{PROJECT_ID}/secrets/{secret_name}/versions/latest"
+        response = client.access_secret_version(request={"name": name})
+        secret_value = response.payload.data.decode("UTF-8")
+        _SECRET_CACHE[secret_name] = secret_value
+        logger.info(f"[SECRET] ✓ Retrieved {secret_name} from Secret Manager")
+        return secret_value
+    except Exception as e:
+        logger.warning(f"[SECRET] Could not fetch {secret_name}: {e}")
+        return ""
+
+def get_database_user() -> str:
+    """Get database user from Secret Manager or environment fallback."""
+    secret_value = get_secret('db_user_test')
+    return secret_value or os.getenv('DATABASE_USER', 'scanner')
+
+def get_database_password() -> str:
+    """Get database password from Secret Manager or environment fallback."""
+    secret_value = get_secret('db_password_test')
+    return secret_value or os.getenv('DATABASE_PASSWORD', 'password')
+
+# Global Cloud SQL Connector instance (connection pooling)
+_connector = None
+
+def get_connector():
+    """Get or create global Cloud SQL Connector instance."""
+    if not HAS_CLOUD_SQL_CONNECTOR:
+        raise ImportError("google.cloud.sql.connector not installed")
+    global _connector
+    if _connector is None:
+        _connector = Connector(ip_type=IPTypes.PRIVATE)
+    return _connector
 
 def get_db_connection():
-    """Get PostgreSQL connection using Cloud SQL Proxy (Cloud Run)."""
+    """
+    Get PostgreSQL connection using Cloud SQL Connector + pg8000.
+    
+    GCP: Uses Cloud SQL Connector (Private IP safe)
+    Local: Falls back to direct pg8000
+    """
+    # Get credentials lazily
+    db_user = get_database_user()
+    db_password = get_database_password()
+    
+    # Try Cloud SQL Connector for GCP
+    if CLOUD_SQL_CONN and PROJECT_ID and HAS_CLOUD_SQL_CONNECTOR:
+        try:
+            logger.info(f"[DB] Connecting via Cloud SQL Connector: {CLOUD_SQL_CONN}")
+            connector = get_connector()
+            conn = connector.connect(
+                CLOUD_SQL_CONN,
+                driver="pg8000",
+                user=db_user,
+                password=db_password,
+                db=DATABASE_NAME,
+            )
+            logger.info("[DB] ✓ Connected via Cloud SQL Connector")
+            return conn
+        except Exception as e:
+            logger.exception("[DB] Cloud SQL connection failed")
+    
+    # Fallback: Direct pg8000 (local development only)
+    # Note: This won't work in Cloud Functions (no public IP or proxy)
+    # In GCP, always use Cloud SQL Connector above
     try:
+        logger.info(f"[DB] Fallback: Using direct pg8000 to {DATABASE_HOST}:{DATABASE_PORT}")
         import pg8000
-        
         conn = pg8000.connect(
             host=DATABASE_HOST,
             port=DATABASE_PORT,
             database=DATABASE_NAME,
-            user=DATABASE_USER,
-            password=DATABASE_PASSWORD,
+            user=db_user,
+            password=db_password,
             timeout=10
         )
+        logger.info("[DB] ✓ Connected via pg8000")
         return conn
     except Exception as e:
         logger.error(f"[DB] Connection failed: {e}")
         return None
 
 
-def update_document_status(document_id: str, status: str, error: str = None) -> bool:
-    """Update document status in database."""
+def update_document_status(document_id: str, status: str) -> bool:
+    """
+    Update document status in database.
+    
+    NOTE: This is a best-effort operation. If Cloud SQL connection fails,
+    we log the error but continue processing. The API layer handles
+    initial status updates (e.g., 'preprocessing' when document uploaded).
+    This Cloud Function status update is for visibility only.
+    """
     logger.info(f"[DB] 🔗 Connecting to database...")
     conn = get_db_connection()
     if not conn:
-        logger.error(f"[DB] ❌ Connection failed!")
+        logger.warning(f"[DB] ⚠️  Could not connect to database for status update (non-critical, continuing)")
         return False
     
     logger.info(f"[DB] ✓ Connected. Updating document {document_id} to status '{status}'")
     
     try:
-        with conn.cursor() as cursor:
+        cursor = conn.cursor()
+        try:
             cursor.execute(
                 """
                 UPDATE documents
@@ -183,6 +277,8 @@ def update_document_status(document_id: str, status: str, error: str = None) -> 
             conn.commit()
             logger.info(f"[DB] ✓ Document {document_id} status updated -> {status}")
             return True
+        finally:
+            cursor.close()
     except Exception as e:
         logger.error(f"[DB] ❌ Error updating status: {type(e).__name__}: {e}")
         import traceback
@@ -196,42 +292,23 @@ def update_document_status(document_id: str, status: str, error: str = None) -> 
 def publish_to_topic(topic_name: str, message_data: Dict[str, Any]) -> bool:
     """Publish message to Pub/Sub topic to trigger next stage."""
     try:
-        logger.info(f"[Pub/Sub] 🔗 Creating publisher client...")
+        logger.info(f"[Pub/Sub] � Publishing message to {topic_name}: {message_data}")
         publisher = pubsub_v1.PublisherClient()
         topic_path = publisher.topic_path(PROJECT_ID, topic_name)
-        logger.info(f"[Pub/Sub] 📍 Topic path: {topic_path}")
-        
         message_json = json.dumps(message_data).encode('utf-8')
-        logger.info(f"[Pub/Sub] 📨 Publishing message: {message_data}")
         
         future = publisher.publish(topic_path, message_json)
         message_id = future.result(timeout=5)
-        
-        logger.info(f"[Pub/Sub] ✓ Published to {topic_name} with message_id: {message_id}")
+        logger.info(f"[Pub/Sub] ✓ Published with message_id: {message_id}")
         return True
     except Exception as e:
-        # If we're running locally without GCP credentials, simulate the message delivery
         if "DefaultCredentialsError" in type(e).__name__:
-            logger.warning(f"[Pub/Sub] ⚠️  No GCP credentials - simulating local Pub/Sub")
-            logger.info(f"[Pub/Sub] 📨 [LOCAL] Publishing message to {topic_name}: {message_data}")
-            
-            # Simulate the message by calling the next function directly
+            logger.info(f"[Pub/Sub] 📨 [LOCAL] Simulating Pub/Sub message")
             simulate_pubsub_message(topic_name, message_data)
             return True
         else:
-            logger.error(f"[Pub/Sub] ❌ Failed to publish: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"[Pub/Sub] ❌ Failed: {type(e).__name__}: {e}")
             return False
-
-
-# ===== DEBUG: Request inspection =====
-# Lägg till Flask-route för att inspektera alla inkommande förfrågningar
-try:
-    from functions_framework import create_app
-    # Vi kan inte enkelt lägga till middleware här, men vi kan logga i själva funktionen
-except:
-    pass
 
 
 # ===== CLOUD FUNCTION 1: PREPROCESSING =====
@@ -474,3 +551,18 @@ def cf_run_automated_evaluation(cloud_event):
         logger.error(f"[CF-EVALUATION] Error: {e}")
         document_id = message.get('document_id') if 'message' in locals() else 'unknown'
         update_document_status(document_id, 'error', str(e))
+
+
+# ===== CLEANUP ON EXIT =====
+
+@atexit.register
+def close_connector():
+    """Close Cloud SQL Connector on function exit to avoid socket leaks."""
+    global _connector
+    if _connector:
+        try:
+            logger.info("[CLEANUP] Closing Cloud SQL Connector")
+            _connector.close()
+            _connector = None
+        except Exception as e:
+            logger.error(f"[CLEANUP] Error closing connector: {e}")

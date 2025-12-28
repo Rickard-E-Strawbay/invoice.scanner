@@ -2005,7 +2005,10 @@ def upload_document():
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                 # Extract filename without extension for document_name
+                # Make it unique by appending timestamp to avoid duplicate key violations
                 filename_without_ext = filename.rsplit('.', 1)[0] if '.' in filename else filename
+                import time
+                unique_document_name = f"{filename_without_ext}_{int(time.time() * 1000)}"
                 
                 # Insert document record with status "preprocessing"
                 # (actual processing starts after response)
@@ -2016,7 +2019,7 @@ def upload_document():
                     VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                     RETURNING id, company_id, uploaded_by, raw_format, raw_filename, document_name, status, created_at
                     """,
-                    (doc_id, company_id, user_id, file_ext, filename, filename_without_ext, "preprocessing")
+                    (doc_id, company_id, user_id, file_ext, filename, unique_document_name, "preprocessing")
                 )
                 
                 document = cursor.fetchone()
