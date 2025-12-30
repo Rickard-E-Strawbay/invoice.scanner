@@ -1,0 +1,46 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Debug test_cf_preprocess",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tests/test_cf_preprocess.py",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "stopOnEntry": false,
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/invoice.scanner.cloud.functions:${workspaceFolder}/invoice.scanner.api",
+        "DATABASE_HOST": "localhost",
+        "DATABASE_PORT": "5432",
+        "DATABASE_USER": "scanner_local",
+        "DATABASE_PASSWORD": "scanner_local",
+        "DATABASE_NAME": "invoice_scanner"
+      },
+      "args": [],
+      "jinja": true,
+      "django": false
+    },
+    {
+      "name": "Python: Debug with breakpoints",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/tests/test_cf_preprocess.py",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "stopOnEntry": true,
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/invoice.scanner.cloud.functions:${workspaceFolder}/invoice.scanner.api",
+        "DATABASE_HOST": "db",
+        "DATABASE_PORT": "5432",
+        "DATABASE_USER": "scanner_local",
+        "DATABASE_PASSWORD": "scanner_local",
+        "DATABASE_NAME": "invoice_scanner"
+      },
+      "jinja": true,
+      "django": false
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "name": "Invoice Scanner - Test Container",
+  "dockerFile": "Dockerfile",
+  
+  // ============================================================
+  // Workspace Configuration
+  // ============================================================
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  
+  // ============================================================
+  // Volume Mounts - Link to cloud.functions and api
+  // ============================================================
+  "mounts": [
+    "source=${localWorkspaceFolder}/../invoice.scanner.api,target=/mounts/invoice.scanner.api,type=bind,consistency=cached",
+    "source=${localWorkspaceFolder}/../invoice.scanner.cloud.functions,target=/mounts/invoice.scanner.cloud.functions,type=bind,consistency=cached",
+    "source=${localWorkspaceFolder}/../documents,target=/app/documents,type=bind,consistency=cached"
+  ],
+  
+  // ============================================================
+  // Port Forwarding
+  // ============================================================
+  "forwardPorts": [5432, 5001, 8080, 9000, 5678],
+  
+  // ============================================================
+  // Container Environment Variables
+  // ============================================================
+  "remoteEnv": {
+    "PYTHONUNBUFFERED": "1",
+    "DATABASE_URL": "postgresql://scanner_local:scanner_local@db:5432/invoice_scanner",
+    "DATABASE_HOST": "db",
+    "DATABASE_PORT": "5432",
+    "DATABASE_USER": "scanner_local",
+    "DATABASE_PASSWORD": "scanner_local",                 
+    "DATABASE_NAME": "invoice_scanner",
+    "STORAGE_TYPE": "local",
+    "DOCUMENTS_RAW_DIR": "/app/documents/raw",
+    "DOCUMENTS_PROCESSED_DIR": "/app/documents/processed",
+    "FLASK_ENV": "development",
+    "FRONTEND_URL": "http://localhost:8080",
+    "PROCESSING_BACKEND": "local",
+    "PROCESSING_SERVICE_URL": "http://host.docker.internal:9000",
+    "ENVIRONMENT": "local",
+    "GMAIL_SENDER": "${GMAIL_SENDER:-}",
+    "GMAIL_PASSWORD": "${GMAIL_PASSWORD:-}",
+    "OPENAI_API_KEY": "${OPENAI_API_KEY:-}",
+    "GOOGLE_API_KEY": "${GOOGLE_API_KEY:-}",
+    "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY:-}"
+  },
+  
+  // ============================================================
+  // VSCode Extensions
+  // ============================================================
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.debugpy",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "ms-python.flake8"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": false,
+        "python.linting.flake8Enabled": true,
+        "python.linting.flake8Args": ["--max-line-length=120"],
+        "python.formatting.provider": "black",
+        "[python]": {
+          "editor.formatOnSave": true,
+          "editor.defaultFormatter": "ms-python.python"
+        }
+      }
+    }
+  },
+  
+  // ============================================================
+  // Post Create Command
+  // ============================================================
+  "postCreateCommand": "pip install -r .devcontainer/requirements.txt && echo '✅ Invoice Scanner Test Container ready!'",
+  
+  // ============================================================
+  // Container User
+  // ============================================================
+  "remoteUser": "vscode"
+}
