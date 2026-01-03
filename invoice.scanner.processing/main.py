@@ -120,7 +120,7 @@ def get_db_connection():
     """
     try:
         logger.info("[DB] Attempting to connect...")
-        conn = get_connection(...)
+        conn = get_connection()
         logger.info("[DB] Connection object returned")
   
         return conn
