@@ -387,6 +387,13 @@ class PreprocessWorker(BaseWorker):
         status_updated = update_document_status(self.document_id, "preprocessing")
         logger.info(f"[PREPROCESS] Status update returned: {status_updated}")
         
+        # CRITICAL: If status update fails, document status is not saved in DB
+        # We must abort processing to avoid orphaned documents in wrong state
+        if not status_updated:
+            logger.error(f"[PREPROCESS] ❌ FAILED to set preprocessing status - aborting")
+            self._handle_error("Failed to update document status to 'preprocessing' in database")
+            return
+        
         try:
             # TODO: Implement actual preprocessing
             # - Get raw file from storage
@@ -398,6 +405,11 @@ class PreprocessWorker(BaseWorker):
             
             status_updated = update_document_status(self.document_id, "preprocessed")
             logger.info(f"[PREPROCESS] Updated to preprocessed: {status_updated}")
+            
+            if not status_updated:
+                logger.error(f"[PREPROCESS] ❌ Failed to update status to preprocessed")
+                self._handle_error("Failed to update document status to 'preprocessed' in database")
+                return
             
             # Trigger next stage
             logger.info(f"[PREPROCESS] Publishing to document-ocr topic")
@@ -425,7 +437,12 @@ class OCRWorker(BaseWorker):
     
     def execute(self):
         logger.info(f"[OCR] Processing document {self.document_id}")
-        update_document_status(self.document_id, "ocr_extracting")
+        status_updated = update_document_status(self.document_id, "ocr_extracting")
+        
+        if not status_updated:
+            logger.error(f"[OCR] ❌ Failed to set ocr_extracting status - aborting")
+            self._handle_error("Failed to update document status to 'ocr_extracting'")
+            return
         
         try:
             # TODO: Implement actual OCR
@@ -440,7 +457,11 @@ class OCRWorker(BaseWorker):
             extracted_text = "Mock OCR text"
             # save_extracted_text(self.document_id, extracted_text)
             
-            update_document_status(self.document_id, "ocr_complete")
+            status_updated = update_document_status(self.document_id, "ocr_complete")
+            if not status_updated:
+                logger.error(f"[OCR] ❌ Failed to set ocr_complete status")
+                self._handle_error("Failed to update document status to 'ocr_complete'")
+                return
             
             # Trigger next stage
             publish_to_topic(
@@ -465,7 +486,12 @@ class LLMWorker(BaseWorker):
     
     def execute(self):
         logger.info(f"[LLM] Processing document {self.document_id}")
-        update_document_status(self.document_id, "llm_predicting")
+        status_updated = update_document_status(self.document_id, "llm_predicting")
+        
+        if not status_updated:
+            logger.error(f"[LLM] ❌ Failed to set llm_predicting status - aborting")
+            self._handle_error("Failed to update document status to 'llm_predicting'")
+            return
         
         try:
             # TODO: Implement actual LLM processing
@@ -475,7 +501,11 @@ class LLMWorker(BaseWorker):
             # - Combine results
             time.sleep(PROCESSING_SLEEP_TIME)
             
-            update_document_status(self.document_id, "llm_complete")
+            status_updated = update_document_status(self.document_id, "llm_complete")
+            if not status_updated:
+                logger.error(f"[LLM] ❌ Failed to set llm_complete status")
+                self._handle_error("Failed to update document status to 'llm_complete'")
+                return
             
             # Trigger next stage
             publish_to_topic(
@@ -499,7 +529,12 @@ class ExtractionWorker(BaseWorker):
     
     def execute(self):
         logger.info(f"[EXTRACTION] Processing document {self.document_id}")
-        update_document_status(self.document_id, "extraction")
+        status_updated = update_document_status(self.document_id, "extraction")
+        
+        if not status_updated:
+            logger.error(f"[EXTRACTION] ❌ Failed to set extraction status - aborting")
+            self._handle_error("Failed to update document status to 'extraction'")
+            return
         
         try:
             # TODO: Implement actual extraction
@@ -508,7 +543,11 @@ class ExtractionWorker(BaseWorker):
             # - Validate data types
             time.sleep(PROCESSING_SLEEP_TIME)
             
-            update_document_status(self.document_id, "extraction_complete")
+            status_updated = update_document_status(self.document_id, "extraction_complete")
+            if not status_updated:
+                logger.error(f"[EXTRACTION] ❌ Failed to set extraction_complete status")
+                self._handle_error("Failed to update document status to 'extraction_complete'")
+                return
             
             # Trigger next stage
             publish_to_topic(
@@ -533,7 +572,12 @@ class EvaluationWorker(BaseWorker):
     
     def execute(self):
         logger.info(f"[EVALUATION] Processing document {self.document_id}")
-        update_document_status(self.document_id, "automated_evaluation")
+        status_updated = update_document_status(self.document_id, "automated_evaluation")
+        
+        if not status_updated:
+            logger.error(f"[EVALUATION] ❌ Failed to set automated_evaluation status - aborting")
+            self._handle_error("Failed to update document status to 'automated_evaluation'")
+            return
         
         try:
             # TODO: Implement actual evaluation
@@ -542,7 +586,11 @@ class EvaluationWorker(BaseWorker):
             # - Generate quality score
             time.sleep(PROCESSING_SLEEP_TIME)
             
-            update_document_status(self.document_id, "evaluation_complete")
+            status_updated = update_document_status(self.document_id, "evaluation_complete")
+            if not status_updated:
+                logger.error(f"[EVALUATION] ❌ Failed to set evaluation_complete status")
+                self._handle_error("Failed to update document status to 'evaluation_complete'")
+                return
             
             logger.info(f"[EVALUATION] ✓ Completed for {self.document_id}")
         except Exception as e:

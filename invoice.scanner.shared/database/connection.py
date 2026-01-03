@@ -379,16 +379,41 @@ def get_connection_pg8000_connector(
         logger.info(f"[DB] Connecting to {instance_connection_name}...")
         logger.info(f"[DB] Connection parameters: db={database}, user={user}")
         
-        # Connect with timeout - default is 3 seconds for connector.connect()
-        # We use default timeout since longer timeout can mask infrastructure issues
-        conn = connector.connect(
-            instance_connection_name,
-            "pg8000",
-            user=user,
-            password=password,
-            db=database,
-            ip_type=IPTypes.PRIVATE
-        )
+        # Connect with retry logic - first attempt might timeout as Connector warms up
+        # Retry up to 3 times with exponential backoff
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"[DB] Connection attempt {attempt}/{max_retries}...")
+                # Use 10 second timeout for connector.connect() to allow warmup
+                import socket
+                old_timeout = socket.getdefaulttimeout()
+                socket.setdefaulttimeout(10)
+                try:
+                    conn = connector.connect(
+                        instance_connection_name,
+                        "pg8000",
+                        user=user,
+                        password=password,
+                        db=database,
+                        ip_type=IPTypes.PRIVATE
+                    )
+                    socket.setdefaulttimeout(old_timeout)
+                    logger.info(f"[DB] ✅ Connected on attempt {attempt}")
+                    break
+                finally:
+                    socket.setdefaulttimeout(old_timeout)
+            except TimeoutError as te:
+                socket.setdefaulttimeout(old_timeout)
+                if attempt == max_retries:
+                    raise  # Last attempt failed
+                logger.warning(f"[DB] Attempt {attempt} timed out, retrying... ({attempt}/{max_retries})")
+                import time
+                time.sleep(1 * attempt)  # Exponential backoff: 1s, 2s, 3s
+                continue
+        else:
+            # This shouldn't happen due to the raise above, but just in case
+            conn = None
         
         logger.info(f"[DB] ✅ Connected via Cloud SQL Connector: {database}")
         return PG8000Connection(conn)
