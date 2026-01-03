@@ -117,24 +117,35 @@ def get_db_connection():
     Routes to Cloud SQL Connector (Cloud Run) or local TCP (docker-compose).
     Uses unified shared.database.config which handles all routing.
     """
+    logger.info(f"[DB] Attempting to get connection...")
     try:
         conn = get_connection()
+        if conn:
+            logger.success(f"[DB] Connection established")
+        else:
+            logger.error(f"[DB] get_connection() returned None")
         return conn
     except Exception as e:
         logger.database_error("connection", str(e))
+        logger.error(f"[DB] Exception: {type(e).__name__}: {e}", exc_info=True)
         return None
 
 
 def update_document_status(document_id: str, status: str, error_message: Optional[str] = None) -> bool:
     """Update document processing status in database."""
+    logger.info(f"[STATUS] Updating {document_id} to status: {status}")
     try:
         conn = get_db_connection()
         if not conn:
             logger.database_error("connection", "Cannot connect to database")
+            logger.error(f"[STATUS] Failed: no DB connection")
             return False
 
         try:
+            logger.info(f"[STATUS] Got connection, creating cursor")
             cursor = conn.cursor()
+            logger.info(f"[STATUS] Cursor created, executing query")
+            
             if error_message:
                 cursor.execute(
                     "UPDATE documents SET status = %s, error_message = %s, updated_at = NOW() WHERE id = %s",
@@ -145,14 +156,19 @@ def update_document_status(document_id: str, status: str, error_message: Optiona
                     "UPDATE documents SET status = %s, updated_at = NOW() WHERE id = %s",
                     (status, document_id)
                 )
+            logger.info(f"[STATUS] Query executed, rows: {cursor.rowcount}")
             conn.commit()
             logger.success(f"Document {document_id} status: {status}")
             return True
         finally:
-            cursor.close()
-            conn.close()
+            try:
+                cursor.close()
+                conn.close()
+            except Exception as e:
+                logger.error(f"[STATUS] Error closing: {e}")
     except Exception as e:
         logger.database_error("update_status", str(e))
+        logger.error(f"[STATUS] Exception: {type(e).__name__}: {e}", exc_info=True)
         return False
 
 
@@ -296,25 +312,34 @@ class PreprocessWorker(BaseWorker):
     
     def execute(self):
         logger.processing_stage("preprocess", self.document_id)
-        update_document_status(self.document_id, "preprocessing")
+        logger.info(f"[PREPROCESS] Calling update_document_status: preprocessing")
+        
+        status_updated = update_document_status(self.document_id, "preprocessing")
+        logger.info(f"[PREPROCESS] Status update returned: {status_updated}")
         
         try:
             # TODO: Implement actual preprocessing
             # - Get raw file from storage
             # - Convert PDF to PNG (600 DPI)
             # - Save to processed storage
+            logger.info(f"[PREPROCESS] Starting preprocessing sleep for {self.document_id}")
             time.sleep(PROCESSING_SLEEP_TIME)
+            logger.info(f"[PREPROCESS] Finished sleep, updating to preprocessed")
             
-            update_document_status(self.document_id, "preprocessed")
+            status_updated = update_document_status(self.document_id, "preprocessed")
+            logger.info(f"[PREPROCESS] Updated to preprocessed: {status_updated}")
             
             # Trigger next stage
-            publish_to_topic(
+            logger.info(f"[PREPROCESS] Publishing to document-ocr topic")
+            publish_result = publish_to_topic(
                 "document-ocr",
                 {"document_id": self.document_id, "company_id": self.company_id, "stage": "ocr"}
             )
+            logger.info(f"[PREPROCESS] Publish to ocr topic returned: {publish_result}")
             
             logger.task_complete("preprocessing", f"doc={self.document_id}")
         except Exception as e:
+            logger.error(f"[PREPROCESS] Exception in execute: {e}", exc_info=True)
             self._handle_error(str(e))
 
 
@@ -463,6 +488,7 @@ def process_document(message_data: Dict[str, Any]):
     Coordinate document processing through pipeline stages.
     Routes to appropriate worker based on stage.
     """
+    logger.info(f"[COORDINATOR] Starting process_document")
     document_id = message_data.get("document_id")
     company_id = message_data.get("company_id")
     stage = message_data.get("stage", "preprocess")
@@ -484,6 +510,7 @@ def process_document(message_data: Dict[str, Any]):
         return
     
     try:
+        logger.info(f"[COORDINATOR] Got worker: {worker_class.__name__}")
         # Instantiate worker with appropriate thread pool size
         if stage in WORKER_THREAD_POOLS:
             worker = worker_class(
@@ -494,10 +521,12 @@ def process_document(message_data: Dict[str, Any]):
         else:
             worker = worker_class(document_id, company_id)
         
+        logger.info(f"[COORDINATOR] Executing worker")
         # Execute worker
         worker.execute()
+        logger.success(f"[COORDINATOR] Worker completed")
     except Exception as e:
-        logger.error(f"[COORDINATOR] Error processing {document_id}: {e}")
+        logger.error(f"[COORDINATOR] Exception: {type(e).__name__}: {e}", exc_info=True)
         update_document_status(document_id, "error", str(e))
 
 # ============================================================
@@ -532,19 +561,27 @@ class PubSubListener:
     
     def on_message(self, message):
         """Callback when Pub/Sub message arrives."""
+        logger.info(f"[PUBSUB] on_message callback triggered")
         try:
+            logger.info(f"[PUBSUB] Decoding message...")
             # message.data is already bytes from Pub/Sub, just decode and parse JSON
             message_data = json.loads(message.data.decode('utf-8'))
             logger.info(f"[PUBSUB] Received message: {message_data}")
             
             # Submit to worker pool
+            logger.info(f"[PUBSUB] Submitting to worker pool")
             self.process_pool.submit(process_document, message_data)
+            logger.info(f"[PUBSUB] Submitted, acknowledging message")
             
             # Acknowledge message
             message.ack()
+            logger.success(f"[PUBSUB] Message acknowledged")
         except Exception as e:
-            logger.error(f"[PUBSUB] Error processing message: {e}")
-            message.ack()  # Still ack to avoid redelivery
+            logger.error(f"[PUBSUB] Error: {type(e).__name__}: {e}", exc_info=True)
+            try:
+                message.ack()  # Still ack to avoid redelivery
+            except Exception as ack_error:
+                logger.error(f"[PUBSUB] Error acking message: {ack_error}")
     
     def wait(self):
         """Wait for all futures (blocking)."""
