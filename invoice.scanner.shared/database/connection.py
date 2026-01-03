@@ -26,6 +26,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Global Cloud SQL Connector cache (lazy initialized)
+_cloud_sql_connector = None
+
 
 class PG8000DictRow:
     """
@@ -318,6 +321,26 @@ def get_connection_pg8000(
         return None
 
 
+def get_cloud_sql_connector():
+    """
+    Get or create global Cloud SQL Connector instance.
+    The connector is expensive to initialize, so we cache it globally.
+    """
+    global _cloud_sql_connector
+    
+    if _cloud_sql_connector is None:
+        logger.info("[DB] Initializing global Cloud SQL Connector (first use)...")
+        try:
+            from google.cloud.sql.connector import Connector
+            _cloud_sql_connector = Connector()
+            logger.info("[DB] Cloud SQL Connector initialized successfully")
+        except Exception as e:
+            logger.error(f"[DB] Failed to initialize Connector: {e}")
+            return None
+    
+    return _cloud_sql_connector
+
+
 def get_connection_pg8000_connector(
     instance_connection_name: str,
     database: str,
@@ -326,6 +349,8 @@ def get_connection_pg8000_connector(
 ) -> Optional[PG8000Connection]:
     """
     Create pg8000 connection via Cloud SQL Connector (Cloud Run).
+    
+    Uses cached global Connector instance to avoid expensive re-initialization.
     
     Args:
         instance_connection_name: Cloud SQL instance connection name
@@ -342,9 +367,20 @@ def get_connection_pg8000_connector(
         return None
     
     try:
-        from google.cloud.sql.connector import Connector, IPTypes
+        from google.cloud.sql.connector import IPTypes
         
-        connector = Connector()
+        logger.info(f"[DB] Getting Cloud SQL Connector...")
+        connector = get_cloud_sql_connector()
+        
+        if not connector:
+            logger.error("[DB] Failed to get Connector")
+            return None
+        
+        logger.info(f"[DB] Connecting to {instance_connection_name}...")
+        logger.info(f"[DB] Connection parameters: db={database}, user={user}")
+        
+        # Connect with timeout - default is 3 seconds for connector.connect()
+        # We use default timeout since longer timeout can mask infrastructure issues
         conn = connector.connect(
             instance_connection_name,
             "pg8000",
@@ -353,10 +389,19 @@ def get_connection_pg8000_connector(
             db=database,
             ip_type=IPTypes.PRIVATE
         )
-        logger.info(f"[DB] Connected via Cloud SQL Connector: {database}")
+        
+        logger.info(f"[DB] ✅ Connected via Cloud SQL Connector: {database}")
         return PG8000Connection(conn)
+    except TimeoutError as e:
+        logger.error(f"[DB] ❌ TIMEOUT connecting to Cloud SQL: {instance_connection_name}")
+        logger.error(f"[DB] This usually means the Cloud Run service can't reach Cloud SQL")
+        logger.error(f"[DB] Check: 1) Cloud SQL instance exists, 2) Service account has permissions, 3) Network connectivity")
+        logger.error(f"[DB] TimeoutError: {e}", exc_info=True)
+        return None
     except Exception as e:
-        logger.error(f"[DB] Cloud SQL Connector connection failed: {e}", exc_info=True)
+        logger.error(f"[DB] ❌ Cloud SQL Connector connection failed: {type(e).__name__}: {e}")
+        logger.error(f"[DB] Connection details: instance={instance_connection_name}, db={database}, user={user}")
+        logger.error(f"[DB] Exception details:", exc_info=True)
         return None
 
 
