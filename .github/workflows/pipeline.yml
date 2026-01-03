@@ -16,7 +16,6 @@ jobs:
     outputs:
       registry: ${{ steps.set-vars.outputs.registry }}
       gcp_project: ${{ steps.set-vars.outputs.gcp_project }}
-      deploy_cloud_functions: ${{ steps.check-cf-flag.outputs.deploy_cf }}
     
     steps:
       - name: Checkout code
