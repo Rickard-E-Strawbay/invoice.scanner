@@ -2,36 +2,41 @@
  * API utility for centralized API URL management
  */
 
-// Determine API URL - try env var first, then fallback to derived URL
+// Determine API URL - try env var first, then fallback to smart detection
 export const API_BASE_URL = (() => {
-  // Check environment variable (set at build time or in docker-compose)
+  // 1. Check explicit VITE_API_URL environment variable (set by docker-compose or pipeline)
   const envUrl = import.meta.env.VITE_API_URL;
   if (envUrl && envUrl.trim() !== '') {
-    console.log('✅ Using API URL from environment:', envUrl);
+    console.log('✅ Using explicit API URL from environment:', envUrl);
     return envUrl;
   }
   
-  // Smart fallback: derive from current hostname
+  // 2. Fallback: Smart detection based on hostname
   const hostname = window.location.hostname || 'localhost';
   const protocol = window.location.protocol;
   
-  // If running on Cloud Run, API is on same domain but different port
-  // If running locally, use localhost:5001
-  let fallbackUrl;
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    // Local development
-    fallbackUrl = `${protocol}//localhost:5001`;
-  } else {
-    // Cloud Run or other server - API is on same base domain
-    // Replace "frontend" with "api" in the hostname
-    const apiHostname = hostname.replace('frontend-test', 'api-test').replace('frontend-prod', 'api-prod').replace('frontend', 'api');
-    fallbackUrl = `${protocol}//${apiHostname}`;
+    // Local development: use localhost:5001
+    const fallbackUrl = `${protocol}//localhost:5001`;
+    console.log('✅ Local development detected, using:', fallbackUrl);
+    return fallbackUrl;
   }
   
-  console.log(`✅ Using fallback API URL: ${fallbackUrl}`);
-  console.log(`   (Current hostname: ${hostname})`);
+  // 3. Cloud Run: API on same base domain but different service
+  // Extract the base domain and replace 'frontend' with 'api'
+  const parts = hostname.split('-');
   
-  return fallbackUrl;
+  // Try to find 'frontend' in the hostname and replace with 'api'
+  if (hostname.includes('frontend-')) {
+    const apiHostname = hostname.replace(/frontend[^-]*/g, 'api');
+    const apiUrl = `${protocol}//${apiHostname}`;
+    console.log(`✅ Cloud Run detected, replacing 'frontend' with 'api':`, apiUrl);
+    return apiUrl;
+  }
+  
+  // Fallback: assume API is at /api route
+  console.warn('⚠️  Could not determine API URL, using relative path');
+  return '/api';
 })();
 
 /**

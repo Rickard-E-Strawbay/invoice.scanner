@@ -29,6 +29,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:${PORT:-8080}/health')" || exit 1
 
 # Start application
-# Cloud Run sets PORT env var (default 8080)
+# Cloud Run expects container to listen on port 8080 (set via PORT env var)
 EXPOSE 8080
-CMD sh -c 'gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 4 --worker-class gthread --timeout 0 --access-logfile - --error-logfile - main:app'
+CMD sh -c 'gunicorn --bind 0.0.0.0:8080 --workers 1 --threads 4 --worker-class gthread --timeout 0 --access-logfile - --error-logfile - main:app'

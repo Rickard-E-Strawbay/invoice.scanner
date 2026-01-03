@@ -184,7 +184,29 @@ else:
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 
 # CORS configuration using flask_cors
-CORS(app, supports_credentials=True, origins=get_cors_origins())
+def cors_supports_credentials():
+    """CORS with credentials support"""
+    def _cors_supports_credentials(origin, request_headers):
+        # Allow wildcard patterns like '*.run.app'
+        cors_origins = get_cors_origins()
+        
+        # Check for exact matches
+        if origin in cors_origins:
+            return origin
+        
+        # Check for wildcard patterns
+        for allowed in cors_origins:
+            if allowed.startswith('*.') and origin.endswith(allowed[1:]):
+                return origin
+        
+        return None
+    
+    return _cors_supports_credentials
+
+CORS(app, 
+     supports_credentials=True, 
+     origins=cors_supports_credentials(),
+     allow_headers=['Content-Type', 'Authorization'])
 
 # Flask-smorest + Swagger configuration
 app.config["API_TITLE"] = "Example API"
