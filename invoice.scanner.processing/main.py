@@ -96,7 +96,7 @@ WORKER_THREAD_POOLS = {
 
 PROCESSING_SLEEP_TIME = float(os.getenv("PROCESSING_SLEEP_TIME", "0.0"))
 
-logger.info(f"Processing Service initialized")
+logger.info(f"Processing Service initialized [v2]")
 logger.info(f"GCP_PROJECT_ID: {GCP_PROJECT_ID}")
 logger.info(f"MAX_DOCUMENT_PROCESSES: {MAX_DOCUMENT_PROCESSES}")
 logger.info(f"Worker thread pool config: {WORKER_THREAD_POOLS}")
