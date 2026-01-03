@@ -63,8 +63,8 @@ import threading
 # Add parent dir to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Import database config (unified from shared package)
-from shared.database.config import get_connection, RealDictCursor
+# Import database config (unified from shared package) - SAME AS API
+from shared.database.config import DB_CONFIG, get_connection, RealDictCursor
 from shared.logging import ComponentLogger
 
 # ============================================================
@@ -115,10 +115,10 @@ def get_db_connection():
     """
     Get database connection (same as API uses).
     Routes to Cloud SQL Connector (Cloud Run) or local TCP (docker-compose).
+    Uses unified shared.database.config which handles all routing.
     """
     try:
-        from shared.database.config import get_connection as get_db_conn
-        conn = get_db_conn()
+        conn = get_connection()
         return conn
     except Exception as e:
         logger.database_error("connection", str(e))
