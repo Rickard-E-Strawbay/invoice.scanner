@@ -134,30 +134,10 @@ def refresh_user_session(user_id):
         conn.close()
 
 
+
 # =============
 # CORS Configuration
 # =============
-def get_cors_origins():
-    """Get allowed CORS origins based on environment.
-    
-    - Local dev: Always allow localhost:8080
-    - TEST: Allow TEST Cloud Run frontend + localhost
-    - PROD: Allow PROD Cloud Run frontend + localhost
-    """
-    env = os.getenv('FLASK_ENV', 'development')
-    
-    # Always allow localhost for local development
-    origins = ['http://localhost:8080', 'https://localhost:8080']
-    
-    if env == 'production':
-        # Production environment
-        origins.append('https://invoice-scanner-frontend-prod-th3siqbveq-ew.a.run.app')
-    else:
-        # Development/Test environment
-        origins.append('https://invoice-scanner-frontend-test-wcpzrlxtjq-ew.a.run.app')
-    
-    logger.debug(f"Allowed origins: {origins}")
-    return origins
 
 # =============
 # App & Config
@@ -184,28 +164,30 @@ else:
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 
 # CORS configuration using flask_cors
-def cors_supports_credentials():
-    """CORS with credentials support"""
-    def _cors_supports_credentials(origin, request_headers):
-        # Allow wildcard patterns like '*.run.app'
-        cors_origins = get_cors_origins()
-        
-        # Check for exact matches
-        if origin in cors_origins:
-            return origin
-        
-        # Check for wildcard patterns
-        for allowed in cors_origins:
-            if allowed.startswith('*.') and origin.endswith(allowed[1:]):
-                return origin
-        
-        return None
+# Use origins_regex to support wildcard patterns for Cloud Run (*.run.app)
+def get_cors_origins_regex():
+    """Get CORS origins regex pattern for flask-cors"""
+    env = os.getenv('FLASK_ENV', 'development')
     
-    return _cors_supports_credentials
+    # Always allow localhost
+    origins = ['http://localhost:8080', 'https://localhost:8080']
+    
+    # Add wildcard pattern for Cloud Run domains
+    origins.append('https://.*\\.run\\.app')
+    
+    if env == 'production':
+        # Production environment - also accept specific prod frontend URL as fallback
+        origins.append('https://invoice-scanner-frontend-prod.*\\.run\\.app')
+    else:
+        # Development/Test environment
+        origins.append('https://invoice-scanner-frontend-test.*\\.run\\.app')
+    
+    logger.debug(f"CORS origins regex patterns: {origins}")
+    return '|'.join(origins)
 
 CORS(app, 
      supports_credentials=True, 
-     origins=cors_supports_credentials(),
+     origins_regex=get_cors_origins_regex(),
      allow_headers=['Content-Type', 'Authorization'])
 
 # Flask-smorest + Swagger configuration
