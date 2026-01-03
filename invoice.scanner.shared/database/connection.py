@@ -15,6 +15,7 @@ Migration from psycopg2:
 
 import logging
 import os
+import threading
 from typing import Optional, Dict, Any, List, Tuple
 from contextlib import contextmanager
 
@@ -26,8 +27,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Global Cloud SQL Connector cache (lazy initialized)
+# Global Cloud SQL Connector cache (lazy initialized with thread safety)
 _cloud_sql_connector = None
+_connector_lock = threading.Lock()  # Thread-safe initialization
 
 
 class PG8000DictRow:
@@ -325,18 +327,25 @@ def get_cloud_sql_connector():
     """
     Get or create global Cloud SQL Connector instance.
     The connector is expensive to initialize, so we cache it globally.
+    
+    THREAD SAFETY: Uses lock to prevent race conditions when multiple
+    threads try to initialize Connector simultaneously (common in Pub/Sub
+    listener with ThreadPool workers).
     """
     global _cloud_sql_connector
     
     if _cloud_sql_connector is None:
-        logger.info("[DB] Initializing global Cloud SQL Connector (first use)...")
-        try:
-            from google.cloud.sql.connector import Connector
-            _cloud_sql_connector = Connector()
-            logger.info("[DB] Cloud SQL Connector initialized successfully")
-        except Exception as e:
-            logger.error(f"[DB] Failed to initialize Connector: {e}")
-            return None
+        with _connector_lock:  # Acquire lock
+            # Double-check inside lock (another thread may have initialized)
+            if _cloud_sql_connector is None:
+                logger.info("[DB] Initializing global Cloud SQL Connector (first use)...")
+                try:
+                    from google.cloud.sql.connector import Connector
+                    _cloud_sql_connector = Connector()
+                    logger.info("[DB] ✅ Cloud SQL Connector initialized successfully")
+                except Exception as e:
+                    logger.error(f"[DB] ❌ Failed to initialize Connector: {e}", exc_info=True)
+                    return None
     
     return _cloud_sql_connector
 
@@ -379,41 +388,14 @@ def get_connection_pg8000_connector(
         logger.info(f"[DB] Connecting to {instance_connection_name}...")
         logger.info(f"[DB] Connection parameters: db={database}, user={user}")
         
-        # Connect with retry logic - first attempt might timeout as Connector warms up
-        # Retry up to 3 times with exponential backoff
-        max_retries = 3
-        for attempt in range(1, max_retries + 1):
-            try:
-                logger.info(f"[DB] Connection attempt {attempt}/{max_retries}...")
-                # Use 10 second timeout for connector.connect() to allow warmup
-                import socket
-                old_timeout = socket.getdefaulttimeout()
-                socket.setdefaulttimeout(10)
-                try:
-                    conn = connector.connect(
-                        instance_connection_name,
-                        "pg8000",
-                        user=user,
-                        password=password,
-                        db=database,
-                        ip_type=IPTypes.PRIVATE
-                    )
-                    socket.setdefaulttimeout(old_timeout)
-                    logger.info(f"[DB] ✅ Connected on attempt {attempt}")
-                    break
-                finally:
-                    socket.setdefaulttimeout(old_timeout)
-            except TimeoutError as te:
-                socket.setdefaulttimeout(old_timeout)
-                if attempt == max_retries:
-                    raise  # Last attempt failed
-                logger.warning(f"[DB] Attempt {attempt} timed out, retrying... ({attempt}/{max_retries})")
-                import time
-                time.sleep(1 * attempt)  # Exponential backoff: 1s, 2s, 3s
-                continue
-        else:
-            # This shouldn't happen due to the raise above, but just in case
-            conn = None
+        conn = connector.connect(
+            instance_connection_name,
+            "pg8000",
+            user=user,
+            password=password,
+            db=database,
+            ip_type=IPTypes.PRIVATE
+        )
         
         logger.info(f"[DB] ✅ Connected via Cloud SQL Connector: {database}")
         return PG8000Connection(conn)
