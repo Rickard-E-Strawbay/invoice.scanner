@@ -403,7 +403,9 @@ jobs:
             --set-env-vars "PYTHONUNBUFFERED=1,FLASK_APP=main:app,DATABASE_HOST=cloudsql-instance,DATABASE_PORT=5432,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_NAME=invoice_scanner,ENVIRONMENT=prod,PROCESSING_MODE=cloud_run" \
             --service-account=527148217996-compute@developer.gserviceaccount.com
         env:
-          DB_PASSWORD: ${{ env.DB_PASSWORD }}      - name: Grant public access to Frontend
+          DB_PASSWORD: ${{ env.DB_PASSWORD }}
+
+      - name: Grant public access to Frontend
         run: |
           gcloud run services add-iam-policy-binding invoice-scanner-frontend-prod \
             --region=europe-west1 \
