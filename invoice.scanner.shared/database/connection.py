@@ -19,7 +19,7 @@ from typing import Optional, Dict, Any, List, Tuple
 from contextlib import contextmanager
 
 try:
-    import pg8000.native
+    import pg8000
     HAS_PG8000 = True
 except ImportError:
     HAS_PG8000 = False

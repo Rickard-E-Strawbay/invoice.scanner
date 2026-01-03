@@ -11,7 +11,7 @@ import uuid
 import secrets
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from db_config import DB_CONFIG, get_connection, RealDictCursor
+from shared.database.config import DB_CONFIG, get_connection, RealDictCursor
 import os
 from dotenv import load_dotenv
 from lib.storage_service import init_storage_service
@@ -25,28 +25,31 @@ from lib.email_service import (
     send_plan_change_email
 )
 from lib.password_validator import validate_password_strength
+from shared.logging import ComponentLogger
 
 load_dotenv()
+
+logger = ComponentLogger("API")
 
 # Initialize storage service (LOCAL or GCS based on STORAGE_TYPE env var)
 try:
     storage_service = init_storage_service()
-    print(f"[INIT] Storage service initialized: STORAGE_TYPE={os.environ.get('STORAGE_TYPE', 'local')}")
+    logger.info(f"Storage service initialized: STORAGE_TYPE={os.environ.get('STORAGE_TYPE', 'local')}")
 except Exception as e:
-    print(f"[INIT] Error initializing storage service: {e}")
+    logger.error(f"Error initializing storage service: {e}")
     storage_service = None
 
 # Initialize processing backend (LOCAL Celery or CLOUD Functions based on env)
-print(f"[INIT] Attempting to initialize processing backend...")
-print(f"[INIT] PROCESSING_BACKEND env: {os.getenv('PROCESSING_BACKEND', 'not set')}")
-print(f"[INIT] GCP_PROJECT_ID env: {os.getenv('GCP_PROJECT_ID', 'not set')}")
+logger.info(f"Attempting to initialize processing backend...")
+logger.info(f"PROCESSING_BACKEND env: {os.getenv('PROCESSING_BACKEND', 'not set')}")
+logger.info(f"GCP_PROJECT_ID env: {os.getenv('GCP_PROJECT_ID', 'not set')}")
 try:
     processing_backend = init_processing_backend()
-    print(f"[INIT] ✅ Processing backend initialized: {processing_backend.backend_type}")
+    logger.success(f"Processing backend initialized: {processing_backend.backend_type}")
 except Exception as e:
     import traceback
-    print(f"[INIT] ❌ Error initializing processing backend: {e}")
-    print(f"[INIT] Traceback: {traceback.format_exc()}")
+    logger.error(f"Error initializing processing backend: {e}")
+    logger.error(f"Traceback: {traceback.format_exc()}")
     processing_backend = None
 
 # =============
@@ -63,17 +66,17 @@ def get_db_connection():
         conn = get_connection()
         return conn
     except Exception as e:
-        print(f"Database connection error: {e}")
+        logger.database_error("connection", str(e))
         return None
 
 
 def refresh_user_session(user_id):
     """Fetch fresh user data from database and update session."""
-    print(f"[refresh_user_session] Refreshing session for user_id: {user_id}")
+    logger.info(f"Refreshing session for user_id: {user_id}")
     
     conn = get_db_connection()
     if not conn:
-        print(f"[refresh_user_session] Database connection failed")
+        logger.error("Database connection failed")
         return None
     
     try:
@@ -91,7 +94,7 @@ def refresh_user_session(user_id):
             user = cursor.fetchone()
             
             if not user:
-                print(f"[refresh_user_session] User not found: {user_id}")
+                logger.warning(f"User not found: {user_id}")
                 return None
             
             # Update session with fresh data
@@ -108,7 +111,7 @@ def refresh_user_session(user_id):
             session["weekly_summary"] = user["weekly_summary"] if user["weekly_summary"] is not None else True
             session["marketing_opt_in"] = user["marketing_opt_in"] if user["marketing_opt_in"] is not None else True
             
-            print(f"[refresh_user_session] Session refreshed with data: email={user['email']}, company={user['company_name']}, role={user['role_name']}, price_plan_key={user['price_plan_key']}")
+            logger.debug(f"Session refreshed: email={user['email']}, company={user['company_name']}, role={user['role_name']}")
             
             return {
                 "id": user["id"],
@@ -125,7 +128,7 @@ def refresh_user_session(user_id):
                 "marketing_opt_in": user["marketing_opt_in"] if user["marketing_opt_in"] is not None else True
             }
     except Exception as e:
-        print(f"[refresh_user_session] Error: {e}")
+        logger.error(f"Error refreshing session: {e}")
         return None
     finally:
         conn.close()
@@ -153,7 +156,7 @@ def get_cors_origins():
         # Development/Test environment
         origins.append('https://invoice-scanner-frontend-test-wcpzrlxtjq-ew.a.run.app')
     
-    print(f"[CORS] Allowed origins: {origins}")
+    logger.debug(f"Allowed origins: {origins}")
     return origins
 
 # =============
@@ -171,12 +174,12 @@ if IS_CLOUD_RUN:
     # Cloud Run: HTTPS environment
     app.config['SESSION_COOKIE_SECURE'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'None'
-    print("[config] Session cookies: SECURE=True, SAMESITE=None (Cloud Run HTTPS)")
+    logger.info("Session cookies: SECURE=True, SAMESITE=None (Cloud Run HTTPS)")
 else:
     # Local development: HTTP environment
     app.config['SESSION_COOKIE_SECURE'] = False
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-    print("[config] Session cookies: SECURE=False, SAMESITE=Lax (Local HTTP)")
+    logger.info("Session cookies: SECURE=False, SAMESITE=Lax (Local HTTP)")
 
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 
@@ -220,7 +223,7 @@ def health():
             "version": "1.0"
         }), 200
     except Exception as e:
-        print(f"[health] Health check failed: {e}")
+        logger.error(f"Health check failed: {e}")
         return jsonify({"status": "unhealthy", "error": str(e)}), 503
 
 @blp_live.route("/x")
@@ -281,13 +284,13 @@ def request_password_reset():
                 reset_link=reset_link
             )
             
-            print(f"[request_password_reset] Password reset email sent to {user['email']}")
+            logger.info(f"Password reset email sent to {user['email']}")
             
             return jsonify({
                 "message": "If an account exists for this email, a password reset link has been sent"
             }), 200
     except Exception as e:
-        print(f"[request_password_reset] Error: {e}")
+        logger.error(f"Failed to process password reset: {e}")
         return jsonify({"error": "Failed to process request"}), 500
     finally:
         if conn:
@@ -297,14 +300,14 @@ def request_password_reset():
 def signup():
     """Register a new user and create company."""
     data = request.get_json()
-    print(f"[signup] Request received: {data}")
+    logger.debug(f"Signup request received")
     
     if not data or not data.get("email") or not data.get("password"):
-        print(f"[signup] Missing email or password")
+        logger.warning("Signup missing email or password")
         return jsonify({"error": "Email and password required"}), 400
     
     if not data.get("company_name") or not data.get("organization_id"):
-        print(f"[signup] Missing company_name or organization_id")
+        logger.warning("Signup missing company_name or organization_id")
         return jsonify({"error": "Company name and organization ID required"}), 400
     
     email = data.get("email")
@@ -314,7 +317,7 @@ def signup():
     password_validation = validate_password_strength(password)
     if not password_validation["is_valid"]:
         error_message = password_validation["errors"][0] if password_validation["errors"] else "Password does not meet requirements"
-        print(f"[signup] Password validation failed: {error_message}")
+        logger.info(f"Password validation failed for {email}: {error_message}")
         return jsonify({"error": error_message}), 400
     
     name = data.get("name", email.split("@")[0])  # Default to email prefix if name not provided
@@ -345,7 +348,7 @@ def signup():
                     "INSERT INTO users_company (id, company_name, company_email, organization_id, company_enabled) VALUES (%s, %s, %s, %s, %s)",
                     (company_id, company_name, email, organization_id, False)
                 )
-                print(f"[signup] New company created (disabled): {company_id} - {company_name}")
+                logger.info(f"New company created (pending approval): {company_id} - {company_name}")
                 is_new_company = True
                 company_name_final = company_name
                 company_enabled = False
@@ -371,7 +374,7 @@ def signup():
                 (user_id, email, password_hash, name, company_id, role_key, terms_accepted, terms_version)
             )
             conn.commit()
-            print(f"[signup] User created successfully: {user_id} - {email}")
+            logger.success(f"User created successfully: {user_id} - {email}")
             
             # If it's a new company, send pending approval email
             if is_new_company:
@@ -390,7 +393,7 @@ def signup():
             
             # If company is not enabled, show pending approval message
             if not company_enabled:
-                print(f"[signup] User added to disabled company: {company_id}")
+                logger.info(f"User added to disabled company: {company_id}")
                 # Get the company admin info for the email
                 cursor.execute("""
                     SELECT u.name, u.email 
@@ -451,7 +454,7 @@ def signup():
             }), 201
     except Exception as e:
         conn.rollback()
-        print(f"[signup] Error: {e}")
+        logger.error(f"Signup failed: {e}")
         return jsonify({"error": "Signup failed"}), 500
     finally:
         conn.close()
@@ -460,10 +463,10 @@ def signup():
 def login():
     """Authenticate user and create session."""
     data = request.get_json()
-    print(f"[login] Request received for email: {data.get('email') if data else 'N/A'}")
+    logger.debug(f"Login request received for email: {data.get('email') if data else 'N/A'}")
     
     if not data or not data.get("email") or not data.get("password"):
-        print(f"[login] Missing email or password")
+        logger.warning("Login missing email or password")
         return jsonify({"error": "Email and password required"}), 400
     
     email = data.get("email")
@@ -486,12 +489,12 @@ def login():
             user = cursor.fetchone()
             
             if not user or not check_password_hash(user["password_hash"], password):
-                print(f"[login] Invalid credentials for email: {email}")
+                logger.warning(f"Invalid credentials for email: {email}")
                 return jsonify({"error": "Invalid credentials"}), 401
             
             # Check if user is enabled
             if not user["user_enabled"]:
-                print(f"[login] User account not enabled for user: {email}")
+                logger.warning(f"User account not enabled: {email}")
                 return jsonify({
                     "error": "Account not enabled",
                     "message": "Ditt konto är inte aktiverat. Kontakta administratör för att få tillgång."
@@ -499,27 +502,27 @@ def login():
             
             # Check if company is enabled
             if user["company_id"] and not user["company_enabled"]:
-                print(f"[login] Company not enabled for user: {email}")
+                logger.warning(f"Company not enabled for user: {email}")
                 return jsonify({
                     "error": "Company not enabled",
                     "message": "Ditt företag avväntar godkännande. Så fort Strawbay godkänt kommer du att få en notifiering via epost."
                 }), 403
             
             user_id = user["id"]
-            print(f"[login] Password verified for user: {user_id}")
+            logger.debug(f"Password verified for user: {user_id}")
             
             # Refresh user session with fresh data from database
             user_data = refresh_user_session(user_id)
             if not user_data:
                 return jsonify({"error": "Failed to load user data"}), 500
             
-            print(f"[login] Login successful for: {email}")
+            logger.success(f"Login successful for: {email}")
             return jsonify({
                 "message": "Logged in successfully",
                 "user": user_data
             }), 200
     except Exception as e:
-        print(f"[login] Error: {e}")
+        logger.error(f"Login failed: {e}")
         return jsonify({"error": "Login failed"}), 500
     finally:
         conn.close()
@@ -533,29 +536,22 @@ def logout():
 @blp_auth.route("/me", methods=["GET"])
 def get_current_user():
     """Get current logged-in user info."""
-    print(f"[get_current_user] ========== REQUEST RECEIVED ==========")
-    print(f"[get_current_user] Session content: {dict(session)}")
-    print(f"[get_current_user] Session keys: {list(session.keys())}")
-    print(f"[get_current_user] Cookies received: {request.cookies}")
+    logger.debug("GET /me - Request received")
     
     if "user_id" not in session:
-        print(f"[get_current_user] ❌ NOT AUTHENTICATED - no user_id in session")
-        print(f"[get_current_user] ========== END REQUEST ==========")
+        logger.warning("Unauthenticated GET /me request - no user_id in session")
         return jsonify({"error": "Not authenticated"}), 401
     
     user_id = session.get("user_id")
-    print(f"[get_current_user] ✅ Found user_id in session: {user_id}")
-    print(f"[get_current_user] Calling refresh_user_session()...")
+    logger.debug(f"User authenticated with ID: {user_id}")
     
     # Refresh and fetch fresh user data from database
     user_data = refresh_user_session(user_id)
     if not user_data:
-        print(f"[get_current_user] ❌ refresh_user_session returned None")
-        print(f"[get_current_user] ========== END REQUEST ==========")
+        logger.error(f"Failed to fetch user information for {user_id}")
         return jsonify({"error": "Failed to fetch user information"}), 500
     
-    print(f"[get_current_user] ✅ Returning user data: {user_data}")
-    print(f"[get_current_user] ========== END REQUEST ==========")
+    logger.debug(f"Returning user data for {user_id}")
     return jsonify(user_data), 200
 
 
@@ -623,7 +619,7 @@ def update_profile():
             # Update session with new name
             session["name"] = updated_user["name"]
             
-            print(f"[update_profile] User {user_id} updated profile: name={updated_user['name']}")
+            logger.success(f"User {user_id} updated profile")
             
             return jsonify({
                 "message": "Profile updated successfully",
@@ -640,7 +636,7 @@ def update_profile():
     
     except Exception as e:
         conn.rollback()
-        print(f"[update_profile] Error updating profile: {e}")
+        logger.error(f"Failed to update profile: {e}")
         return jsonify({"error": "Failed to update profile"}), 500
     finally:
         conn.close()
@@ -690,7 +686,7 @@ def change_password():
             # Verify old password
             if not check_password_hash(user["password_hash"], old_password):
                 conn.close()
-                print(f"[change_password] User {user_id} provided incorrect old password")
+                logger.warning(f"User {user_id} provided incorrect old password")
                 return jsonify({"error": "Current password is incorrect"}), 401
         
         # Hash new password
@@ -712,7 +708,7 @@ def change_password():
                 conn.close()
                 return jsonify({"error": "Failed to update password"}), 500
             
-            print(f"[change_password] User {user_id} ({updated_user['email']}) changed password")
+            logger.success(f"User {user_id} changed password")
             
             return jsonify({
                 "message": "Password changed successfully",
@@ -724,7 +720,7 @@ def change_password():
     
     except Exception as e:
         conn.rollback()
-        print(f"[change_password] Error changing password: {e}")
+        logger.error(f"Failed to change password: {e}")
         return jsonify({"error": "Failed to change password"}), 500
     finally:
         conn.close()
@@ -734,21 +730,21 @@ def change_password():
 def search_companies():
     """Search for companies by name in users_company table."""
     query = request.args.get("q", "").strip()
-    print(f"[search-companies] Query received: '{query}'")
+    logger.debug(f"Company search query: '{query}'")
     
     if not query or len(query) < 2:
-        print(f"[search-companies] Query too short or empty, returning empty results")
+        logger.debug("Query too short, returning empty results")
         return jsonify({"companies": []}), 200
     
     conn = get_db_connection()
     if not conn:
-        print(f"[search-companies] Database connection failed")
+        logger.error("Database connection failed")
         return jsonify({"error": "Database connection failed"}), 500
     
     try:
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
             # Search for companies matching the query (case-insensitive, partial match)
-            print(f"[search-companies] Executing database query for: {query}")
+            logger.debug(f"Executing company search query: {query}")
             cursor.execute(
                 """
                 SELECT DISTINCT company_name, organization_id
@@ -760,10 +756,10 @@ def search_companies():
                 (f"%{query}%",)
             )
             companies = cursor.fetchall()
-            print(f"[search-companies] Found {len(companies)} companies: {companies}")
+            logger.debug(f"Found {len(companies)} companies")
             return jsonify({"companies": [dict(company) for company in companies]}), 200
     except Exception as e:
-        print(f"[search-companies] Error searching companies: {e}")
+        logger.error(f"Company search failed: {e}")
         return jsonify({"error": "Search failed"}), 500
     finally:
         conn.close()
@@ -802,7 +798,7 @@ def get_company_info():
                 "company_email": company["company_email"]
             }), 200
     except Exception as e:
-        print(f"[company-info] Error fetching company info: {e}")
+        logger.error(f"Failed to fetch company info: {e}")
         return jsonify({"error": "Failed to fetch company information"}), 500
     finally:
         conn.close()
@@ -817,14 +813,14 @@ def get_all_companies():
     # Check if user is admin (role_key 1000 or 50)
     role_key = session.get("role_key", 10)
     if role_key not in [1000, 50]:
-        print(f"[get_all_companies] Unauthorized - user role_key: {role_key}")
+        logger.warning(f"Unauthorized access attempt - role_key: {role_key}")
         return jsonify({"error": "Unauthorized"}), 403
     
-    print(f"[get_all_companies] Fetching all companies for user with role_key: {role_key}")
+    logger.debug(f"Fetching all companies for user with role_key: {role_key}")
     
     conn = get_db_connection()
     if not conn:
-        print(f"[get_all_companies] Database connection failed")
+        logger.error("Database connection failed")
         return jsonify({"error": "Database connection failed"}), 500
     
     try:
@@ -836,12 +832,12 @@ def get_all_companies():
                 ORDER BY company_name ASC
             """)
             companies = cursor.fetchall()
-            print(f"[get_all_companies] Found {len(companies)} companies")
+            logger.debug(f"Found {len(companies)} companies")
             # Convert PG8000DictRow objects to dictionaries for JSON serialization
             companies_list = [dict(company) for company in companies]
             return jsonify({"companies": companies_list}), 200
     except Exception as e:
-        print(f"[get_all_companies] Error fetching companies: {e}")
+        logger.error(f"Failed to fetch companies: {e}")
         return jsonify({"error": "Failed to fetch companies"}), 500
     finally:
         conn.close()
@@ -856,11 +852,11 @@ def add_company():
     # Check if user is Strawbay Admin (role_key 1000)
     role_key = session.get("role_key", 10)
     if role_key != 1000:
-        print(f"[add_company] Unauthorized - user role_key: {role_key}")
+        logger.warning(f"Unauthorized add_company attempt - role_key: {role_key}")
         return jsonify({"error": "Only Strawbay Admins can add companies"}), 403
     
     data = request.get_json()
-    print(f"[add_company] Request received: {data}")
+    logger.debug(f"Add company request received")
     
     # Validate input
     if not data:
@@ -894,7 +890,7 @@ def add_company():
             """, (organization_id,))
             
             if cursor.fetchone():
-                print(f"[add_company] Organization ID already exists: {organization_id}")
+                logger.warning(f"Organization ID already exists: {organization_id}")
                 return jsonify({"error": "Organization ID already exists"}), 409
             
             # Insert new company
@@ -907,7 +903,7 @@ def add_company():
             new_company = cursor.fetchone()
             conn.commit()
             
-            print(f"[add_company] Company added successfully: {new_company['company_name']}")
+            logger.success(f"Company added: {new_company['company_name']}")
             return jsonify({
                 "message": "Company added successfully",
                 "company": {
@@ -922,7 +918,7 @@ def add_company():
             }), 201
     except Exception as e:
         conn.rollback()
-        print(f"[add_company] Error adding company: {e}")
+        logger.error(f"Failed to add company: {e}")
         return jsonify({"error": "Failed to add company"}), 500
     finally:
         conn.close()
@@ -940,7 +936,7 @@ def update_company_status(company_id):
     
     # Check if user is Strawbay Admin (role_key == 1000)
     if role_key != 1000:
-        print(f"[update_company_status] User {user_id} tried to update company but is not admin (role_key: {role_key})")
+        logger.warning(f"Unauthorized update_company_status attempt - role_key: {role_key}")
         return jsonify({"error": "Only Strawbay Admins can update company"}), 403
     
     # Get request data
@@ -1008,7 +1004,7 @@ def update_company_status(company_id):
             company_check = cursor.fetchone()
             if not company_check:
                 conn.close()
-                print(f"[update_company_status] Company {company_id} not found")
+                logger.warning(f"Company not found: {company_id}")
                 return jsonify({"error": "Company not found"}), 404
             
             was_enabled = company_check["company_enabled"]
@@ -1031,7 +1027,7 @@ def update_company_status(company_id):
             
             # If company was just enabled, send approval email to all company admins
             if company_enabled is True and not was_enabled:
-                print(f"[update_company_status] Company {company_id} was approved, sending emails to admins")
+                logger.info(f"Company {company_id} was approved, sending approval emails")
                 # Get all Company Admins for this company
                 with conn.cursor(cursor_factory=RealDictCursor) as cursor:
                     cursor.execute("""
@@ -1049,9 +1045,9 @@ def update_company_status(company_id):
                             company_name=updated_company["company_name"],
                             organization_id=updated_company["organization_id"]
                         )
-                        print(f"[update_company_status] Approval email sent to admin: {admin['email']}")
+                        logger.info(f"Approval email sent to admin: {admin['email']}")
             
-            print(f"[update_company_status] Company {company_id} updated by user {user_id}")
+            logger.info(f"Company {company_id} updated by user {user_id}")
             
             return jsonify({
                 "company": {
@@ -1066,7 +1062,7 @@ def update_company_status(company_id):
             }), 200
     except Exception as e:
         conn.rollback()
-        print(f"[update_company_status] Error updating company: {e}")
+        logger.error(f"Failed to update company: {e}")
         return jsonify({"error": "Failed to update company"}), 500
     finally:
         conn.close()
@@ -1156,7 +1152,7 @@ def get_users():
                 ]
             }), 200
     except Exception as e:
-        print(f"[get_users] Error fetching users: {e}")
+        logger.error(f"Failed to fetch users: {e}")
         return jsonify({"error": "Failed to fetch users"}), 500
     finally:
         conn.close()
@@ -1229,7 +1225,7 @@ def create_user():
                 company = cursor.fetchone()
                 company_enabled = company["company_enabled"] if company else False
             
-            print(f"[create_user] User {email} created by admin {user_id}")
+            logger.success(f"User {email} created by admin {user_id}")
             
             return jsonify({
                 "user": {
@@ -1245,7 +1241,7 @@ def create_user():
             }), 201
     except Exception as e:
         conn.rollback()
-        print(f"[create_user] Error creating user: {e}")
+        logger.error(f"Failed to create user: {e}")
         if "duplicate key" in str(e).lower():
             return jsonify({"error": "Email already exists"}), 409
         return jsonify({"error": "Failed to create user"}), 500
@@ -1284,7 +1280,7 @@ def update_user(user_id):
                     return jsonify({"error": "You can only update users in your own company"}), 403
             conn_check.close()
         except Exception as e:
-            print(f"Error checking user company: {e}")
+            logger.error(f"Failed to verify user: {e}")
             return jsonify({"error": "Failed to verify user"}), 500
     
     # Get request data
@@ -1327,7 +1323,7 @@ def update_user(user_id):
                     return jsonify({"error": "Company not found"}), 404
             conn_check.close()
         except Exception as e:
-            print(f"Error checking company: {e}")
+            logger.error(f"Failed to verify company: {e}")
             return jsonify({"error": "Failed to verify company"}), 500
         
         update_fields.append("company_id = %s")

@@ -95,7 +95,7 @@ echo "  • No rebuild needed - Vite watches files automatically"
 echo "  • View browser console for errors/warnings"
 echo ""
 
-# Start Cloud Functions Framework in a new terminal
+# Start Cloud Functions Framework in a separate terminal
 echo "2️⃣  Starting Cloud Functions Framework in a new terminal..."
 echo ""
 
@@ -106,34 +106,43 @@ fi
 
 chmod +x invoice.scanner.cloud.functions/local_server.sh
 
-# Start Cloud Functions in a new Terminal window (macOS)
-echo "📱 Opening new Terminal for Cloud Functions Framework..."
-
 # Get the absolute path for the script
 CF_SCRIPT="$ROOT_DIR/invoice.scanner.cloud.functions/local_server.sh"
 
-# Open in new Terminal window and run the script
+echo "📱 Opening new Terminal for Cloud Functions Framework..."
+echo "   (This keeps Cloud Functions separate from Docker - matching production)"
+echo ""
+
+# Open in new Terminal window and run the script (macOS)
 open -a Terminal "$CF_SCRIPT"
 
-echo ""
+sleep 2
+
 echo "✅ All services started!"
 echo ""
-echo "📍 Services are running:"
+echo "========================================"
+echo "📍 LOCAL DEVELOPMENT STACK RUNNING"
+echo "========================================"
+echo ""
+echo "🔗 Service URLs:"
 echo "   API:                http://localhost:5001"
 echo "   Frontend (Vite):    http://localhost:8080  (hot-reload enabled)"
 echo "   Database:           localhost:5432"
-echo "   Cloud Functions:    http://localhost:9000  (new Terminal window)"
+echo "   Cloud Functions:    http://localhost:9000  (separate Terminal)"
 echo ""
-echo "Frontend Development:"
-echo "  • Changes to JSX/CSS files reflect instantly"
-echo "  • No rebuild needed - Vite watches files automatically"
+echo "👨‍💻 Development Tips:"
+echo "   • Frontend changes reflect instantly (Vite hot-reload)"
+echo "   • API changes require container restart"
+echo "   • Cloud Functions changes require script restart"
 echo ""
-echo "To view Cloud Functions logs:"
-echo "  • Check the Terminal window that opened automatically"
-echo "  • Or run: docker-compose logs -f api"
+echo "📊 View Logs:"
+echo "   Docker services:    docker-compose logs -f"
+echo "   API only:          docker-compose logs -f api"
+echo "   Database:          docker-compose logs -f db"
 echo ""
-echo "Press Ctrl+C in THIS terminal to stop Docker services"
-echo "Press Ctrl+C in the CLOUD FUNCTIONS terminal to stop it"
+echo "🛑 Stopping:"
+echo "   Press Ctrl+C in THIS terminal to stop Docker services"
+echo "   Press Ctrl+C in the CLOUD FUNCTIONS terminal to stop it"
 echo ""
 
 # Wait indefinitely so docker-compose stays running

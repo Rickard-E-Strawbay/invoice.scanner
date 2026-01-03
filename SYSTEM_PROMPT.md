@@ -284,7 +284,7 @@ services:
     ├─ User: scanner / scanner
     ├─ Database: invoice_scanner
     ├─ Health: pg_isready check
-    └─ Init: ./invoice.scanner.db/init.sql
+    └─ Init: ./invoice.scanner.shared/database/schema.sql
 
   api:                   # Flask REST API
     ├─ Port: 5001

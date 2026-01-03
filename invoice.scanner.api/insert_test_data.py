@@ -5,8 +5,8 @@ Script to insert mock test data into documents table for testing pagination
 Migrated from psycopg2 to pg8000 (Pure Python PostgreSQL driver)
 """
 from datetime import datetime, timedelta
-from db_config import DB_CONFIG
-from shared.pg8000_wrapper import get_connection as get_pg8000_connection
+from shared.database.config import DB_CONFIG
+from shared.database.connection import get_connection as get_pg8000_connection
 import random
 
 def insert_test_documents(num_documents=300, company_id='e7a7c86d-82e9-4d94-a74c-536575460dd7'):

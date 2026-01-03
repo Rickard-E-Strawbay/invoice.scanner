@@ -5,8 +5,6 @@
 # ============================================================
 # NOTE: Celery and Redis removed - using Cloud Functions instead
 
-version: '3.8'
-
 services:
 
   # ============================================================
@@ -24,7 +22,7 @@ services:
       - "5432:5432"
     volumes:
       - invoice_scanner_data:/var/lib/postgresql/data
-      - ./invoice.scanner.db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./invoice.scanner.shared/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
     networks:
       - invoice.scanner
     healthcheck:
@@ -47,6 +45,7 @@ services:
       - "5001:5000"
     environment:
       - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app:/parent
       - DATABASE_URL=postgresql://scanner_local:scanner_local@db:5432/invoice_scanner
       - DATABASE_HOST=db
       - DATABASE_PORT=5432
@@ -58,10 +57,9 @@ services:
       - DOCUMENTS_PROCESSED_DIR=/app/documents/processed
       - FLASK_ENV=development
       - FRONTEND_URL=http://localhost:8080
-      # Processing Backend: Cloud Functions Framework (localhost:9000)
-      # External to docker-compose (starts separately on host machine)
-      - PROCESSING_BACKEND=local
-      - PROCESSING_SERVICE_URL=http://host.docker.internal:9000
+      # Processing Backend: Worker Service on port 8000
+      - PROCESSING_BACKEND=worker_service
+      - PROCESSING_SERVICE_URL=http://processing:8000
       # Email Configuration (LOCAL: Gmail SMTP)
       - ENVIRONMENT=local
       - GMAIL_SENDER=${GMAIL_SENDER:-}
@@ -73,15 +71,54 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      processing:
+        condition: service_started
     volumes:
       - ./invoice.scanner.api:/app
+      - ./invoice.scanner.shared:/parent/shared
       - ./documents:/app/documents
     networks:
       - invoice.scanner
     restart: unless-stopped
 
   # ============================================================
-  # SERVICE 2: FRONTEND (invoice.scanner.frontend.react)
+  # SERVICE 2: PROCESSING (invoice.scanner.processing)
+  # Pub/Sub-triggered document processing worker
+  # ============================================================
+
+  processing:
+    build:
+      context: ./invoice.scanner.processing
+      dockerfile: Dockerfile.dev
+    container_name: invoice.scanner.processing
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLASK_APP=main:app
+      - PYTHONPATH=/app:/parent
+      - DATABASE_HOST=db
+      - DATABASE_PORT=5432
+      - DATABASE_USER=scanner_local
+      - DATABASE_PASSWORD=scanner_local
+      - DATABASE_NAME=invoice_scanner
+      - GCP_PROJECT_ID=strawbayscannertest
+      - PROCESSING_LOG_LEVEL=INFO
+      - WORKER_MAX_PROCESSES=5
+      - PROCESSING_SLEEP_TIME=0.1
+      - FLASK_ENV=development
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./invoice.scanner.processing:/app
+      - ./invoice.scanner.shared:/parent/shared
+    networks:
+      - invoice.scanner
+    restart: unless-stopped
+
+  # ============================================================
+  # SERVICE 3: FRONTEND (invoice.scanner.frontend.react)
   # React web application
   # ============================================================
 
@@ -117,34 +154,40 @@ volumes:
 # USAGE
 # ============================================================
 #
-# Start all services:
+# Start all services (docker-compose only):
 #   docker-compose up -d
 #
-# Start Cloud Functions Framework (separate terminal):
-#   cd invoice.scanner.cloud.functions && ./local_server.sh
-#
 # Services and URLs:
-#   API:                http://localhost:5001
-#   Frontend (Vite):    http://localhost:8080  (hot-reload enabled)
-#   PostgreSQL:         localhost:5432
-#   Cloud Functions:    http://localhost:9000 (external, from host.docker.internal)
+#   API:              http://localhost:5001
+#   Frontend (Vite):  http://localhost:8080  (hot-reload enabled)
+#   Processing:       http://localhost:8000
+#   PostgreSQL:       localhost:5432
 #
 # View logs:
-#   docker-compose logs -f                    # All services
-#   docker-compose logs -f api                # API only
-#   docker-compose logs -f db                 # Database
+#   docker-compose logs -f              # All services
+#   docker-compose logs -f api          # API only
+#   docker-compose logs -f processing   # Processing worker
+#   docker-compose logs -f db           # Database
 #
 # Stop services:
-#   docker-compose down                       # Stop all
-#   docker-compose down -v                    # Stop + remove volumes
+#   docker-compose down                 # Stop all
+#   docker-compose down -v              # Stop + remove volumes
 #
 # Environment variables (.env file):
 #   OPENAI_API_KEY=sk-...
 #   GOOGLE_API_KEY=AIza...
 #   ANTHROPIC_API_KEY=sk-ant-...
 #
-# Processing Backend:
-#   Local Cloud Functions Framework runs OUTSIDE docker-compose
-#   API connects via host.docker.internal:9000
-#   This simulates cloud deployment exactly
+# Document Processing Flow:
+#   1. Upload document via API (POST /api/documents)
+#   2. API queues document to processing service (HTTP: POST /api/documents/{id}/process)
+#   3. Processing service processes through 5 stages:
+#      - Preprocess (PDF→PNG)
+#      - OCR extraction (with ThreadPool for multi-page)
+#      - LLM extraction (with ThreadPool for line items)
+#      - Data extraction (normalization)
+#      - Evaluation (confidence scoring with ThreadPool)
+#   4. Updates database at each stage
+#   5. Frontend polls status (GET /api/documents/{id}/status)
+#
 #

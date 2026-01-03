@@ -1,0 +1,40 @@
+# Local Development Dockerfile for docker-compose
+# Includes all development tools and mounts source code
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies for image processing + dev tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    libtesseract-dev \
+    poppler-utils \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy application files
+COPY requirements.txt .
+COPY main.py .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install development dependencies
+RUN pip install --no-cache-dir \
+    gunicorn==21.2.0 \
+    python-dotenv==1.0.0
+
+# Create non-root user for security
+RUN useradd -m -u 1000 scanner && chown -R scanner:scanner /app
+USER scanner
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Start application
+EXPOSE 8000
+ENV FLASK_APP=main:app
+CMD ["python", "-m", "flask", "run", "--host=0.0.0.0", "--port=8000"]

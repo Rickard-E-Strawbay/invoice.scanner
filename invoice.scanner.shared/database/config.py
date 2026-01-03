@@ -1,7 +1,7 @@
 """
-Database configuration for Invoice Scanner API (pg8000 unified driver)
+Unified Database Configuration for Invoice Scanner
 
-Connection modes:
+Connection modes (shared across all services):
 - Cloud Run: pg8000 via Cloud SQL Connector (Private IP, IAM auth)
 - Local docker-compose: pg8000 TCP to db service
 
@@ -10,14 +10,15 @@ Uses pg8000 (Pure Python PostgreSQL driver) for both environments:
 - Works with local TCP connections
 - Provides RealDictCursor compatibility layer for existing code
 
-Migration from psycopg2:
-- All existing code using RealDictCursor continues to work
-- Connection factory and cursor usage unchanged
+Used by:
+- invoice.scanner.api (Flask REST API)
+- invoice.scanner.processing (Worker Service)
+- invoice.scanner.cloud.functions (Cloud Functions - deprecated)
 """
 import os
 from urllib.parse import quote_plus
 
-from pg8000_wrapper import (
+from .connection import (
     get_connection as get_pg8000_connection,
     RealDictCursor
 )
@@ -124,3 +125,18 @@ else:
             user=DATABASE_USER,
             password=DATABASE_PASSWORD
         )
+
+
+__all__ = [
+    'get_connection',
+    'RealDictCursor',
+    'DB_CONFIG',
+    'DATABASE_URL',
+    'IS_CLOUD_RUN',
+    'DATABASE_HOST',
+    'DATABASE_PORT',
+    'DATABASE_USER',
+    'DATABASE_PASSWORD',
+    'DATABASE_NAME',
+    'INSTANCE_CONNECTION_NAME',
+]

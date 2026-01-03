@@ -1,6 +1,6 @@
 # Invoice Scanner
 
-Document processing system with Cloud Functions architecture.
+Document processing system with scalable Processing Worker architecture.
 
 ## 🚀 Quick Start
 
@@ -11,20 +11,20 @@ Document processing system with Cloud Functions architecture.
 
 This starts everything needed:
 - 3 Docker services (API, Frontend with Vite hot-reload, Database)
-- Cloud Functions Framework in new Terminal (:9000)
+- Processing Worker Service on :8000 (in docker-compose)
 
 ### Services & URLs
 - **API:** http://localhost:5001
 - **Frontend:** http://localhost:8080 (Vite dev-server with hot-reload)
 - **Database:** localhost:5432
-- **Cloud Functions Framework:** http://localhost:9000 (in separate Terminal)
+- **Processing Service:** http://localhost:8000 (in docker-compose)
 
 ## 📋 Architecture
 
-**Unified Cloud Functions approach:**
-- Same code runs locally (functions-framework) and in GCP (Cloud Functions)
+**Processing Worker Service approach:**
+- Scalable document processing via Cloud Run Processing Service
 - 5-stage processing pipeline (preprocess → OCR → LLM → extraction → evaluation)
-- Pub/Sub message chaining for orchestration
+- Internal REST API for document processing
 - Cloud SQL for persistence
 - GCS for document storage (cloud only)
 
