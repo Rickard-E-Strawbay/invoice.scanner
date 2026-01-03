@@ -11,13 +11,14 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt /tmp/requirements.txt
+COPY invoice.scanner.api/requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -r /tmp/requirements.txt && \
     rm -rf /tmp/requirements.txt
 
-# Copy application code
-COPY . /app
+# Copy shared module and application code
+COPY invoice.scanner.shared /app/shared
+COPY invoice.scanner.api /app
 
 # Expose port 8080 (Cloud Run expects this by default)
 EXPOSE 8080

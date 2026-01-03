@@ -12,9 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy application files
-COPY requirements.txt .
-COPY main.py .
+# Copy shared module and application files
+COPY invoice.scanner.shared ./shared
+COPY invoice.scanner.processing/requirements.txt .
+COPY invoice.scanner.processing/main.py .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt

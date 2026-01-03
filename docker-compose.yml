@@ -38,8 +38,8 @@ services:
 
   api:
     build:
-      context: ./invoice.scanner.api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: invoice.scanner.api/Dockerfile
     container_name: invoice.scanner.api
     ports:
       - "5001:5000"

@@ -44,7 +44,7 @@ jobs:
         run: |
           docker build -t ${{ steps.set-vars.outputs.registry }}/api:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/api:${{ github.sha }} \
-                       ./invoice.scanner.api
+                       -f invoice.scanner.api/Dockerfile .
           docker push ${{ steps.set-vars.outputs.registry }}/api:latest
           docker push ${{ steps.set-vars.outputs.registry }}/api:${{ github.sha }}
 
@@ -60,7 +60,7 @@ jobs:
         run: |
           docker build -t ${{ steps.set-vars.outputs.registry }}/processing:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/processing:${{ github.sha }} \
-                       ./invoice.scanner.processing
+                       -f invoice.scanner.processing/Dockerfile .
           docker push ${{ steps.set-vars.outputs.registry }}/processing:latest
           docker push ${{ steps.set-vars.outputs.registry }}/processing:${{ github.sha }}
 
@@ -297,7 +297,7 @@ jobs:
         run: |
           docker build -t ${{ steps.set-vars.outputs.registry }}/api:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/api:${{ github.sha }} \
-                       ./invoice.scanner.api
+                       -f invoice.scanner.api/Dockerfile .
           docker push ${{ steps.set-vars.outputs.registry }}/api:latest
           docker push ${{ steps.set-vars.outputs.registry }}/api:${{ github.sha }}
 
@@ -313,7 +313,7 @@ jobs:
         run: |
           docker build -t ${{ steps.set-vars.outputs.registry }}/processing:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/processing:${{ github.sha }} \
-                       ./invoice.scanner.processing
+                       -f invoice.scanner.processing/Dockerfile .
           docker push ${{ steps.set-vars.outputs.registry }}/processing:latest
           docker push ${{ steps.set-vars.outputs.registry }}/processing:${{ github.sha }}
 
