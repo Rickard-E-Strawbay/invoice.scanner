@@ -653,7 +653,10 @@ def startup():
         app.config['_pubsub_started'] = True
 
 if __name__ == "__main__":
-    logger.info(f"[MAIN] Starting Processing Service on port 8000")
+    # Cloud Run sets PORT environment variable (default 8080)
+    # For local dev: PORT defaults to 8000
+    port = int(os.getenv("PORT", "8000"))
+    logger.info(f"[MAIN] Starting Processing Service on port {port}")
     
     # Start Flask app (Flask development server)
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False)

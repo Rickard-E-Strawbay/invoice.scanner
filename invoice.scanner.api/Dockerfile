@@ -23,9 +23,9 @@ COPY invoice.scanner.api /app
 # Expose port 8080 (Cloud Run expects this by default)
 EXPOSE 8080
 
-# Start Flask app directly
+# Start Flask app via gunicorn for production, or directly for local dev
 # Cloud SQL Connector will handle database connection based on environment
 # In Cloud Run: INSTANCE_CONNECTION_NAME env var triggers Connector mode
 # Locally: DATABASE_* env vars trigger psycopg2 mode
-CMD ["python", "-u", "main.py"]
+CMD sh -c 'if [ "$FLASK_ENV" = "production" ]; then gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 4 --threads 2 --worker-class gthread --timeout 120 --access-logfile - --error-logfile - main:app; else python -u main.py --port ${PORT:-8080}; fi'
 
