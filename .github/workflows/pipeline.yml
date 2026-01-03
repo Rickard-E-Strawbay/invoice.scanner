@@ -162,7 +162,7 @@ jobs:
             --cpu=2 \
             --timeout=3600 \
             --max-instances=5 \
-            --set-env-vars "PYTHONUNBUFFERED=1,FLASK_APP=main:app,DATABASE_HOST=cloudsql-instance,DATABASE_PORT=5432,DATABASE_USER=scanner_test,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_NAME=invoice_scanner,ENVIRONMENT=test,PROCESSING_MODE=cloud_run" \
+            --set-env-vars "PYTHONUNBUFFERED=1,FLASK_APP=main:app,INSTANCE_CONNECTION_NAME=strawbayscannertest:europe-west1:invoice-scanner-test,DATABASE_USER=scanner_test,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_NAME=invoice_scanner,ENVIRONMENT=test,PROCESSING_MODE=cloud_run" \
             --service-account=447531332666-compute@developer.gserviceaccount.com
         env:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
@@ -418,7 +418,7 @@ jobs:
             --timeout=3600 \
             --max-instances=10 \
             --min-instances=1 \
-            --set-env-vars "PYTHONUNBUFFERED=1,FLASK_APP=main:app,DATABASE_HOST=cloudsql-instance,DATABASE_PORT=5432,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_NAME=invoice_scanner,ENVIRONMENT=prod,PROCESSING_MODE=cloud_run" \
+            --set-env-vars "PYTHONUNBUFFERED=1,FLASK_APP=main:app,INSTANCE_CONNECTION_NAME=strawbayscannerprod:europe-west1:invoice-scanner-prod,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_NAME=invoice_scanner,ENVIRONMENT=prod,PROCESSING_MODE=cloud_run" \
             --service-account=527148217996-compute@developer.gserviceaccount.com
         env:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
