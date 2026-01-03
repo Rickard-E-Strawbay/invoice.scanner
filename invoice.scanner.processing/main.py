@@ -112,63 +112,47 @@ app = Flask(__name__)
 # ============================================================
 
 def get_db_connection():
+    """Get a database connection.
+    
+    Routes to appropriate connection method:
+    - Cloud Run: Cloud SQL Connector (from get_connection in db_config)
+    - Local: pg8000 TCP (from get_connection in db_config)
     """
-    Get database connection (same as API uses).
-    Routes to Cloud SQL Connector (Cloud Run) or local TCP (docker-compose).
-    Uses unified shared.database.config which handles all routing.
-    """
-    logger.info(f"[DB] Attempting to get connection...")
     try:
         conn = get_connection()
-        if conn:
-            logger.success(f"[DB] Connection established")
-        else:
-            logger.error(f"[DB] get_connection() returned None")
         return conn
     except Exception as e:
         logger.database_error("connection", str(e))
-        logger.error(f"[DB] Exception: {type(e).__name__}: {e}", exc_info=True)
         return None
 
 
 def update_document_status(document_id: str, status: str, error_message: Optional[str] = None) -> bool:
     """Update document processing status in database."""
-    logger.info(f"[STATUS] Updating {document_id} to status: {status}")
     try:
         conn = get_db_connection()
         if not conn:
             logger.database_error("connection", "Cannot connect to database")
-            logger.error(f"[STATUS] Failed: no DB connection")
             return False
 
         try:
-            logger.info(f"[STATUS] Got connection, creating cursor")
-            cursor = conn.cursor()
-            logger.info(f"[STATUS] Cursor created, executing query")
-            
-            if error_message:
-                cursor.execute(
-                    "UPDATE documents SET status = %s, error_message = %s, updated_at = NOW() WHERE id = %s",
-                    (status, error_message, document_id)
-                )
-            else:
-                cursor.execute(
-                    "UPDATE documents SET status = %s, updated_at = NOW() WHERE id = %s",
-                    (status, document_id)
-                )
-            logger.info(f"[STATUS] Query executed, rows: {cursor.rowcount}")
+            with conn.cursor() as cursor:
+                if error_message:
+                    cursor.execute(
+                        "UPDATE documents SET status = %s, error_message = %s, updated_at = NOW() WHERE id = %s",
+                        (status, error_message, document_id)
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE documents SET status = %s, updated_at = NOW() WHERE id = %s",
+                        (status, document_id)
+                    )
             conn.commit()
             logger.success(f"Document {document_id} status: {status}")
             return True
         finally:
-            try:
-                cursor.close()
-                conn.close()
-            except Exception as e:
-                logger.error(f"[STATUS] Error closing: {e}")
+            conn.close()
     except Exception as e:
         logger.database_error("update_status", str(e))
-        logger.error(f"[STATUS] Exception: {type(e).__name__}: {e}", exc_info=True)
         return False
 
 
@@ -180,15 +164,14 @@ def get_document_details(document_id: str) -> Dict[str, Any]:
             return {}
 
         try:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute(
-                "SELECT * FROM documents WHERE id = %s",
-                (document_id,)
-            )
-            result = cursor.fetchone()
-            return dict(result) if result else {}
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    "SELECT * FROM documents WHERE id = %s",
+                    (document_id,)
+                )
+                result = cursor.fetchone()
+                return dict(result) if result else {}
         finally:
-            cursor.close()
             conn.close()
     except Exception as e:
         logger.database_error("fetch_document", str(e))
@@ -203,24 +186,23 @@ def save_extracted_text(document_id: str, extracted_text: str, ocr_data: Dict[st
             return False
 
         try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                UPDATE documents 
-                SET ocr_raw_text = %s, ocr_data = %s, updated_at = NOW()
-                WHERE id = %s
-                """,
-                (
-                    extracted_text,
-                    json.dumps(ocr_data or {}),
-                    document_id
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE documents 
+                    SET ocr_raw_text = %s, ocr_data = %s, updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (
+                        extracted_text,
+                        json.dumps(ocr_data or {}),
+                        document_id
+                    )
                 )
-            )
             conn.commit()
             logger.success(f"Saved OCR data for {document_id}")
             return True
         finally:
-            cursor.close()
             conn.close()
     except Exception as e:
         logger.database_error("save_ocr_data", str(e))
@@ -561,27 +543,19 @@ class PubSubListener:
     
     def on_message(self, message):
         """Callback when Pub/Sub message arrives."""
-        logger.info(f"[PUBSUB] on_message callback triggered")
         try:
-            logger.info(f"[PUBSUB] Decoding message...")
             # message.data is already bytes from Pub/Sub, just decode and parse JSON
             message_data = json.loads(message.data.decode('utf-8'))
             logger.info(f"[PUBSUB] Received message: {message_data}")
             
             # Submit to worker pool
-            logger.info(f"[PUBSUB] Submitting to worker pool")
             self.process_pool.submit(process_document, message_data)
-            logger.info(f"[PUBSUB] Submitted, acknowledging message")
             
             # Acknowledge message
             message.ack()
-            logger.success(f"[PUBSUB] Message acknowledged")
         except Exception as e:
-            logger.error(f"[PUBSUB] Error: {type(e).__name__}: {e}", exc_info=True)
-            try:
-                message.ack()  # Still ack to avoid redelivery
-            except Exception as ack_error:
-                logger.error(f"[PUBSUB] Error acking message: {ack_error}")
+            logger.error(f"[PUBSUB] Error processing message: {e}")
+            message.ack()  # Still ack to avoid redelivery
     
     def wait(self):
         """Wait for all futures (blocking)."""
