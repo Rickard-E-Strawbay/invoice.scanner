@@ -18,6 +18,7 @@ import os
 import threading
 from typing import Optional, Dict, Any, List, Tuple
 from contextlib import contextmanager
+import atexit
 
 try:
     import pg8000
@@ -30,6 +31,11 @@ logger = logging.getLogger(__name__)
 # Global Cloud SQL Connector cache (lazy initialized with thread safety)
 _cloud_sql_connector = None
 _connector_lock = threading.Lock()  # Thread-safe initialization
+
+@atexit.register
+def close_connector():
+    if _cloud_sql_connector:
+        _cloud_sql_connector.close()
 
 
 class PG8000DictRow:
@@ -313,6 +319,7 @@ def get_connection_pg8000(
             port=port,
             database=database,
             user=user,
+            timeout = 5
             password=password,
             ssl_context=None  # SSL disabled for local docker-compose
         )
@@ -327,25 +334,18 @@ def get_cloud_sql_connector():
     """
     Get or create global Cloud SQL Connector instance.
     The connector is expensive to initialize, so we cache it globally.
-    
-    THREAD SAFETY: Uses lock to prevent race conditions when multiple
-    threads try to initialize Connector simultaneously (common in Pub/Sub
-    listener with ThreadPool workers).
     """
     global _cloud_sql_connector
     
     if _cloud_sql_connector is None:
-        with _connector_lock:  # Acquire lock
-            # Double-check inside lock (another thread may have initialized)
-            if _cloud_sql_connector is None:
-                logger.info("[DB] Initializing global Cloud SQL Connector (first use)...")
-                try:
-                    from google.cloud.sql.connector import Connector
-                    _cloud_sql_connector = Connector()
-                    logger.info("[DB] ✅ Cloud SQL Connector initialized successfully")
-                except Exception as e:
-                    logger.error(f"[DB] ❌ Failed to initialize Connector: {e}", exc_info=True)
-                    return None
+        logger.info("[DB] Initializing global Cloud SQL Connector (first use)...")
+        try:
+            from google.cloud.sql.connector import Connector
+            _cloud_sql_connector = Connector()
+            logger.info("[DB] Cloud SQL Connector initialized successfully")
+        except Exception as e:
+            logger.error(f"[DB] Failed to initialize Connector: {e}")
+            return None
     
     return _cloud_sql_connector
 
@@ -446,8 +446,10 @@ def get_connection(
     database = database or os.getenv('DATABASE_NAME', 'invoice_scanner')
     user = user or os.getenv('DATABASE_USER', 'scanner')
     password = password or os.getenv('DATABASE_PASSWORD', 'password')
+
+    is_cloud_run = os.getenv("K_SERVICE") is not None
     
-    if use_connector:
+    if use_connector or is_cloud_run:
         if not instance_connection_name:
             instance_connection_name = os.getenv('CLOUD_SQL_INSTANCE')
         

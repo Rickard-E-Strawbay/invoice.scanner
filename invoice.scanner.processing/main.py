@@ -119,7 +119,10 @@ def get_db_connection():
     - Local: pg8000 TCP (from get_connection in db_config)
     """
     try:
-        conn = get_connection()
+        logger.info("[DB] Attempting to connect...")
+        conn = get_connection(...)
+        logger.info("[DB] Connection object returned")
+  
         return conn
     except Exception as e:
         logger.database_error("connection", str(e))
