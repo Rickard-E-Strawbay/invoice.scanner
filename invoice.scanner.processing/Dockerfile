@@ -15,8 +15,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy application files
 COPY requirements.txt .
 COPY main.py .
-COPY db_config.py .
-COPY pg8000_wrapper.py .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
