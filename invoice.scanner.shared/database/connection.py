@@ -319,7 +319,7 @@ def get_connection_pg8000(
             port=port,
             database=database,
             user=user,
-            timeout = 5
+            timeout = 5,
             password=password,
             ssl_context=None  # SSL disabled for local docker-compose
         )
