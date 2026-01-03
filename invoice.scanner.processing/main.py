@@ -127,86 +127,174 @@ def get_db_connection():
 
 
 def update_document_status(document_id: str, status: str, error_message: Optional[str] = None) -> bool:
-    """Update document processing status in database."""
+    """Update document processing status in database.
+    
+    Uses explicit cursor handling (no context manager) to avoid pg8000 transaction deadlocks.
+    """
+    conn = None
+    cursor = None
     try:
         conn = get_db_connection()
         if not conn:
             logger.database_error("connection", "Cannot connect to database")
             return False
 
-        try:
-            with conn.cursor() as cursor:
-                if error_message:
-                    cursor.execute(
-                        "UPDATE documents SET status = %s, error_message = %s, updated_at = NOW() WHERE id = %s",
-                        (status, error_message, document_id)
-                    )
-                else:
-                    cursor.execute(
-                        "UPDATE documents SET status = %s, updated_at = NOW() WHERE id = %s",
-                        (status, document_id)
-                    )
-            conn.commit()
-            logger.success(f"Document {document_id} status: {status}")
-            return True
-        finally:
-            conn.close()
+        # Explicit cursor creation (NOT using context manager)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Execute query
+        if error_message:
+            cursor.execute(
+                "UPDATE documents SET status = %s, error_message = %s, updated_at = NOW() WHERE id = %s",
+                (status, error_message, document_id)
+            )
+        else:
+            cursor.execute(
+                "UPDATE documents SET status = %s, updated_at = NOW() WHERE id = %s",
+                (status, document_id)
+            )
+        
+        # EXPLICIT close BEFORE commit (critical for pg8000)
+        cursor.close()
+        cursor = None
+        
+        # Now commit
+        conn.commit()
+        logger.success(f"Document {document_id} status: {status}")
+        return True
+        
     except Exception as e:
+        # Attempt rollback on error
+        if conn:
+            try:
+                conn.rollback()
+            except Exception as rollback_error:
+                logger.debug(f"Rollback failed (may have been auto-rolled back): {rollback_error}")
         logger.database_error("update_status", str(e))
         return False
+    finally:
+        # Cleanup: close cursor if still open
+        if cursor:
+            try:
+                cursor.close()
+            except Exception as cursor_error:
+                logger.debug(f"Cursor close error in finally: {cursor_error}")
+        # Cleanup: close connection
+        if conn:
+            try:
+                conn.close()
+            except Exception as conn_error:
+                logger.debug(f"Connection close error in finally: {conn_error}")
 
 
 def get_document_details(document_id: str) -> Dict[str, Any]:
-    """Get document details from database."""
+    """Get document details from database.
+    
+    Uses explicit cursor handling (no context manager) to avoid pg8000 transaction deadlocks.
+    """
+    conn = None
+    cursor = None
     try:
         conn = get_db_connection()
         if not conn:
             return {}
 
-        try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute(
-                    "SELECT * FROM documents WHERE id = %s",
-                    (document_id,)
-                )
-                result = cursor.fetchone()
-                return dict(result) if result else {}
-        finally:
-            conn.close()
+        # Explicit cursor creation with RealDictCursor factory
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Execute query
+        cursor.execute(
+            "SELECT * FROM documents WHERE id = %s",
+            (document_id,)
+        )
+        result = cursor.fetchone()
+        
+        # EXPLICIT close (critical for pg8000)
+        cursor.close()
+        cursor = None
+        conn.close()
+        conn = None
+        
+        return dict(result) if result else {}
+        
     except Exception as e:
         logger.database_error("fetch_document", str(e))
         return {}
+    finally:
+        # Cleanup: close cursor if still open
+        if cursor:
+            try:
+                cursor.close()
+            except Exception as cursor_error:
+                logger.debug(f"Cursor close error in finally: {cursor_error}")
+        # Cleanup: close connection if still open
+        if conn:
+            try:
+                conn.close()
+            except Exception as conn_error:
+                logger.debug(f"Connection close error in finally: {conn_error}")
 
 
 def save_extracted_text(document_id: str, extracted_text: str, ocr_data: Dict[str, Any] = None) -> bool:
-    """Save extracted text and OCR data to database."""
+    """Save extracted text and OCR data to database.
+    
+    Uses explicit cursor handling (no context manager) to avoid pg8000 transaction deadlocks.
+    """
+    conn = None
+    cursor = None
     try:
         conn = get_db_connection()
         if not conn:
             return False
 
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    """
-                    UPDATE documents 
-                    SET ocr_raw_text = %s, ocr_data = %s, updated_at = NOW()
-                    WHERE id = %s
-                    """,
-                    (
-                        extracted_text,
-                        json.dumps(ocr_data or {}),
-                        document_id
-                    )
-                )
-            conn.commit()
-            logger.success(f"Saved OCR data for {document_id}")
-            return True
-        finally:
-            conn.close()
+        # Explicit cursor creation (NOT using context manager)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Execute query
+        cursor.execute(
+            """
+            UPDATE documents 
+            SET ocr_raw_text = %s, ocr_data = %s, updated_at = NOW()
+            WHERE id = %s
+            """,
+            (
+                extracted_text,
+                json.dumps(ocr_data or {}),
+                document_id
+            )
+        )
+        
+        # EXPLICIT close BEFORE commit (critical for pg8000)
+        cursor.close()
+        cursor = None
+        
+        # Now commit
+        conn.commit()
+        logger.success(f"Saved OCR data for {document_id}")
+        return True
+        
     except Exception as e:
+        # Attempt rollback on error
+        if conn:
+            try:
+                conn.rollback()
+            except Exception as rollback_error:
+                logger.debug(f"Rollback failed (may have been auto-rolled back): {rollback_error}")
         logger.database_error("save_ocr_data", str(e))
         return False
+    finally:
+        # Cleanup: close cursor if still open
+        if cursor:
+            try:
+                cursor.close()
+            except Exception as cursor_error:
+                logger.debug(f"Cursor close error in finally: {cursor_error}")
+        # Cleanup: close connection
+        if conn:
+            try:
+                conn.close()
+            except Exception as conn_error:
+                logger.debug(f"Connection close error in finally: {conn_error}")
 
 
 def publish_to_topic(topic_name: str, message_data: Dict[str, Any]) -> bool:
