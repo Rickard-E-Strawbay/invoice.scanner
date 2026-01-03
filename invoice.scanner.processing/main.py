@@ -533,7 +533,8 @@ class PubSubListener:
     def on_message(self, message):
         """Callback when Pub/Sub message arrives."""
         try:
-            message_data = json.loads(base64.b64decode(message.data).decode())
+            # message.data is already bytes from Pub/Sub, just decode and parse JSON
+            message_data = json.loads(message.data.decode('utf-8'))
             logger.info(f"[PUBSUB] Received message: {message_data}")
             
             # Submit to worker pool
