@@ -8,7 +8,7 @@ COPY invoice.scanner.frontend.react/package*.json ./
 # Install dependencies with legacy peer deps support
 RUN npm install --legacy-peer-deps
 
-COPY invoice.scanner.frontend.react/* /app
+COPY invoice.scanner.frontend.react/ .
 
 # Build production bundle
 RUN npm run build
