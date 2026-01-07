@@ -5,8 +5,6 @@
 # ============================================================
 # NOTE: Celery and Redis removed - using Cloud Functions instead
 
-version: '3.8'
-
 services:
 
   # ============================================================
@@ -24,7 +22,7 @@ services:
       - "5432:5432"
     volumes:
       - invoice_scanner_data:/var/lib/postgresql/data
-      - ./invoice.scanner.db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./invoice.scanner.db/init.sql:/docker-entrypoint-initdb.d
     networks:
       - invoice.scanner
     healthcheck:
@@ -40,11 +38,11 @@ services:
 
   api:
     build:
-      context: ./invoice.scanner.api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./invoice.scanner.api/Dockerfile
     container_name: invoice.scanner.api
     ports:
-      - "5001:5000"
+      - "5001:8080"
     environment:
       - PYTHONUNBUFFERED=1
       - DATABASE_URL=postgresql://scanner_local:scanner_local@db:5432/invoice_scanner
@@ -58,6 +56,7 @@ services:
       - DOCUMENTS_PROCESSED_DIR=/app/documents/processed
       - FLASK_ENV=development
       - FRONTEND_URL=http://localhost:8080
+      - LOGGING_LEVEL=DEBUG
       # Processing Backend: Cloud Functions Framework (localhost:9000)
       # External to docker-compose (starts separately on host machine)
       - PROCESSING_BACKEND=local
@@ -74,7 +73,9 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - ./invoice.scanner.api:/app
+      # Mount only specific directories, NOT /app root (preserves Docker build copies)
+      - ./invoice.scanner.api/lib:/app/lib
+      - ./invoice.scanner.api/documents:/app/documents
       - ./documents:/app/documents
     networks:
       - invoice.scanner

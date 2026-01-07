@@ -46,7 +46,6 @@ NOTES:
 
 import functions_framework
 import json
-import logging
 import os
 import atexit
 from google.cloud import pubsub_v1
@@ -54,6 +53,16 @@ from google.cloud import secretmanager
 from datetime import datetime
 from typing import Dict, Any
 from functools import lru_cache
+
+# Import ComponentLogger instead of standard logging
+try:
+    from shared.logging import ComponentLogger
+    logger = ComponentLogger("CloudFunctions")
+except ImportError:
+    # Fallback if shared module not available
+    import logging
+    logger = logging.getLogger("CloudFunctions")
+    logger.setLevel(os.getenv("FUNCTION_LOG_LEVEL", "DEBUG"))
 
 # Optional imports for Cloud SQL
 try:
@@ -63,16 +72,6 @@ try:
 except ImportError:
     HAS_CLOUD_SQL_CONNECTOR = False
     IPTypes = None
-
-logger = logging.getLogger(__name__)
-logger.setLevel(os.getenv("FUNCTION_LOG_LEVEL", "DEBUG"))
-
-# Add console handler to ensure logs are printed
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter("%(name)s - %(levelname)s - %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
 
 
 # ===== LOCAL PUB/SUB SIMULATOR =====
@@ -86,7 +85,7 @@ def simulate_pubsub_message(topic_name: str, message_data: Dict[str, Any]) -> No
     In GCP, Cloud Functions are triggered by Pub/Sub topics.
     Locally, we simulate this by directly invoking the next function.
     """
-    logger.info(f"[LOCAL-PUBSUB] 📨 Simulating Pub/Sub message to {topic_name}")
+    logger.info(f"📨 Simulating Pub/Sub message to {topic_name}")
 
     # Create a mock CloudEvent object
     import base64
@@ -127,23 +126,23 @@ def simulate_pubsub_message(topic_name: str, message_data: Dict[str, Any]) -> No
 
     if topic_name in topic_to_function:
         func_name = topic_to_function[topic_name]
-        logger.info(f"[LOCAL-PUBSUB] 🔗 Calling {func_name} directly (local mode)")
+        logger.info(f"🔗 Calling {func_name} directly (local mode)")
 
         # Get the function from globals and call it
         try:
             func = globals().get(func_name)
             if func:
                 func(cloud_event)
-                logger.info(f"[LOCAL-PUBSUB] ✅ Successfully called {func_name}")
+                logger.info(f"✅ Successfully called {func_name}")
             else:
-                logger.error(f"[LOCAL-PUBSUB] ❌ Function {func_name} not found")
+                logger.error(f"❌ Function {func_name} not found")
         except Exception as e:
-            logger.error(f"[LOCAL-PUBSUB] ❌ Error calling {func_name}: {e}")
+            logger.error(f"❌ Error calling {func_name}: {e}")
             import traceback
 
             traceback.print_exc()
     else:
-        logger.warning(f"[LOCAL-PUBSUB] ⚠️  No function mapping for topic {topic_name}")
+        logger.warning(f"⚠️  No function mapping for topic {topic_name}")
 
 
 # Get configuration from environment
@@ -168,7 +167,7 @@ def get_secret(secret_name: str) -> str:
         return _SECRET_CACHE[secret_name]
 
     if not PROJECT_ID:
-        logger.warning(f"[SECRET] No PROJECT_ID set, returning empty string for {secret_name}")
+        logger.warning(f"No PROJECT_ID set, returning empty string for {secret_name}")
         return ""
 
     try:
@@ -177,10 +176,10 @@ def get_secret(secret_name: str) -> str:
         response = client.access_secret_version(request={"name": name})
         secret_value = response.payload.data.decode("UTF-8")
         _SECRET_CACHE[secret_name] = secret_value
-        logger.info(f"[SECRET] ✓ Retrieved {secret_name} from Secret Manager")
+        logger.info(f"✓ Retrieved {secret_name} from Secret Manager")
         return secret_value
     except Exception as e:
-        logger.warning(f"[SECRET] Could not fetch {secret_name}: {e}")
+        logger.warning(f"Could not fetch {secret_name}: {e}")
         return ""
 
 
@@ -228,7 +227,7 @@ def get_db_connection():
     # Try Cloud SQL Connector for GCP
     if CLOUD_SQL_CONN and PROJECT_ID and HAS_CLOUD_SQL_CONNECTOR:
         try:
-            logger.info(f"[DB] Connecting via Cloud SQL Connector: {CLOUD_SQL_CONN}")
+            logger.info(f"Connecting via Cloud SQL Connector: {CLOUD_SQL_CONN}")
             connector = get_connector()
             conn = connector.connect(
                 CLOUD_SQL_CONN,
@@ -246,7 +245,7 @@ def get_db_connection():
     # Note: This won't work in Cloud Functions (no public IP or proxy)
     # In GCP, always use Cloud SQL Connector above
     try:
-        logger.info(f"[DB] Fallback: Using direct pg8000 to {DATABASE_HOST}:{DATABASE_PORT}")
+        logger.info(f"Fallback: Using direct pg8000 to {DATABASE_HOST}:{DATABASE_PORT}")
         import pg8000
 
         conn = pg8000.connect(
@@ -260,7 +259,7 @@ def get_db_connection():
         logger.info("[DB] ✓ Connected via pg8000")
         return conn
     except Exception as e:
-        logger.error(f"[DB] Connection failed: {e}")
+        logger.error(f"Connection failed: {e}")
         return None
 
 
@@ -324,7 +323,7 @@ def update_document_status(document_id: str, status: str) -> bool:
         logger.warning("[DB] ⚠️  Could not connect to database for status update (non-critical, continuing)")
         return False
 
-    logger.info(f"[DB] ✓ Connected. Updating document {document_id} to status '{status}'")
+    logger.info(f"✓ Connected. Updating document {document_id} to status '{status}'")
 
     try:
         cursor = conn.cursor()
@@ -338,12 +337,12 @@ def update_document_status(document_id: str, status: str) -> bool:
                 (status, document_id),
             )
             conn.commit()
-            logger.info(f"[DB] ✓ Document {document_id} status updated -> {status}")
+            logger.info(f"✓ Document {document_id} status updated -> {status}")
             return True
         finally:
             cursor.close()
     except Exception as e:
-        logger.error(f"[DB] ❌ Error updating status: {type(e).__name__}: {e}")
+        logger.error(f"❌ Error updating status: {type(e).__name__}: {e}")
         import traceback
 
         traceback.print_exc()
@@ -356,14 +355,14 @@ def update_document_status(document_id: str, status: str) -> bool:
 def publish_to_topic(topic_name: str, message_data: Dict[str, Any]) -> bool:
     """Publish message to Pub/Sub topic to trigger next stage."""
     try:
-        logger.info(f"[Pub/Sub] � Publishing message to {topic_name}: {message_data}")
+        logger.info(f"� Publishing message to {topic_name}: {message_data}")
         publisher = pubsub_v1.PublisherClient()
         topic_path = publisher.topic_path(PROJECT_ID, topic_name)
         message_json = json.dumps(message_data).encode("utf-8")
 
         future = publisher.publish(topic_path, message_json)
         message_id = future.result(timeout=5)
-        logger.info(f"[Pub/Sub] ✓ Published with message_id: {message_id}")
+        logger.info(f"✓ Published with message_id: {message_id}")
         return True
     except Exception as e:
         if "DefaultCredentialsError" in type(e).__name__:
@@ -371,7 +370,7 @@ def publish_to_topic(topic_name: str, message_data: Dict[str, Any]) -> bool:
             simulate_pubsub_message(topic_name, message_data)
             return True
         else:
-            logger.error(f"[Pub/Sub] ❌ Failed: {type(e).__name__}: {e}")
+            logger.error(f"❌ Failed: {type(e).__name__}: {e}")
             return False
 
 
@@ -403,10 +402,10 @@ def cf_preprocess_document(cloud_event):
         stage = message.get("stage")
 
         if stage != "preprocess":
-            logger.info(f"[CF-PREPROCESS] ⏭️  Skipping message with stage={stage} (not 'preprocess')")
+            logger.info(f"⏭️  Skipping message with stage={stage} (not 'preprocess')")
             return
 
-        logger.info(f"[CF-PREPROCESS] ✅ Processing document {document_id}")
+        logger.info(f"✅ Processing document {document_id}")
 
         # Update status
         update_document_status(document_id, "preprocessing")
@@ -423,10 +422,10 @@ def cf_preprocess_document(cloud_event):
         # Publish to next stage
         publish_to_topic("document-ocr", {"document_id": document_id, "company_id": company_id, "stage": "ocr"})
 
-        logger.info(f"[CF-PREPROCESS] ✅ Completed for {document_id}")
+        logger.info(f"✅ Completed for {document_id}")
 
     except Exception as e:
-        logger.error(f"[CF-PREPROCESS] ❌ Error: {type(e).__name__}: {e}")
+        logger.error(f"❌ Error: {type(e).__name__}: {e}")
         import traceback
 
         traceback.print_exc()
@@ -455,7 +454,7 @@ def cf_extract_ocr_text(cloud_event):
         if stage != "ocr":
             return
 
-        logger.info(f"[CF-OCR] Processing document {document_id}")
+        logger.info(f"Processing document {document_id}")
 
         update_document_status(document_id, "ocr_extracting")
 
@@ -469,10 +468,10 @@ def cf_extract_ocr_text(cloud_event):
         # Publish to next stage
         publish_to_topic("document-llm", {"document_id": document_id, "company_id": company_id, "stage": "llm"})
 
-        logger.info(f"[CF-OCR] Completed for {document_id}")
+        logger.info(f"Completed for {document_id}")
 
     except Exception as e:
-        logger.error(f"[CF-OCR] Error: {e}")
+        logger.error(f"Error: {e}")
         document_id = message.get("document_id") if "message" in locals() else "unknown"
         update_document_status(document_id, "error", str(e))
 
@@ -500,7 +499,7 @@ def cf_predict_invoice_data(cloud_event):
         if stage != "llm":
             return
 
-        logger.info(f"[CF-LLM] Processing document {document_id}")
+        logger.info(f"Processing document {document_id}")
 
         update_document_status(document_id, "llm_predicting")
 
@@ -516,10 +515,10 @@ def cf_predict_invoice_data(cloud_event):
             "document-extraction", {"document_id": document_id, "company_id": company_id, "stage": "extraction"}
         )
 
-        logger.info(f"[CF-LLM] Completed for {document_id}")
+        logger.info(f"Completed for {document_id}")
 
     except Exception as e:
-        logger.error(f"[CF-LLM] Error: {e}")
+        logger.error(f"Error: {e}")
         document_id = message.get("document_id") if "message" in locals() else "unknown"
         update_document_status(document_id, "error", str(e))
 
@@ -547,7 +546,7 @@ def cf_extract_structured_data(cloud_event):
         if stage != "extraction":
             return
 
-        logger.info(f"[CF-EXTRACTION] Processing document {document_id}")
+        logger.info(f"Processing document {document_id}")
 
         update_document_status(document_id, "extraction")
 
@@ -563,10 +562,10 @@ def cf_extract_structured_data(cloud_event):
             "document-evaluation", {"document_id": document_id, "company_id": company_id, "stage": "evaluation"}
         )
 
-        logger.info(f"[CF-EXTRACTION] Completed for {document_id}")
+        logger.info(f"Completed for {document_id}")
 
     except Exception as e:
-        logger.error(f"[CF-EXTRACTION] Error: {e}")
+        logger.error(f"Error: {e}")
         document_id = message.get("document_id") if "message" in locals() else "unknown"
         update_document_status(document_id, "error", str(e))
 
@@ -596,7 +595,7 @@ def cf_run_automated_evaluation(cloud_event):
         if stage != "evaluation":
             return
 
-        logger.info(f"[CF-EVALUATION] Processing document {document_id}")
+        logger.info(f"Processing document {document_id}")
 
         update_document_status(document_id, "evaluation")
 
@@ -608,10 +607,10 @@ def cf_run_automated_evaluation(cloud_event):
         # Final stage - mark as completed
         update_document_status(document_id, "completed")
 
-        logger.info(f"[CF-EVALUATION] Completed for {document_id}")
+        logger.info(f"Completed for {document_id}")
 
     except Exception as e:
-        logger.error(f"[CF-EVALUATION] Error: {e}")
+        logger.error(f"Error: {e}")
         document_id = message.get("document_id") if "message" in locals() else "unknown"
         update_document_status(document_id, "error", str(e))
 
@@ -629,4 +628,4 @@ def close_connector():
             _connector.close()
             _connector = None
         except Exception as e:
-            logger.error(f"[CLEANUP] Error closing connector: {e}")
+            logger.error(f"Error closing connector: {e}")
