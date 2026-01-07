@@ -10,21 +10,20 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy shared module directly (will be linked via PYTHONPATH)
-COPY invoice.scanner.shared /app/
-
-# Set PYTHONPATH to include shared module
-# This allows imports like: from shared.database.connection import ...
-ENV PYTHONPATH=/app:/app/invoice.scanner.shared
-
-# Copy requirements and install dependencies
+# Copy requirements and install dependencies FIRST (before copying shared)
+# This avoids circular imports where pip tries to import our local 'logging' module
 COPY invoice.scanner.api/requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -r /tmp/requirements.txt && \
     rm -rf /tmp/requirements.txt
 
-# Copy application code
+# NOW copy shared module and application code (after pip is done)
+COPY invoice.scanner.shared /app/shared
 COPY invoice.scanner.api /app/
+
+# Set PYTHONPATH to include shared module as a sibling
+# This allows imports like: from shared.database.connection import ...
+ENV PYTHONPATH=/app
 
 # Expose port 8080 (Cloud Run expects this by default)
 EXPOSE 8080
