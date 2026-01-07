@@ -51,11 +51,15 @@ echo ""
 # Determine GCS bucket based on project
 if [[ "$PROJECT_ID" == *"prod"* ]]; then
     GCS_BUCKET="invoice-scanner-prod-docs"
+    DB_USER="scanner_prod"
+    DB_PASSWORD=$(gcloud secrets versions access latest --secret=db_password_prod --project="$PROJECT_ID" 2>/dev/null || echo "")
 else
     GCS_BUCKET="invoice-scanner-test-docs"
+    DB_USER="scanner_test"
+    DB_PASSWORD=$(gcloud secrets versions access latest --secret=db_password_test --project="$PROJECT_ID" 2>/dev/null || echo "")
 fi
 
-ENV_VARS="GCP_PROJECT_ID=$PROJECT_ID,CLOUD_SQL_CONN=$CLOUD_SQL_CONN,DATABASE_NAME=invoice_scanner,STORAGE_TYPE=gcs,GCS_BUCKET_NAME=$GCS_BUCKET,PUBSUB_TOPIC_PREFIX=document-,OPENAI_MODEL=gpt-4o,GOOGLE_MODEL=gemini-2.0-flash,ANTHROPIC_MODEL=claude-3-5-sonnet-20241022,FUNCTION_LOG_LEVEL=INFO,PYTHONUNBUFFERED=1"
+ENV_VARS="GCP_PROJECT_ID=$PROJECT_ID,INSTANCE_CONNECTION_NAME=$CLOUD_SQL_CONN,DATABASE_USER=$DB_USER,DATABASE_PASSWORD=$DB_PASSWORD,DATABASE_NAME=invoice_scanner,STORAGE_TYPE=gcs,GCS_BUCKET_NAME=$GCS_BUCKET,PUBSUB_TOPIC_PREFIX=document-,OPENAI_MODEL=gpt-4o,GOOGLE_MODEL=gemini-2.0-flash,ANTHROPIC_MODEL=claude-3-5-sonnet-20241022,FUNCTION_LOG_LEVEL=INFO,PYTHONUNBUFFERED=1"
 
 echo "[DEPLOY] Deploying 5 Cloud Functions..."
 echo ""
