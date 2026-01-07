@@ -15,10 +15,13 @@ flask_cors
 anthropic
 google-generativeai
 
-cloud-sql-python-connector==1.4.3ßΩ
+# Cloud and database
+cloud-sql-python-connector==1.4.3
 pg8000==1.30.5
 google-cloud-storage>=2.14.0
 google-cloud-pubsub>=2.23.0
+
+# Utilities
 jinja2>=3.0.0
 python-dotenv
 requests>=2.31.0

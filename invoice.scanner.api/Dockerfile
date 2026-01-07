@@ -32,5 +32,5 @@ EXPOSE 8080
 # Cloud SQL Connector will handle database connection based on environment
 # In Cloud Run: INSTANCE_CONNECTION_NAME env var triggers Connector mode
 # Locally: DATABASE_* env vars trigger psycopg2 mode
-# NOTE: Cloud Run's gunicorn wrapper only accepts --host and --port, no other flags
-CMD exec sh -c 'if [ "$FLASK_ENV" = "production" ]; then exec gunicorn --host 0.0.0.0 --port ${PORT:-8080} main:app; else exec python -u main.py --port ${PORT:-8080}; fi'
+ENTRYPOINT ["/bin/sh", "-c"]
+CMD ["if [ \"$FLASK_ENV\" = \"production\" ]; then exec gunicorn --host 0.0.0.0 --port ${PORT:-8080} main:app; else exec python -u main.py --port ${PORT:-8080}; fi"]
