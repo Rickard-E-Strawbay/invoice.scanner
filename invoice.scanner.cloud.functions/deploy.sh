@@ -11,27 +11,48 @@ set -e
 PROJECT_ID=${1:-strawbayscannertest}
 REGION=${2:-europe-west1}
 
+# Get current directory and calculate relative path to repo root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+CF_DIR="$REPO_ROOT/invoice.scanner.cloud.functions"
+
+# Cleanup function to remove temporary shared module on exit
+cleanup() {
+    if [ -d "$CF_DIR/shared" ]; then
+        rm -rf "$CF_DIR/shared" 2>/dev/null || true
+    fi
+    if [ -f "$CF_DIR/pyproject.toml" ]; then
+        rm -f "$CF_DIR/pyproject.toml" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
 echo "[DEPLOY] Starting Cloud Functions deployment to project: $PROJECT_ID"
 echo "[DEPLOY] Region: $REGION"
 echo ""
 
-# NOTE: gcloud functions deploy uses --source . (repo root) so it can access both
-# invoice.scanner.cloud.functions/ and invoice.scanner.shared/ for pip install
-# We still run from CF directory for convenience, but gcloud resolves from repo root
+SHARED_DIR="$REPO_ROOT/invoice.scanner.shared"
 
-# Get current directory and calculate relative path to repo root
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
-
-# Change to repo root for deployment (so --source . works correctly)
-cd "$REPO_ROOT"
-
-# Verify we can see both directories
-if [ ! -d "invoice.scanner.cloud.functions" ] || [ ! -d "invoice.scanner.shared" ]; then
-    echo "❌ ERROR: Could not verify directory structure from repo root"
+# Verify both directories exist
+if [ ! -d "$CF_DIR" ] || [ ! -d "$SHARED_DIR" ]; then
+    echo "❌ ERROR: Could not find required directories"
+    echo "  CF_DIR: $CF_DIR"
+    echo "  SHARED_DIR: $SHARED_DIR"
     exit 1
 fi
-echo "✓ Verified repo structure from: $REPO_ROOT"
+echo "✓ Verified repo structure"
+echo ""
+
+# Copy shared module into CF directory for pip to access during Cloud Build
+# gcloud functions deploy --source CF_DIR will see shared/ during pip install
+echo "[DEPLOY] Preparing shared module for Cloud Build..."
+TEMP_SHARED="$CF_DIR/shared"
+if [ -d "$TEMP_SHARED" ]; then
+    rm -rf "$TEMP_SHARED"
+fi
+cp -r "$SHARED_DIR/shared" "$CF_DIR/shared"
+cp "$SHARED_DIR/pyproject.toml" "$CF_DIR/pyproject.toml"
+echo "  ✓ Copied shared module to CF directory"
 echo ""
 
 # Set current project
@@ -91,7 +112,7 @@ gcloud functions deploy cf-preprocess-document \
     --runtime python311 \
     --trigger-topic document-processing \
     --entry-point cf_preprocess_document \
-    --source . \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
@@ -107,7 +128,7 @@ gcloud functions deploy cf-extract-ocr-text \
     --runtime python311 \
     --trigger-topic document-ocr \
     --entry-point cf_extract_ocr_text \
-    --source . \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 1024MB \
     --timeout 300 \
@@ -123,7 +144,7 @@ gcloud functions deploy cf-predict-invoice-data \
     --runtime python311 \
     --trigger-topic document-llm \
     --entry-point cf_predict_invoice_data \
-    --source . \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
@@ -139,7 +160,7 @@ gcloud functions deploy cf-extract-structured-data \
     --runtime python311 \
     --trigger-topic document-extraction \
     --entry-point cf_extract_structured_data \
-    --source . \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
@@ -155,7 +176,7 @@ gcloud functions deploy cf-run-automated-evaluation \
     --runtime python311 \
     --trigger-topic document-evaluation \
     --entry-point cf_run_automated_evaluation \
-    --source . \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
@@ -164,7 +185,17 @@ gcloud functions deploy cf-run-automated-evaluation \
     --project="$PROJECT_ID" \
     --quiet
 
+# Clean up temporary copied shared module
+echo "[DEPLOY] Cleaning up temporary files..."
+if [ -d "$CF_DIR/shared" ]; then
+    rm -rf "$CF_DIR/shared"
+fi
+if [ -f "$CF_DIR/pyproject.toml" ]; then
+    rm -f "$CF_DIR/pyproject.toml"
+fi
+echo "  ✓ Removed temporary shared module copy"
 echo ""
+
 echo "✅ All Cloud Functions deployed successfully!"
 echo ""
 echo "Verify deployment:"
