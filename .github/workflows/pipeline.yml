@@ -120,12 +120,10 @@ jobs:
 
       - name: Deploy Cloud Functions to TEST
         run: |
-          # Sync shared module into CF directory
-          rsync -a --delete "invoice.scanner.shared/" "invoice.scanner.cloud.functions/shared/"
-          
-          # Deploy
+          # NOTE: deploy.sh now uses --source $ROOT (repo root),
+          # so Cloud Build includes both invoice.scanner.cloud.functions/ and invoice.scanner.shared/
           chmod +x invoice.scanner.cloud.functions/deploy.sh
-          rsync -a --delete "invoice.scanner.shared/" "invoice.scanner.cloud.functions/"
+          ./invoice.scanner.cloud.functions/deploy.sh strawbayscannertest europe-west1
       - name: Verify Cloud Functions Deployment
         run: |
           echo "✅ Cloud Functions Deploy Complete!"
@@ -398,10 +396,8 @@ jobs:
 
       - name: Deploy Cloud Functions to PROD
         run: |
-          # Sync shared module into CF directory
-          rsync -a --delete "invoice.scanner.shared/" "invoice.scanner.cloud.functions/shared/"
-          
-          # Deploy
+          # NOTE: deploy.sh now uses --source $ROOT (repo root),
+          # so Cloud Build includes both invoice.scanner.cloud.functions/ and invoice.scanner.shared/
           chmod +x invoice.scanner.cloud.functions/deploy.sh
           ./invoice.scanner.cloud.functions/deploy.sh strawbayscannerprod europe-west1
 
