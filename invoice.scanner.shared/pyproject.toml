@@ -6,3 +6,6 @@ build-backend = "setuptools.build_meta"
 name = "invoice-scanner-shared"
 version = "0.1.0"
 description = "Shared utilities and configurations for Invoice Scanner services"
+
+[tool.setuptools]
+packages = ["shared"]
