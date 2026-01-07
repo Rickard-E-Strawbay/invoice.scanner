@@ -36,6 +36,19 @@ except Exception as e:
     logger.error(f"Error initializing storage service: {e}")
     storage_service = None
 
+# Initialize Cloud SQL Connector early (pre-warm for health checks)
+# This ensures health checks don't timeout waiting for connector initialization
+logger.info("Pre-warming Cloud SQL Connector for health checks...")
+try:
+    from shared.database.connection import get_cloud_sql_connector
+    connector = get_cloud_sql_connector()
+    if connector:
+        logger.success("Cloud SQL Connector pre-warmed")
+    else:
+        logger.warning("Cloud SQL Connector not available (running locally?)")
+except Exception as e:
+    logger.warning(f"Could not pre-warm Cloud SQL Connector: {e}")
+
 # Initialize processing backend (LOCAL Celery or CLOUD Functions based on env)
 logger.info(f"Attempting to initialize processing backend...")
 logger.info(f"PROCESSING_BACKEND env: {os.getenv('PROCESSING_BACKEND', 'not set')}")
