@@ -1,6 +1,9 @@
 # Cloud Functions Framework (Gen2) with CloudEvents support
 functions-framework[cloudevents]==3.5.0
 
+# Local shared package (installed with -e flag for development)
+-e ../invoice.scanner.shared
+
 # Google Cloud Libraries (Official versions from Google Cloud samples)
 google-cloud-pubsub==2.20.0
 google-cloud-secret-manager==2.16.0

@@ -15,47 +15,6 @@ echo "[DEPLOY] Starting Cloud Functions deployment to project: $PROJECT_ID"
 echo "[DEPLOY] Region: $REGION"
 echo ""
 
-# Copy shared module into Cloud Functions directory for deployment
-echo "[DEPLOY] Preparing shared modules..."
-if [ -d "../invoice.scanner.shared" ]; then
-    echo "  ℹ️  Found ../invoice.scanner.shared"
-    rm -rf ./shared 2>/dev/null || true
-    mkdir -p ./shared
-    cp -r ../invoice.scanner.shared/* ./shared/
-    if [ -d "./shared" ]; then
-        echo "  ✓ Successfully copied shared module to ./shared"
-        # Verify __init__.py exists
-        if [ -f "./shared/__init__.py" ]; then
-            echo "  ✓ Verified shared/__init__.py exists"
-        else
-            echo "  ❌ ERROR: shared/__init__.py not found after copy!"
-            exit 1
-        fi
-    else
-        echo "  ❌ ERROR: Failed to copy shared module - ./shared directory not created"
-        exit 1
-    fi
-else
-    echo "  ❌ ERROR: Could not find ../invoice.scanner.shared"
-    echo "  Make sure you're running deploy.sh from the invoice.scanner.cloud.functions directory"
-    exit 1
-fi
-echo ""
-
-# Sanity check: Verify shared module can be imported
-echo "[DEPLOY] Verifying shared package structure..."
-PYTHONPATH=. python3 - <<EOF
-import shared.configuration.config
-print("✓ shared.configuration.config import OK")
-EOF
-
-if [ $? -ne 0 ]; then
-    echo "  ❌ ERROR: Failed to import shared.configuration.config"
-    echo "  This means the Cloud Functions deployment will also fail"
-    exit 1
-fi
-echo ""
-
 # Set current project
 gcloud config set project "$PROJECT_ID"
 
@@ -189,17 +148,6 @@ gcloud functions deploy cf-run-automated-evaluation \
 echo ""
 echo "✅ All Cloud Functions deployed successfully!"
 echo ""
-
-# Cleanup: Remove copied shared module
-echo "[DEPLOY] Cleaning up temporary files..."
-if [ -d "./shared" ]; then
-    rm -rf ./shared
-    echo "  ✓ Removed temporary shared module copy"
-else
-    echo "  ℹ️  No temporary shared module to clean up"
-fi
-echo ""
-
 echo "Verify deployment:"
 echo "  gcloud functions list --v2 --project=$PROJECT_ID"
 echo ""
