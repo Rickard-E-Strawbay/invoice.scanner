@@ -34,14 +34,14 @@ echo "📦 Installing dependencies..."
 $PYTHON_CMD -m pip install -q -r "$SCRIPT_DIR/requirements.txt" 2>/dev/null || true
 echo "✓ Dependencies ready"
 
-# Set environment variables
+# Set environment variables (match docker-compose.yml for local dev)
 export PYTHONUNBUFFERED=1
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 export DATABASE_HOST="${DATABASE_HOST:-127.0.0.1}"
 export DATABASE_PORT="${DATABASE_PORT:-5432}"
 export DATABASE_NAME="${DATABASE_NAME:-invoice_scanner}"
-export DATABASE_USER="${DATABASE_USER:-scanner}"
-export DATABASE_PASSWORD="${DATABASE_PASSWORD:-scanner}"
+export DATABASE_USER="${DATABASE_USER:-scanner_local}"
+export DATABASE_PASSWORD="${DATABASE_PASSWORD:-scanner_local}"
 
 echo ""
 echo "Starting functions-framework on port 9000..."
