@@ -152,13 +152,10 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
         """
         HTTP POST to local Cloud Functions Framework.
         
-        Attempts to send task immediately. If service unavailable, document is queued
-        and API continues operating normally.
+        Attempts to send task immediately WITHOUT pre-flight health checks.
+        If service unavailable, error is returned but doesn't block or retry.
         
-        Flow:
-            API → HTTP POST → Cloud Functions Framework → Processing
-                  ↓ (if fails)
-                  Document marked for retry, error returned but doesn't crash API
+        This is Option A: Lazy health checks - no blocking operations.
         """
         import requests
         import base64
@@ -169,7 +166,6 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
             )
             
             # Format as CloudEvents HTTP Structured Content Mode
-            # This is what Cloud Functions Framework expects locally
             pubsub_message = {
                 'document_id': document_id,
                 'company_id': company_id,
@@ -203,11 +199,12 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
                 f"[LocalCloudFunctionsBackend] 📨 Sending CloudEvents HTTP to {self.processing_url}"
             )
             
+            # Send immediately WITHOUT health check - just try to reach the service
             response = requests.post(
                 f"{self.processing_url}/",
                 json=cloud_event,
                 headers={"Content-Type": "application/cloudevents+json"},
-                timeout=30
+                timeout=5  # Reduced from 30 - fail fast if service unreachable
             )
             
             if response.status_code == 200 or response.status_code == 202:
@@ -215,14 +212,13 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
                     f"[LocalCloudFunctionsBackend] ✅ Task triggered successfully: doc={document_id}"
                 )
                 return {
-                    'task_id': document_id,  # Use document_id as task_id for local
+                    'task_id': document_id,
                     'status': 'queued',
                     'backend': self.backend_type
                 }
             else:
                 error_msg = f"Cloud Functions returned {response.status_code}"
-                logger.error(f"❌ {error_msg}")
-                logger.error(f"Response: {response.text}")
+                logger.warning(f"⚠️  {error_msg}")
                 return {
                     'task_id': None,
                     'status': 'service_error',
@@ -231,7 +227,16 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
                 }
         
         except requests.exceptions.Timeout:
-            error_msg = f"Cloud Functions Framework timeout at {self.processing_url}"
+            error_msg = f"Cloud Functions timeout at {self.processing_url}"
+            logger.warning(f"⚠️  {error_msg}")
+            return {
+                'task_id': None,
+                'status': 'service_unavailable',
+                'backend': self.backend_type,
+                'error': error_msg
+            }
+        except requests.exceptions.ConnectionError:
+            error_msg = f"Cannot connect to Cloud Functions at {self.processing_url}"
             logger.warning(f"⚠️  {error_msg}")
             return {
                 'task_id': None,
@@ -241,8 +246,6 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
             }
         except Exception as e:
             logger.warning(f"⚠️  Error triggering task: {e}")
-            import traceback
-            traceback.print_exc()
             return {
                 'task_id': None,
                 'status': 'service_error',
