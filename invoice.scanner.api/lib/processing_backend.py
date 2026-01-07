@@ -37,12 +37,13 @@ USAGE:
 """
 
 import os
-import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 import json
 
-logger = logging.getLogger(__name__)
+from shared.logging import ComponentLogger
+
+logger = ComponentLogger("ProcessingBackend")
 
 
 # ===== ABSTRACT BASE CLASS =====
@@ -121,7 +122,7 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
             'PROCESSING_SERVICE_URL',
             'http://host.docker.internal:9000'
         )
-        logger.info(f"[LocalCloudFunctionsBackend] Initialized with URL: {self.processing_url}")
+        logger.info(f"Initialized with URL: {self.processing_url}")
     
     def _check_service_available(self) -> bool:
         """
@@ -134,16 +135,16 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
         
         try:
             response = requests.get(self.processing_url, timeout=2)
-            logger.info(f"[LocalCloudFunctionsBackend] ✅ Cloud Functions Framework is available")
+            logger.info(f"✅ Cloud Functions Framework is available")
             return True
         except requests.exceptions.ConnectionError:
-            logger.error(f"[LocalCloudFunctionsBackend] ❌ CLOUD FUNCTIONS FRAMEWORK NOT RUNNING")
-            logger.error(f"[LocalCloudFunctionsBackend] Cannot connect to {self.processing_url}")
-            logger.error(f"[LocalCloudFunctionsBackend] ⚠️  Please start Cloud Functions Framework:")
-            logger.error(f"[LocalCloudFunctionsBackend]    cd invoice.scanner.cloud.functions && ./local_server.sh")
+            logger.error(f"❌ CLOUD FUNCTIONS FRAMEWORK NOT RUNNING")
+            logger.error(f"Cannot connect to {self.processing_url}")
+            logger.error(f"⚠️  Please start Cloud Functions Framework:")
+            logger.error(f"cd invoice.scanner.cloud.functions && ./local_server.sh")
             return False
         except Exception as e:
-            logger.error(f"[LocalCloudFunctionsBackend] ❌ Error checking service availability: {e}")
+            logger.error(f"❌ Error checking service availability: {e}")
             return False
     
     def trigger_task(self, document_id: str, company_id: str) -> Dict[str, Any]:
@@ -163,8 +164,8 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
         
         # First check if Cloud Functions Framework is running
         if not self._check_service_available():
-            logger.error(f"[LocalCloudFunctionsBackend] ❌ Processing failed for doc={document_id}")
-            logger.error(f"[LocalCloudFunctionsBackend] Cloud Functions Framework is not running!")
+            logger.error(f"❌ Processing failed for doc={document_id}")
+            logger.error(f"Cloud Functions Framework is not running!")
             return {
                 'task_id': None,
                 'status': 'service_unavailable',
@@ -230,8 +231,8 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
                 }
             else:
                 error_msg = f"Cloud Functions returned {response.status_code}"
-                logger.error(f"[LocalCloudFunctionsBackend] ❌ {error_msg}")
-                logger.error(f"[LocalCloudFunctionsBackend] Response: {response.text}")
+                logger.error(f"❌ {error_msg}")
+                logger.error(f"Response: {response.text}")
                 return {
                     'task_id': None,
                     'status': 'service_error',
@@ -241,7 +242,7 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
         
         except requests.exceptions.Timeout:
             error_msg = f"Cloud Functions Framework timeout at {self.processing_url}"
-            logger.error(f"[LocalCloudFunctionsBackend] ❌ {error_msg}")
+            logger.error(f"❌ {error_msg}")
             return {
                 'task_id': None,
                 'status': 'service_unavailable',
@@ -249,7 +250,7 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
                 'error': error_msg
             }
         except Exception as e:
-            logger.error(f"[LocalCloudFunctionsBackend] ❌ Error triggering task: {e}")
+            logger.error(f"❌ Error triggering task: {e}")
             import traceback
             traceback.print_exc()
             return {
@@ -276,13 +277,13 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
             if response.status_code == 200:
                 return response.json()
             else:
-                logger.warning(f"[LocalCloudFunctionsBackend] Status endpoint returned {response.status_code}")
+                logger.warning(f"Status endpoint returned {response.status_code}")
                 return {
                     'task_id': task_id,
                     'status': 'UNKNOWN'
                 }
         except Exception as e:
-            logger.error(f"[LocalCloudFunctionsBackend] Error getting task status: {e}")
+            logger.error(f"Error getting task status: {e}")
             return {
                 'task_id': task_id,
                 'status': 'UNKNOWN',
@@ -320,50 +321,50 @@ class CloudFunctionsBackend(ProcessingBackend):
             PUBSUB_TOPIC_ID: Pub/Sub topic name (default: 'document-processing')
             GOOGLE_APPLICATION_CREDENTIALS: Path to service account JSON
         """
-        print(f"[CloudFunctionsBackend] Starting initialization...")
+        logger.info(f"Starting initialization...")
         
         try:
-            print(f"[CloudFunctionsBackend] Attempting to import google-cloud-pubsub...")
+            logger.info(f"Attempting to import google-cloud-pubsub...")
             from google.cloud import pubsub_v1
             from google.oauth2 import service_account
-            print(f"[CloudFunctionsBackend] ✅ google-cloud-pubsub imported successfully")
+            logger.success(f"✅ google-cloud-pubsub imported successfully")
         except ImportError as import_error:
             error_msg = (
                 "google-cloud-pubsub required for Cloud Functions backend. "
                 f"Install: pip install google-cloud-pubsub. Error: {import_error}"
             )
-            print(f"[CloudFunctionsBackend] ❌ {error_msg}")
+            logger.error(f"❌ {error_msg}")
             raise ImportError(error_msg)
         
         self.project_id = os.getenv('GCP_PROJECT_ID')
         self.topic_id = os.getenv('PUBSUB_TOPIC_ID', 'document-processing')
         
-        print(f"[CloudFunctionsBackend] Environment: GCP_PROJECT_ID={self.project_id}, PUBSUB_TOPIC_ID={self.topic_id}")
+        logger.info(f"Environment: GCP_PROJECT_ID={self.project_id}, PUBSUB_TOPIC_ID={self.topic_id}")
         
         if not self.project_id:
             error_msg = (
                 "GCP_PROJECT_ID environment variable not set. "
                 "Required for Cloud Functions backend."
             )
-            print(f"[CloudFunctionsBackend] ❌ {error_msg}")
+            logger.error(f"❌ {error_msg}")
             raise ValueError(error_msg)
         
         try:
-            print(f"[CloudFunctionsBackend] Initializing Pub/Sub publisher...")
+            logger.info(f"Initializing Pub/Sub publisher...")
             # Initialize Pub/Sub publisher
             self.publisher = pubsub_v1.PublisherClient()
             self.topic_path = self.publisher.topic_path(self.project_id, self.topic_id)
-            print(f"[CloudFunctionsBackend] ✅ Pub/Sub publisher initialized, topic_path={self.topic_path}")
+            logger.success(f"✅ Pub/Sub publisher initialized, topic_path={self.topic_path}")
         except Exception as pubsub_error:
             error_msg = f"Failed to initialize Pub/Sub publisher: {pubsub_error}"
-            print(f"[CloudFunctionsBackend] ❌ {error_msg}")
+            logger.error(f"❌ {error_msg}")
             raise
         
         logger.info(
             f"[CloudFunctionsBackend] ✅ Initialized for project={self.project_id}, "
             f"topic={self.topic_id}"
         )
-        print(f"[CloudFunctionsBackend] ✅ Initialization complete")
+        logger.success(f"✅ Initialization complete")
     
     def trigger_task(self, document_id: str, company_id: str) -> Dict[str, Any]:
         """
@@ -408,7 +409,7 @@ class CloudFunctionsBackend(ProcessingBackend):
             }
         
         except Exception as e:
-            logger.error(f"[CloudFunctionsBackend] Error triggering task: {e}")
+            logger.error(f"Error triggering task: {e}")
             raise
     
     def get_task_status(self, task_id: str) -> Dict[str, Any]:
@@ -450,7 +451,7 @@ class MockBackend(ProcessingBackend):
         import uuid
         
         task_id = f"mock-{uuid.uuid4()}"
-        logger.debug(f"[MockBackend] Mock task queued: {task_id}")
+        logger.debug(f"Mock task queued: {task_id}")
         
         return {
             'task_id': task_id,
@@ -495,7 +496,7 @@ def get_processing_backend() -> ProcessingBackend:
     if not backend_name:
         backend_name = 'local'
     
-    logger.info(f"[ProcessingBackend] Initializing backend: {backend_name}")
+    logger.info(f"Initializing backend: {backend_name}")
     
     if backend_name == 'local':
         return LocalCloudFunctionsBackend()

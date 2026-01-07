@@ -10,21 +10,25 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
+# Set PYTHONPATH so Python can find modules in /app
+ENV PYTHONPATH=/app
+
+# Copy shared package directly into the app (shared code)
+COPY invoice.scanner.shared /app/shared
+COPY invoice.scanner.api /app/
+
 # Copy requirements and install Python dependencies
-COPY requirements.txt /tmp/requirements.txt
+COPY ./invoice.scanner.api/requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -r /tmp/requirements.txt && \
     rm -rf /tmp/requirements.txt
 
-# Copy application code
-COPY . /app
-
 # Expose port 8080 (Cloud Run expects this by default)
 EXPOSE 8080
 
-# Start Flask app directly
+# Start Flask app - use gunicorn for production, Flask dev server for local
 # Cloud SQL Connector will handle database connection based on environment
 # In Cloud Run: INSTANCE_CONNECTION_NAME env var triggers Connector mode
 # Locally: DATABASE_* env vars trigger psycopg2 mode
-CMD ["python", "-u", "main.py"]
-
+# NOTE: Cloud Run's gunicorn wrapper only accepts --host and --port, no other flags
+CMD exec sh -c 'if [ "$FLASK_ENV" = "production" ]; then exec gunicorn --host 0.0.0.0 --port ${PORT:-8080} main:app; else exec python -u main.py --port ${PORT:-8080}; fi'

@@ -5,10 +5,15 @@ import os
 from dotenv import load_dotenv
 import requests
 
+from shared.logging import ComponentLogger
+
 # Load environment variables immediately when module is imported
 load_dotenv()
 
 from .email_templates_loader import render_email_template
+
+# Create logger
+logger = ComponentLogger("EmailService")
 
 # Detect environment
 ENVIRONMENT = os.getenv("ENVIRONMENT", "local").lower()  # local, test, or prod
@@ -35,7 +40,7 @@ def _get_sendgrid_api_key():
             secret_name = f"sendgrid_api_key_{ENVIRONMENT}"  # sendgrid_api_key_test or sendgrid_api_key_prod
             
             if not project_id:
-                print(f"[email_service] ⚠️  WARNING: GCP_PROJECT not set, cannot fetch SendGrid API key from Secret Manager")
+                logger.warning(f"⚠️  WARNING: GCP_PROJECT not set, cannot fetch SendGrid API key from Secret Manager")
                 return None
             
             client = secretmanager.SecretManagerServiceClient()
@@ -46,13 +51,13 @@ def _get_sendgrid_api_key():
                 api_key = response.payload.data.decode('UTF-8').strip()
                 return api_key
             except Exception as e:
-                print(f"[email_service] ⚠️  WARNING: Failed to fetch {secret_name} from GCP Secret Manager")
-                print(f"[email_service] ⚠️  Error: {str(e)}")
-                print(f"[email_service] ⚠️  Please create the secret with:")
-                print(f"[email_service] ⚠️    gcloud secrets create {secret_name} --project={project_id} --data-file=-")
+                logger.error(f"⚠️  WARNING: Failed to fetch {secret_name} from GCP Secret Manager")
+                logger.error(f"⚠️  Error: {str(e)}")
+                logger.warning(f"⚠️  Please create the secret with:")
+                logger.warning(f"⚠️    gcloud secrets create {secret_name} --project={project_id} --data-file=-")
                 return None
         except ImportError:
-            print(f"[email_service] ⚠️  WARNING: google-cloud-secretmanager not available")
+            logger.warning(f"⚠️  WARNING: google-cloud-secretmanager not available")
             return None
     
     return None
@@ -65,7 +70,7 @@ def _send_via_gmail_smtp(to_email, subject, html_body, text_body):
         sender_password = os.getenv("GMAIL_PASSWORD")
         
         if not sender_email or not sender_password:
-            print("[email_service] ❌ Missing Gmail credentials (GMAIL_SENDER or GMAIL_PASSWORD)")
+            logger.info("[email_service] ❌ Missing Gmail credentials (GMAIL_SENDER or GMAIL_PASSWORD)")
             return False
         
         # Clean password
@@ -85,22 +90,22 @@ def _send_via_gmail_smtp(to_email, subject, html_body, text_body):
         message.attach(MIMEText(html_body, "html", _charset="utf-8"))
         
         # Send via Gmail SMTP
-        print(f"[email_service] 📧 [LOCAL] Sending via Gmail SMTP to {to_email}")
+        logger.info(f"📧 [LOCAL] Sending via Gmail SMTP to {to_email}")
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, to_email, message.as_string())
         
-        print(f"[email_service] ✅ Email sent successfully to {to_email}")
+        logger.success(f"✅ Email sent successfully to {to_email}")
         return True
         
     except smtplib.SMTPAuthenticationError:
-        print(f"[email_service] ❌ Authentication failed. Check GMAIL_SENDER and GMAIL_PASSWORD")
+        logger.error(f"❌ Authentication failed. Check GMAIL_SENDER and GMAIL_PASSWORD")
         return False
     except smtplib.SMTPException as e:
-        print(f"[email_service] ❌ SMTP error: {e}")
+        logger.error(f"❌ SMTP error: {e}")
         return False
     except Exception as e:
-        print(f"[email_service] ❌ Error sending email: {e}")
+        logger.error(f"❌ Error sending email: {e}")
         return False
 
 
@@ -111,8 +116,8 @@ def _send_via_sendgrid(to_email, subject, html_body, text_body):
         api_key = _get_sendgrid_api_key()
         
         if not api_key:
-            print(f"[email_service] ❌ [{ENVIRONMENT.upper()}] Cannot send email - SendGrid API key not configured")
-            print(f"[email_service] ❌ Email to {to_email} was NOT sent")
+            logger.error(f"❌ [{ENVIRONMENT.upper()}] Cannot send email - SendGrid API key not configured")
+            logger.error(f"❌ Email to {to_email} was NOT sent")
             return False
         
         url = "https://api.sendgrid.com/v3/mail/send"
@@ -134,21 +139,21 @@ def _send_via_sendgrid(to_email, subject, html_body, text_body):
             ]
         }
         
-        print(f"[email_service] 📧 [{ENVIRONMENT.upper()}] Sending via SendGrid to {to_email}")
+        logger.info(f"📧 [{ENVIRONMENT.upper()}] Sending via SendGrid to {to_email}")
         response = requests.post(url, json=payload, headers=headers, timeout=10)
         
         if response.status_code == 202:
-            print(f"[email_service] ✅ Email sent successfully to {to_email}")
+            logger.success(f"✅ Email sent successfully to {to_email}")
             return True
         else:
-            print(f"[email_service] ❌ SendGrid error ({response.status_code}): {response.text}")
+            logger.error(f"❌ SendGrid error ({response.status_code}): {response.text}")
             return False
             
     except requests.exceptions.RequestException as e:
-        print(f"[email_service] ❌ Request error: {e}")
+        logger.error(f"❌ Request error: {e}")
         return False
     except Exception as e:
-        print(f"[email_service] ❌ Error sending email: {e}")
+        logger.error(f"❌ Error sending email: {e}")
         return False
 
 
@@ -191,7 +196,7 @@ def send_email(to_email, subject, html_body, text_body=None):
         return _send_via_sendgrid(to_email, subject, html_body, text_body)
     
     else:
-        print(f"[email_service] ❌ Unknown environment: {ENVIRONMENT}")
+        logger.error(f"❌ Unknown environment: {ENVIRONMENT}")
         return False
 
 
@@ -234,7 +239,7 @@ The Strawbay Team"""
         
         return send_email(to_email, subject, html_body, text_body)
     except Exception as e:
-        print(f"[send_password_reset_email] Error: {e}")
+        logger.error(f"Error: {e}")
         return False
 
 def send_company_approved_email(to_email, name, company_name, organization_id, app_url="http://localhost:3000"):
@@ -284,7 +289,7 @@ The Strawbay Team"""
         
         return send_email(to_email, subject, html_body, text_body)
     except Exception as e:
-        print(f"[send_company_approved_email] Error: {e}")
+        logger.error(f"Error: {e}")
         return False
 
 
@@ -333,7 +338,7 @@ The Strawbay Team"""
         
         return send_email(to_email, subject, html_body, text_body)
     except Exception as e:
-        print(f"[send_company_registration_pending_email] Error: {e}")
+        logger.error(f"Error: {e}")
         return False
 
 
@@ -385,7 +390,7 @@ The Strawbay Team"""
         
         return send_email(to_email, subject, html_body, text_body)
     except Exception as e:
-        print(f"[send_user_registration_pending_email] Error: {e}")
+        logger.error(f"Error: {e}")
         return False
 
 
@@ -436,7 +441,7 @@ The Strawbay Team"""
         
         return send_email(to_email, subject, html_body, text_body)
     except Exception as e:
-        print(f"[send_user_approved_email] Error: {e}")
+        logger.error(f"Error: {e}")
         return False
 
 
@@ -543,4 +548,4 @@ The Strawbay Team
         
         return send_email(to_email, subject, html_body, text_body)
     except Exception as e:
-        print(f"[send_plan_change_email] Error: {e}")
+        logger.error(f"Error: {e}")
