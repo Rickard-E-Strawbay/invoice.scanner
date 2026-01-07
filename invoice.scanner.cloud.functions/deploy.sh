@@ -10,12 +10,6 @@ SHARED_DST="$CF_DIR/shared"
 PROJECT_ID=${1:-strawbayscannertest}
 REGION=${2:-europe-west1}
 
-echo "→ Syncing shared code"
-rm -rf "$SHARED_DST"
-cp -R "$SHARED_SRC" "$SHARED_DST"
-echo "✓ Shared code synced"
-echo ""
-
 echo "[DEPLOY] Starting Cloud Functions deployment to project: $PROJECT_ID"
 echo "[DEPLOY] Region: $REGION"
 echo ""
