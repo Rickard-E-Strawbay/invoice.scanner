@@ -59,12 +59,14 @@ except Exception as e:
     logger.warning(f"Could not pre-warm Cloud SQL Connector: {e}")
 
 # Initialize processing backend (LOCAL Celery or CLOUD Functions based on env)
+# NOTE: This is now lazy - no blocking health checks at startup
 logger.info(f"Attempting to initialize processing backend...")
 logger.info(f"PROCESSING_BACKEND env: {os.getenv('PROCESSING_BACKEND', 'not set')}")
 logger.info(f"GCP_PROJECT_ID env: {os.getenv('GCP_PROJECT_ID', 'not set')}")
 try:
     processing_backend = init_processing_backend()
     logger.success(f"Processing backend initialized: {processing_backend.backend_type}")
+    logger.info(f"ℹ️  API will start regardless of processing service availability")
 except Exception as e:
     import traceback
     logger.error(f"Error initializing processing backend: {e}")

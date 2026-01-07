@@ -128,6 +128,9 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
         """
         Check if Cloud Functions Framework is running and accessible.
         
+        WARNING: This is called during task execution, NOT at startup.
+        Failures are logged as warnings, not errors.
+        
         Returns:
             True if service is reachable, False otherwise
         """
@@ -138,40 +141,27 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
             logger.info(f"✅ Cloud Functions Framework is available")
             return True
         except requests.exceptions.ConnectionError:
-            logger.error(f"❌ CLOUD FUNCTIONS FRAMEWORK NOT RUNNING")
-            logger.error(f"Cannot connect to {self.processing_url}")
-            logger.error(f"⚠️  Please start Cloud Functions Framework:")
-            logger.error(f"cd invoice.scanner.cloud.functions && ./local_server.sh")
+            logger.warning(f"⚠️  Cloud Functions Framework NOT available at {self.processing_url}")
+            logger.warning(f"Document will be marked for retry or fallback")
             return False
         except Exception as e:
-            logger.error(f"❌ Error checking service availability: {e}")
+            logger.warning(f"⚠️  Error checking service availability: {e}")
             return False
     
     def trigger_task(self, document_id: str, company_id: str) -> Dict[str, Any]:
         """
         HTTP POST to local Cloud Functions Framework.
         
-        First checks if Cloud Functions Framework is available.
-        If not available, returns error status that indicates failed_preprocessing.
+        Attempts to send task immediately. If service unavailable, document is queued
+        and API continues operating normally.
         
         Flow:
-            API → Check service available
-                  → If available: HTTP POST → Cloud Functions Framework → Processing
-                  → If not available: Return error with status='service_unavailable'
+            API → HTTP POST → Cloud Functions Framework → Processing
+                  ↓ (if fails)
+                  Document marked for retry, error returned but doesn't crash API
         """
         import requests
         import base64
-        
-        # First check if Cloud Functions Framework is running
-        if not self._check_service_available():
-            logger.error(f"❌ Processing failed for doc={document_id}")
-            logger.error(f"Cloud Functions Framework is not running!")
-            return {
-                'task_id': None,
-                'status': 'service_unavailable',
-                'backend': self.backend_type,
-                'error': 'Cloud Functions Framework not running. Start with: cd invoice.scanner.cloud.functions && ./local_server.sh'
-            }
         
         try:
             logger.debug(
@@ -242,7 +232,7 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
         
         except requests.exceptions.Timeout:
             error_msg = f"Cloud Functions Framework timeout at {self.processing_url}"
-            logger.error(f"❌ {error_msg}")
+            logger.warning(f"⚠️  {error_msg}")
             return {
                 'task_id': None,
                 'status': 'service_unavailable',
@@ -250,7 +240,7 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
                 'error': error_msg
             }
         except Exception as e:
-            logger.error(f"❌ Error triggering task: {e}")
+            logger.warning(f"⚠️  Error triggering task: {e}")
             import traceback
             traceback.print_exc()
             return {
