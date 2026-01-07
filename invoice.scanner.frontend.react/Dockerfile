@@ -3,12 +3,12 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY invoice.scanner.frontend.react/package*.json ./
 
 # Install dependencies with legacy peer deps support
 RUN npm install --legacy-peer-deps
 
-COPY . .
+COPY invoice.scanner.frontend.react . /app
 
 # Build production bundle
 RUN npm run build
@@ -20,10 +20,10 @@ FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY invoice.scanner.frontend.react/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy startup script that handles PORT environment variable
-COPY start.sh /start.sh
+COPY invoice.scanner.frontend.react/start.sh /start.sh
 RUN chmod +x /start.sh
 
 # Health check (uses PORT env var)
