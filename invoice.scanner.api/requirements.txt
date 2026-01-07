@@ -15,8 +15,8 @@ flask_cors
 anthropic
 google-generativeai
 
-# Local shared package (installed with -e flag for development)
--e ../invoice.scanner.shared
+# Note: invoice-scanner-shared is installed separately in Dockerfile
+# (installed before WORKDIR to avoid path resolution issues in Docker)
 
 cloud-sql-python-connector==1.4.3
 pg8000==1.30.5

@@ -15,6 +15,18 @@ echo "[DEPLOY] Starting Cloud Functions deployment to project: $PROJECT_ID"
 echo "[DEPLOY] Region: $REGION"
 echo ""
 
+# NOTE: This script must be run from the repository root, not from invoice.scanner.cloud.functions/
+# This allows gcloud to see both invoice.scanner.cloud.functions/ and invoice.scanner.shared/
+
+# Verify we're in the right location
+if [ ! -d "invoice.scanner.cloud.functions" ] || [ ! -d "invoice.scanner.shared" ]; then
+    echo "❌ ERROR: This script must be run from the repository root directory"
+    echo "   Expected to find: ./invoice.scanner.cloud.functions and ./invoice.scanner.shared"
+    exit 1
+fi
+echo "✓ Running from repository root"
+echo ""
+
 # Set current project
 gcloud config set project "$PROJECT_ID"
 
@@ -72,7 +84,7 @@ gcloud functions deploy cf-preprocess-document \
     --runtime python311 \
     --trigger-topic document-processing \
     --entry-point cf_preprocess_document \
-    --source . \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
@@ -88,7 +100,7 @@ gcloud functions deploy cf-extract-ocr-text \
     --runtime python311 \
     --trigger-topic document-ocr \
     --entry-point cf_extract_ocr_text \
-    --source . \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 1024MB \
     --timeout 300 \
@@ -104,7 +116,7 @@ gcloud functions deploy cf-predict-invoice-data \
     --runtime python311 \
     --trigger-topic document-llm \
     --entry-point cf_predict_invoice_data \
-    --source . \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
@@ -120,7 +132,7 @@ gcloud functions deploy cf-extract-structured-data \
     --runtime python311 \
     --trigger-topic document-extraction \
     --entry-point cf_extract_structured_data \
-    --source . \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
@@ -136,7 +148,7 @@ gcloud functions deploy cf-run-automated-evaluation \
     --runtime python311 \
     --trigger-topic document-evaluation \
     --entry-point cf_run_automated_evaluation \
-    --source . \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \

@@ -7,21 +7,25 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Install shared package first (before WORKDIR to avoid relative path issues)
+COPY invoice.scanner.shared /tmp/invoice.scanner.shared
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install -e /tmp/invoice.scanner.shared && \
+    rm -rf /tmp/invoice.scanner.shared
+
 # Set working directory
 WORKDIR /app
 
 # Set PYTHONPATH so Python can find modules in /app
 ENV PYTHONPATH=/app
 
-# Copy shared package directly into the app (shared code)
-COPY invoice.scanner.shared /app/shared
-COPY invoice.scanner.api /app/
-
-# Copy requirements and install Python dependencies
+# Copy requirements and install remaining dependencies
 COPY invoice.scanner.api/requirements.txt /tmp/requirements.txt
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install -r /tmp/requirements.txt && \
+RUN pip install -r /tmp/requirements.txt && \
     rm -rf /tmp/requirements.txt
+
+# Copy application code
+COPY invoice.scanner.api /app/
 
 # Expose port 8080 (Cloud Run expects this by default)
 EXPOSE 8080

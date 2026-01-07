@@ -120,12 +120,9 @@ jobs:
 
       - name: Deploy Cloud Functions to TEST
         run: |
-          cd invoice.scanner.cloud.functions
-          # Show directory structure before deployment
-          echo "📂 Directory structure:"
-          ls -la ../invoice.scanner.shared/ | head -10
-          chmod +x deploy.sh
-          ./deploy.sh strawbayscannertest europe-west1
+          # Run from repo root to allow pip to access both CF and shared directories
+          chmod +x invoice.scanner.cloud.functions/deploy.sh
+          ./invoice.scanner.cloud.functions/deploy.sh strawbayscannertest europe-west1
 
       - name: Verify Cloud Functions Deployment
         run: |
@@ -399,12 +396,9 @@ jobs:
 
       - name: Deploy Cloud Functions to PROD
         run: |
-          cd invoice.scanner.cloud.functions
-          # Show directory structure before deployment
-          echo "📂 Directory structure:"
-          ls -la ../invoice.scanner.shared/ | head -10
-          chmod +x deploy.sh
-          ./deploy.sh strawbayscannerprod europe-west1
+          # Run from repo root to allow pip to access both CF and shared directories
+          chmod +x invoice.scanner.cloud.functions/deploy.sh
+          ./invoice.scanner.cloud.functions/deploy.sh strawbayscannerprod europe-west1
 
       - name: Verify Cloud Functions Deployment
         run: |

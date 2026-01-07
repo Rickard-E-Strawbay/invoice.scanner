@@ -1,7 +1,9 @@
 # Cloud Functions Framework (Gen2) with CloudEvents support
 functions-framework[cloudevents]==3.5.0
 
-# Local shared package (installed with -e flag for development)
+# Local shared package - installed directly from source
+# When running from repo root: gcloud functions deploy --source ./invoice.scanner.cloud.functions
+# Cloud Build can access ../invoice.scanner.shared relative to the source directory
 -e ../invoice.scanner.shared
 
 # Google Cloud Libraries (Official versions from Google Cloud samples)
