@@ -125,8 +125,7 @@ jobs:
           
           # Deploy
           chmod +x invoice.scanner.cloud.functions/deploy.sh
-          ./invoice.scanner.cloud.functions/deploy.sh strawbayscannertest europe-west1
-
+          rsync -a --delete "invoice.scanner.shared/" "invoice.scanner.cloud.functions/"
       - name: Verify Cloud Functions Deployment
         run: |
           echo "✅ Cloud Functions Deploy Complete!"

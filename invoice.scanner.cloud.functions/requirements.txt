@@ -1,11 +1,6 @@
 # Cloud Functions Framework (Gen2) with CloudEvents support
 functions-framework[cloudevents]==3.5.0
 
-# Local shared package - installed directly from source
-# pipeline.yml syncs invoice.scanner.shared/ into CF directory as shared/
-# pyproject.toml and packages are in the CF root
--e .
-
 # Google Cloud Libraries (Official versions from Google Cloud samples)
 google-cloud-pubsub==2.20.0
 google-cloud-secret-manager==2.16.0
