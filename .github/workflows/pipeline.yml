@@ -120,7 +120,10 @@ jobs:
 
       - name: Deploy Cloud Functions to TEST
         run: |
-          # Run from repo root to allow pip to access both CF and shared directories
+          # Sync shared module into CF directory
+          rsync -a --delete "invoice.scanner.shared/" "invoice.scanner.cloud.functions/shared/"
+          
+          # Deploy
           chmod +x invoice.scanner.cloud.functions/deploy.sh
           ./invoice.scanner.cloud.functions/deploy.sh strawbayscannertest europe-west1
 
@@ -396,7 +399,10 @@ jobs:
 
       - name: Deploy Cloud Functions to PROD
         run: |
-          # Run from repo root to allow pip to access both CF and shared directories
+          # Sync shared module into CF directory
+          rsync -a --delete "invoice.scanner.shared/" "invoice.scanner.cloud.functions/shared/"
+          
+          # Deploy
           chmod +x invoice.scanner.cloud.functions/deploy.sh
           ./invoice.scanner.cloud.functions/deploy.sh strawbayscannerprod europe-west1
 

@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# Temporary shared module synced by pipeline
+shared/
 .Python
 *.so
 
