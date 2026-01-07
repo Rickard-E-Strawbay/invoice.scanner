@@ -12,7 +12,7 @@ REGION=${2:-europe-west1}
 
 echo "[DEPLOY] Starting Cloud Functions deployment to project: $PROJECT_ID"
 echo "[DEPLOY] Region: $REGION"
-echo "[DEPLOY] Using source: $ROOT (repo root - includes both shared/ and cloud.functions/)"
+echo "[DEPLOY] Using source: $CF_DIR (includes shared/ synced by pipeline)"
 echo ""
 
 # Set current project
@@ -67,7 +67,7 @@ gcloud functions deploy cf-preprocess-document \
     --runtime python311 \
     --trigger-topic document-processing \
     --entry-point cf_preprocess_document \
-    --source "$ROOT" \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
@@ -83,7 +83,7 @@ gcloud functions deploy cf-extract-ocr-text \
     --runtime python311 \
     --trigger-topic document-ocr \
     --entry-point cf_extract_ocr_text \
-    --source "$ROOT" \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 1024MB \
     --timeout 300 \
@@ -99,7 +99,7 @@ gcloud functions deploy cf-predict-invoice-data \
     --runtime python311 \
     --trigger-topic document-llm \
     --entry-point cf_predict_invoice_data \
-    --source "$ROOT" \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
@@ -115,7 +115,7 @@ gcloud functions deploy cf-extract-structured-data \
     --runtime python311 \
     --trigger-topic document-extraction \
     --entry-point cf_extract_structured_data \
-    --source "$ROOT" \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \
@@ -131,7 +131,7 @@ gcloud functions deploy cf-run-automated-evaluation \
     --runtime python311 \
     --trigger-topic document-evaluation \
     --entry-point cf_run_automated_evaluation \
-    --source "$ROOT" \
+    --source ./invoice.scanner.cloud.functions \
     --region "$REGION" \
     --memory 512MB \
     --timeout 300 \

@@ -4,8 +4,8 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Temporary shared module synced by pipeline
-shared/
+# NOTE: shared/ is now tracked in Git and synced by pipeline
+# Do not add it back to .gitignore
 .Python
 *.so
 

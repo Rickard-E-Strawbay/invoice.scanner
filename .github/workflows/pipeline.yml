@@ -120,8 +120,19 @@ jobs:
 
       - name: Deploy Cloud Functions to TEST
         run: |
-          # NOTE: deploy.sh now uses --source $ROOT (repo root),
-          # so Cloud Build includes both invoice.scanner.cloud.functions/ and invoice.scanner.shared/
+          # Sync shared module into CF directory
+          rsync -a --delete "invoice.scanner.shared/" "invoice.scanner.cloud.functions/shared/"
+          
+          # Configure git for commit
+          git config user.email "github-actions[bot]@github.com"
+          git config user.name "github-actions[bot]"
+          
+          # Commit shared module sync (force add, ignores .gitignore)
+          git add -f invoice.scanner.cloud.functions/shared/
+          git commit -m "Sync shared module for Cloud Functions deployment [auto-sync]" || echo "No changes to commit"
+          git push origin main || echo "No commits to push"
+          
+          # Deploy Cloud Functions
           chmod +x invoice.scanner.cloud.functions/deploy.sh
           ./invoice.scanner.cloud.functions/deploy.sh strawbayscannertest europe-west1
       - name: Verify Cloud Functions Deployment
@@ -396,8 +407,19 @@ jobs:
 
       - name: Deploy Cloud Functions to PROD
         run: |
-          # NOTE: deploy.sh now uses --source $ROOT (repo root),
-          # so Cloud Build includes both invoice.scanner.cloud.functions/ and invoice.scanner.shared/
+          # Sync shared module into CF directory
+          rsync -a --delete "invoice.scanner.shared/" "invoice.scanner.cloud.functions/shared/"
+          
+          # Configure git for commit
+          git config user.email "github-actions[bot]@github.com"
+          git config user.name "github-actions[bot]"
+          
+          # Commit shared module sync (force add, ignores .gitignore)
+          git add -f invoice.scanner.cloud.functions/shared/
+          git commit -m "Sync shared module for Cloud Functions deployment [auto-sync]" || echo "No changes to commit"
+          git push origin main || echo "No commits to push"
+          
+          # Deploy Cloud Functions
           chmod +x invoice.scanner.cloud.functions/deploy.sh
           ./invoice.scanner.cloud.functions/deploy.sh strawbayscannerprod europe-west1
 
