@@ -14,11 +14,11 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 
 # Copy shared package directly into the app (shared code)
-COPY invoice.scanner.shared /app/shared
-COPY invoice.scanner.api /app/
+COPY ../invoice.scanner.shared /app/shared
+COPY . /app/
 
 # Copy requirements and install Python dependencies
-COPY ./invoice.scanner.api/requirements.txt /tmp/requirements.txt
+COPY requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -r /tmp/requirements.txt && \
     rm -rf /tmp/requirements.txt
