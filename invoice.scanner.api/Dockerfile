@@ -7,21 +7,20 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install shared package first (before WORKDIR to avoid relative path issues)
-COPY invoice.scanner.shared /tmp/invoice.scanner.shared
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install -e /tmp/invoice.scanner.shared && \
-    rm -rf /tmp/invoice.scanner.shared
-
 # Set working directory
 WORKDIR /app
 
-# Set PYTHONPATH so Python can find modules in /app
-ENV PYTHONPATH=/app
+# Copy shared module directly (will be linked via PYTHONPATH)
+COPY invoice.scanner.shared /app/
 
-# Copy requirements and install remaining dependencies
+# Set PYTHONPATH to include shared module
+# This allows imports like: from shared.database.connection import ...
+ENV PYTHONPATH=/app:/app/invoice.scanner.shared
+
+# Copy requirements and install dependencies
 COPY invoice.scanner.api/requirements.txt /tmp/requirements.txt
-RUN pip install -r /tmp/requirements.txt && \
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install -r /tmp/requirements.txt && \
     rm -rf /tmp/requirements.txt
 
 # Copy application code
