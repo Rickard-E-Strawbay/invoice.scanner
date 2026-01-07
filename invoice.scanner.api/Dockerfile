@@ -14,8 +14,8 @@ WORKDIR /app
 ENV PYTHONPATH=/app
 
 # Copy shared package directly into the app (shared code)
-COPY ../invoice.scanner.shared /app/shared
-COPY . /app/
+COPY invoice.scanner.shared /app/shared
+COPY invoice.scanner.api /app/
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt /tmp/requirements.txt
