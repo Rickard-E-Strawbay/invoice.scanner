@@ -121,6 +121,9 @@ jobs:
       - name: Deploy Cloud Functions to TEST
         run: |
           cd invoice.scanner.cloud.functions
+          # Show directory structure before deployment
+          echo "📂 Directory structure:"
+          ls -la ../invoice.scanner.shared/ | head -10
           chmod +x deploy.sh
           ./deploy.sh strawbayscannertest europe-west1
 
@@ -397,6 +400,9 @@ jobs:
       - name: Deploy Cloud Functions to PROD
         run: |
           cd invoice.scanner.cloud.functions
+          # Show directory structure before deployment
+          echo "📂 Directory structure:"
+          ls -la ../invoice.scanner.shared/ | head -10
           chmod +x deploy.sh
           ./deploy.sh strawbayscannerprod europe-west1
 

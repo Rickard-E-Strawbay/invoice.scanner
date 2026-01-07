@@ -46,6 +46,7 @@ NOTES:
 
 import functions_framework
 import json
+import os
 import atexit
 from google.cloud import pubsub_v1
 from google.cloud import secretmanager
@@ -61,8 +62,6 @@ except ImportError:
     # Fallback if shared module not available
     import logging
     logger = logging.getLogger("CloudFunctions")
-    from shared.configuration.config import FUNCTION_LOG_LEVEL
-    logger.setLevel(FUNCTION_LOG_LEVEL)
 
 # Import Cloud Functions configuration from shared
 try:
@@ -79,11 +78,11 @@ try:
         SECRET_MANAGER_CACHE_SIZE,
     )
     PROJECT_ID = GCP_PROJECT_ID
+    logger.info("✓ Loaded configuration from shared.configuration.config")
 except ImportError as e:
-    # Fail fast if config import fails - this is a critical error
-    error_msg = f"Failed to import shared.configuration.config: {e}. Cloud Functions require centralized configuration."
+    error_msg = f"FATAL: Cannot import shared.configuration.config: {e}"
     logger.error(error_msg)
-    raise ImportError(error_msg) from e
+    raise
 
 # Optional imports for Cloud SQL
 try:
