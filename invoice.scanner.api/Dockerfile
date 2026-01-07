@@ -18,7 +18,7 @@ COPY invoice.scanner.shared /app/shared
 COPY invoice.scanner.api /app/
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt /tmp/requirements.txt
+COPY invoice.scanner.api/requirements.txt /tmp/requirements.txt
 RUN pip install --upgrade pip setuptools wheel && \
     pip install -r /tmp/requirements.txt && \
     rm -rf /tmp/requirements.txt

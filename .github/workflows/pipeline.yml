@@ -64,25 +64,28 @@ jobs:
 
       - name: Build and Push API image
         run: |
-          docker build -t ${{ steps.set-vars.outputs.registry }}/api:latest \
+          docker build -f ./invoice.scanner.api/Dockerfile \
+                       -t ${{ steps.set-vars.outputs.registry }}/api:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/api:${{ github.sha }} \
-                       ./invoice.scanner.api
+                       .
           docker push ${{ steps.set-vars.outputs.registry }}/api:latest
           docker push ${{ steps.set-vars.outputs.registry }}/api:${{ github.sha }}
 
       - name: Build and Push Frontend image
         run: |
-          docker build -t ${{ steps.set-vars.outputs.registry }}/frontend:latest \
+          docker build -f ./invoice.scanner.frontend.react/Dockerfile \
+                       -t ${{ steps.set-vars.outputs.registry }}/frontend:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/frontend:${{ github.sha }} \
-                       ./invoice.scanner.frontend.react
+                       .
           docker push ${{ steps.set-vars.outputs.registry }}/frontend:latest
           docker push ${{ steps.set-vars.outputs.registry }}/frontend:${{ github.sha }}
 
       - name: Build and Push Worker image
         run: |
-          docker build -t ${{ steps.set-vars.outputs.registry }}/worker:latest \
+          docker build -f ./invoice.scanner.worker/Dockerfile \
+                       -t ${{ steps.set-vars.outputs.registry }}/worker:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/worker:${{ github.sha }} \
-                       ./invoice.scanner.worker 2>/dev/null || echo "Worker directory not found, skipping"
+                       . 2>/dev/null || echo "Worker directory not found, skipping"
           docker push ${{ steps.set-vars.outputs.registry }}/worker:latest 2>/dev/null || echo "Worker image skipped"
           docker push ${{ steps.set-vars.outputs.registry }}/worker:${{ github.sha }} 2>/dev/null || echo "Worker image skipped"
 
@@ -337,25 +340,28 @@ jobs:
 
       - name: Build and Push API image
         run: |
-          docker build -t ${{ steps.set-vars.outputs.registry }}/api:latest \
+          docker build -f ./invoice.scanner.api/Dockerfile \
+                       -t ${{ steps.set-vars.outputs.registry }}/api:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/api:${{ github.sha }} \
-                       ./invoice.scanner.api
+                       .
           docker push ${{ steps.set-vars.outputs.registry }}/api:latest
           docker push ${{ steps.set-vars.outputs.registry }}/api:${{ github.sha }}
 
       - name: Build and Push Frontend image
         run: |
-          docker build -t ${{ steps.set-vars.outputs.registry }}/frontend:latest \
+          docker build -f ./invoice.scanner.frontend.react/Dockerfile \
+                       -t ${{ steps.set-vars.outputs.registry }}/frontend:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/frontend:${{ github.sha }} \
-                       ./invoice.scanner.frontend.react
+                       .
           docker push ${{ steps.set-vars.outputs.registry }}/frontend:latest
           docker push ${{ steps.set-vars.outputs.registry }}/frontend:${{ github.sha }}
 
       - name: Build and Push Worker image
         run: |
-          docker build -t ${{ steps.set-vars.outputs.registry }}/worker:latest \
+          docker build -f ./invoice.scanner.worker/Dockerfile \
+                       -t ${{ steps.set-vars.outputs.registry }}/worker:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/worker:${{ github.sha }} \
-                       ./invoice.scanner.worker 2>/dev/null || echo "Worker directory not found, skipping"
+                       . 2>/dev/null || echo "Worker directory not found, skipping"
           docker push ${{ steps.set-vars.outputs.registry }}/worker:latest 2>/dev/null || echo "Worker image skipped"
           docker push ${{ steps.set-vars.outputs.registry }}/worker:${{ github.sha }} 2>/dev/null || echo "Worker image skipped"
 
