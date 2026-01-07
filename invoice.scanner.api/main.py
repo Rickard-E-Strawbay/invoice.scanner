@@ -1,6 +1,7 @@
 # ===================
 # Imports and Globals
 # ===================
+# API Version: 2026-01-07-CLEAN (Force rebuild to deploy clean code without cached images)
 from flask import Flask, jsonify, request, session, make_response
 from flask_cors import CORS
 from flask_smorest import Api, Blueprint
