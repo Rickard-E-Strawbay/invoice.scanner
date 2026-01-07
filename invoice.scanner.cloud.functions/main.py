@@ -46,7 +46,6 @@ NOTES:
 
 import functions_framework
 import json
-import os
 import atexit
 from google.cloud import pubsub_v1
 from google.cloud import secretmanager
@@ -62,7 +61,29 @@ except ImportError:
     # Fallback if shared module not available
     import logging
     logger = logging.getLogger("CloudFunctions")
-    logger.setLevel(os.getenv("FUNCTION_LOG_LEVEL", "DEBUG"))
+    from shared.configuration.config import FUNCTION_LOG_LEVEL
+    logger.setLevel(FUNCTION_LOG_LEVEL)
+
+# Import Cloud Functions configuration from shared
+try:
+    from shared.configuration.config import (
+        GCP_PROJECT_ID,
+        CLOUD_SQL_CONN,
+        DATABASE_HOST,
+        DATABASE_NAME,
+        DATABASE_PORT,
+        DATABASE_USER,
+        DATABASE_PASSWORD,
+        PROCESSING_SLEEP_TIME,
+        FUNCTION_LOG_LEVEL,
+        SECRET_MANAGER_CACHE_SIZE,
+    )
+    PROJECT_ID = GCP_PROJECT_ID
+except ImportError as e:
+    # Fail fast if config import fails - this is a critical error
+    error_msg = f"Failed to import shared.configuration.config: {e}. Cloud Functions require centralized configuration."
+    logger.error(error_msg)
+    raise ImportError(error_msg) from e
 
 # Optional imports for Cloud SQL
 try:
@@ -144,20 +165,11 @@ def simulate_pubsub_message(topic_name: str, message_data: Dict[str, Any]) -> No
     else:
         logger.warning(f"⚠️  No function mapping for topic {topic_name}")
 
-
-# Get configuration from environment
-PROJECT_ID = os.getenv("GCP_PROJECT_ID")
-CLOUD_SQL_CONN = os.getenv("CLOUD_SQL_CONN")  # Format: project:region:instance
-DATABASE_HOST = os.getenv("DATABASE_HOST", "localhost")
-DATABASE_NAME = os.getenv("DATABASE_NAME", "invoice_scanner")
-DATABASE_PORT = int(os.getenv("DATABASE_PORT", 5432))
-PROCESSING_SLEEP_TIME = float(os.getenv("PROCESSING_SLEEP_TIME", "1.0"))  # seconds
-
 # Cached secret values (lazy loading)
 _SECRET_CACHE = {}
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=SECRET_MANAGER_CACHE_SIZE)
 def get_secret(secret_name: str) -> str:
     """
     Fetch secret from Google Cloud Secret Manager.
@@ -185,18 +197,18 @@ def get_secret(secret_name: str) -> str:
 
 def get_database_user() -> str:
     """Get database user from Secret Manager or environment fallback."""
-    project_id = os.getenv("GCP_PROJECT_ID", "strawbayscannertest")
+    project_id = PROJECT_ID or "strawbayscannertest"
     secret_suffix = "prod" if "prod" in project_id else "test"
     secret_value = get_secret(f"db_user_{secret_suffix}")
-    return secret_value or os.getenv("DATABASE_USER", "scanner")
+    return secret_value or DATABASE_USER
 
 
 def get_database_password() -> str:
     """Get database password from Secret Manager or environment fallback."""
-    project_id = os.getenv("GCP_PROJECT_ID", "strawbayscannertest")
+    project_id = PROJECT_ID or "strawbayscannertest"
     secret_suffix = "prod" if "prod" in project_id else "test"
     secret_value = get_secret(f"db_password_{secret_suffix}")
-    return secret_value or os.getenv("DATABASE_PASSWORD", "password")
+    return secret_value or DATABASE_PASSWORD
 
 
 # Global Cloud SQL Connector instance (connection pooling)

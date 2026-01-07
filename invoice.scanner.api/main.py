@@ -44,6 +44,15 @@ try:
     connector = get_cloud_sql_connector()
     if connector:
         logger.success("Cloud SQL Connector pre-warmed")
+        # Make an actual test connection to warm up the pool
+        try:
+            results, success = execute_sql("SELECT 1 AS warmup")
+            if success:
+                logger.success("✅ Cloud SQL Connector test query succeeded - health checks ready")
+            else:
+                logger.error("❌ Cloud SQL Connector test query failed")
+        except Exception as e:
+            logger.error(f"❌ Cloud SQL Connector test connection failed: {e}")
     else:
         logger.warning("Cloud SQL Connector not available (running locally?)")
 except Exception as e:
@@ -201,10 +210,11 @@ def health():
     """Health check endpoint for Cloud Run and load balancers."""
     try:
         # Verify database connection
+        logger.info("[HEALTH] Starting health check...")
         results, success = execute_sql("SELECT 1 AS health_check")
         
         if not success:
-            logger.error("[HEALTH] Database connectivity check failed")
+            logger.error("[HEALTH] ❌ Database connectivity check failed")
             return jsonify({
                 "status": "unhealthy",
                 "service": "invoice.scanner.api",
@@ -212,7 +222,7 @@ def health():
                 "timestamp": datetime.now().isoformat()
             }), 503
         
-        logger.success("[HEALTH] Health check passed - database connected")
+        logger.success("[HEALTH] ✅ Health check passed - database connected")
         return jsonify({
             "status": "healthy",
             "service": "invoice.scanner.api",
@@ -220,13 +230,15 @@ def health():
             "timestamp": datetime.now().isoformat()
         }), 200
     except Exception as e:
-        logger.error(f"Exception during health check: {e}")
+        logger.error(f"[HEALTH] ❌ Exception during health check: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return jsonify({
             "status": "unhealthy",
             "service": "invoice.scanner.api",
             "error": str(e),
             "timestamp": datetime.now().isoformat()
-        }), 500
+        }), 503
 
 
 

@@ -115,6 +115,14 @@ GOOGLE_SEARCH_ENGINE_ID = "970ef8a11e74a4ad4"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "YOUR_ANTHROPIC_API_KEY")
 
+# ===== CLOUD FUNCTIONS CONFIGURATION =====
+
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID")
+CLOUD_SQL_CONN = os.getenv("CLOUD_SQL_CONN")  # Format: project:region:instance
+PROCESSING_SLEEP_TIME = float(os.getenv("PROCESSING_SLEEP_TIME", "1.0"))  # seconds
+FUNCTION_LOG_LEVEL = os.getenv("FUNCTION_LOG_LEVEL", "DEBUG")
+SECRET_MANAGER_CACHE_SIZE = 1  # Cache size for secret manager
+
 # ===== EXPORTS =====
 
 __all__ = [
@@ -137,5 +145,11 @@ __all__ = [
     'GOOGLE_SEARCH_ENGINE_ID',
     'OPENAI_API_KEY',
     'ANTHROPIC_API_KEY',
+    # Cloud Functions configuration
+    'GCP_PROJECT_ID',
+    'CLOUD_SQL_CONN',
+    'PROCESSING_SLEEP_TIME',
+    'FUNCTION_LOG_LEVEL',
+    'SECRET_MANAGER_CACHE_SIZE',
 ]
 
