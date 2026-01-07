@@ -196,7 +196,7 @@ def get_connection_pg8000_connector(instance_connection_name, database, user, pa
             "pg8000",
             user=user,
             password=password,
-            timeout=5,
+            timeout=15,  # Increased from 5s to allow connector initialization time
             db=database,
             ip_type=IPTypes.PRIVATE
         )
