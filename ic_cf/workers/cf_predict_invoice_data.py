@@ -1,4 +1,4 @@
-from ic_cf.workers.cf_base import cf_base
+from workers.cf_base import cf_base
 from ic_shared.logging import ComponentLogger
 import time
 from ic_shared.configuration.config import PROCESSING_SLEEP_TIME

@@ -20,3 +20,4 @@ DOCUMENTS_RAW_DIR = BASE_DOCUMENTS_DIR / "raw"
 DOCUMENTS_PROCESSED_DIR = BASE_DOCUMENTS_DIR / "processed"
 
 # Note: Directories are mounted via Docker bind mount, not created locally
+

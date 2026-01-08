@@ -187,7 +187,7 @@ def cf_preprocess_document(cloud_event):
     Triggered by: Pub/Sub message on 'document-processing' topic with stage='preprocess'
     """
     try:
-        from ic_cf.workers.cf_preprocess import cf_preprocess
+        from workers.cf_preprocess import cf_preprocess
         processor = cf_preprocess(cloud_event)
         processor.execute()
     except Exception as e:
@@ -206,7 +206,7 @@ def cf_extract_ocr_text(cloud_event):
     Triggered by: Pub/Sub message on 'document-ocr' topic with stage='ocr'
     """
     try:
-        from ic_cf.workers.cf_extract_ocr_text import cf_extract_ocr_text
+        from workers.cf_extract_ocr_text import cf_extract_ocr_text
         processor = cf_extract_ocr_text(cloud_event)
         processor.execute()
     except Exception as e:
@@ -225,7 +225,7 @@ def cf_predict_invoice_data(cloud_event):
     Triggered by: Pub/Sub message on 'document-llm' topic with stage='llm'
     """
     try:
-        from ic_cf.workers.cf_predict_invoice_data import cf_predict_invoice_data
+        from workers.cf_predict_invoice_data import cf_predict_invoice_data
         processor = cf_predict_invoice_data(cloud_event)
         processor.execute()
     except Exception as e:
@@ -244,7 +244,7 @@ def cf_extract_structured_data(cloud_event):
     Triggered by: Pub/Sub message on 'document-extraction' topic with stage='extraction'
     """
     try:
-        from ic_cf.workers.cf_extract_structured_data import cf_extract_structured_data
+        from workers.cf_extract_structured_data import cf_extract_structured_data
         processor = cf_extract_structured_data(cloud_event)
         processor.execute()
     except Exception as e:
@@ -264,7 +264,7 @@ def cf_run_automated_evaluation(cloud_event):
     Final stage - marks document as 'completed' when done.
     """
     try:
-        from ic_cf.workers.cf_run_automated_evaluation import cf_run_automated_evaluation
+        from workers.cf_run_automated_evaluation import cf_run_automated_evaluation
         processor = cf_run_automated_evaluation(cloud_event)
         processor.execute()
     except Exception as e:
