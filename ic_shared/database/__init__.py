@@ -23,12 +23,19 @@ from .connection import (
     RealDictCursor,
     execute_sql,
 )
+from .document_operations import (
+    get_document_status,
+    update_document_status,
+)
 
 __all__ = [
     # Connection functions (from connection.py)
     'get_connection',
     'RealDictCursor',
     'execute_sql',
+    # Document operations (from document_operations.py)
+    'get_document_status',
+    'update_document_status',
     # Configuration (from config.py)
     'DB_CONFIG',
     'DATABASE_URL',
