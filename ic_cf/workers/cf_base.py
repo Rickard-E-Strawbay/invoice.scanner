@@ -14,11 +14,13 @@ PUBSUB_MESSAGE_TEMPLATE = {
 class cf_base:
     """Base class for all processing workers."""
     
-    def __init__(self, cloud_event ):
+    def __init__(self, cloud_event, logger_name):
         data = self._read_cloud_event_data(cloud_event)
+        self.logger = ComponentLogger(logger_name)
         self.document_id = data.get("document_id")
         self.company_id = data.get("company_id")
         self.stage_name = data.get("stage")
+        self.logger.info(f"INIT {self.document_id}, company {self.company_id}, stage {self.stage_name}")
     
     def execute(self):
         """Override in subclass."""
@@ -42,6 +44,7 @@ class cf_base:
     
     def _update_document_status(self, document_status: str, error_message: Optional[str] = None):
         """Update document status in the database."""
+        self.logger.info(f"NEW STATUS {document_status} for document {self.document_id}")
         return update_document_status(self.document_id, document_status)
     
     def _publish_to_topic(self, next_topic_name: str, next_stage_name: str):
@@ -52,13 +55,14 @@ class cf_base:
         message_data["document_id"] = self.document_id
         message_data["company_id"] = self.company_id
         message_data["stage"] = next_stage_name
+
+        self.logger.info(f"PUBLISH {self.document_id} to topic {next_topic_name} for stage {next_stage_name}")
         publish_to_topic(next_topic_name, message_data)
     
-    def _handle_error(self, prefix: str,failed_status: str, error_msg: str):
+    def _handle_error(self,failed_status: str, error_msg: str):
         """Handle preprocessing errors."""
-        logger = ComponentLogger(prefix)
-        logger.error(f"Error: {error_msg}")
+        self.logger.error(f"Error: {error_msg}")
         try:
             update_document_status(self.document_id, failed_status)
         except Exception as e:
-            logger.error(f"Could not update status: {e}")
+            self.logger.error(f"Could not update status: {e}")

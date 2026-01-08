@@ -2,6 +2,8 @@ from workers.cf_base import cf_base
 from ic_shared.logging import ComponentLogger
 import time
 from ic_shared.configuration.config import PROCESSING_SLEEP_TIME
+from ic_shared.configuration.defines import ENTER, EXIT
+from ic_shared.configuration.defines import EVALUATION_STATUS, EVALUATION_ERROR
 
 logger = ComponentLogger("cf_run_automated_evaluation")
 
@@ -9,13 +11,13 @@ class cf_run_automated_evaluation(cf_base):
     """Cloud Function entry point for automated evaluation worker."""
     
     def __init__(self, cloud_event):
-        super().__init__(cloud_event)
+        super().__init__(cloud_event, "cf_run_automated_evaluation")
     
     def execute(self):
         """Execute the automated evaluation worker logic."""
-        ENTER_STATUS = "evaluation"
-        FAILED_STATUS = "evaluation_error"
-        EXIT_STATUS = "completed"
+        ENTER_STATUS = EVALUATION_STATUS[ENTER]
+        FAILED_STATUS = EVALUATION_ERROR
+        EXIT_STATUS = EVALUATION_STATUS[EXIT]
 
         try:
             self._update_document_status(ENTER_STATUS)
