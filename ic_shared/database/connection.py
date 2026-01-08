@@ -222,16 +222,19 @@ def get_connection(
     user = user or os.getenv("DATABASE_USER", "scanner")
     password = password or os.getenv("DATABASE_PASSWORD", "password")
     
-    # Detect if running in Cloud Run
+    # Detect if running in Cloud (Cloud Run, Cloud Functions, or explicitly requested)
     is_cloud_run = os.getenv("K_SERVICE") is not None
-    # Decide connection method
-    if use_connector or is_cloud_run:
+    is_cloud_function = os.getenv("FUNCTION_TARGET") is not None or os.getenv("FUNCTION_SIGNATURE_TYPE") is not None
+    has_instance_connection = os.getenv("INSTANCE_CONNECTION_NAME") is not None
+    
+    # Decide connection method: use Cloud SQL Connector if in Cloud or explicitly requested
+    if use_connector or is_cloud_run or is_cloud_function or has_instance_connection:
         cloud_sql_instance = os.getenv("CLOUD_SQL_INSTANCE") 
         instance_conn_name = os.getenv("INSTANCE_CONNECTION_NAME")
         instance_connection_name = instance_connection_name or cloud_sql_instance or instance_conn_name
         
         if not instance_connection_name:
-            logger.error("[DB] ✗ get_connection() FAILURE - Connection is None")
+            logger.error("[DB] ✗ get_connection() FAILURE - INSTANCE_CONNECTION_NAME not set in Cloud environment")
             return None
         conn = get_connection_pg8000_connector(instance_connection_name, database, user, password)
     else:
