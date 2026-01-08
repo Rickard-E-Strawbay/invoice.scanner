@@ -184,53 +184,15 @@ def publish_to_topic(topic_name: str, message_data: Dict[str, Any]) -> bool:
 def cf_preprocess_document(cloud_event):
     """
     Cloud Function: Preprocess document image.
-
     Triggered by: Pub/Sub message on 'document-processing' topic with stage='preprocess'
-
-    Process:
-        1. Get document from storage
-        2. Preprocess image
-        3. Save preprocessed version
-        4. Update status to 'preprocessed'
-        5. Publish to 'document-ocr' topic to trigger next stage
     """
     try:
-        import base64
-
-        pubsub_message = base64.b64decode(cloud_event.data["message"]["data"]).decode()
-        message = json.loads(pubsub_message)
-
-        document_id = message.get("document_id")
-        company_id = message.get("company_id")
-        stage = message.get("stage")
-
-        if stage != "preprocess":
-            logger.info(f"⏭️  Skipping message with stage={stage} (not 'preprocess')")
-            return
-
-        logger.info(f"✅ Processing document {document_id}")
-
-        # Update status
-        update_document_status(document_id, "preprocessing")
-
-        # TODO: Add actual preprocessing logic here
-        # For now: mock delay to simulate processing
-        # import time
-
-        # time.sleep(PROCESSING_SLEEP_TIME)
-
-        # Mark complete
-        update_document_status(document_id, "preprocessed")
-
-        # Publish to next stage
-        publish_to_topic("document-ocr", {"document_id": document_id, "company_id": company_id, "stage": "ocr"})
-
-        logger.info(f"✅ Completed for {document_id}")
-
+        from ic_cf.workers.cf_preprocess import cf_preprocess
+        processor = cf_preprocess(cloud_event)
+        processor.execute()
     except Exception as e:
-        logger.error(f"❌ Error: {type(e).__name__}: {e}")
+        logger.error(f"❌ Error in cf_preprocess_document: {type(e).__name__}: {e}")
         import traceback
-
         traceback.print_exc()
 
 
@@ -241,42 +203,16 @@ def cf_preprocess_document(cloud_event):
 def cf_extract_ocr_text(cloud_event):
     """
     Cloud Function: Extract text from document using OCR.
-
     Triggered by: Pub/Sub message on 'document-ocr' topic with stage='ocr'
     """
     try:
-        import base64
-
-        pubsub_message = base64.b64decode(cloud_event.data["message"]["data"]).decode()
-        message = json.loads(pubsub_message)
-
-        document_id = message.get("document_id")
-        company_id = message.get("company_id")
-        stage = message.get("stage")
-
-        if stage != "ocr":
-            return
-
-        logger.info(f"Processing document {document_id}")
-
-        update_document_status(document_id, "ocr_extracting")
-
-        # TODO: Add actual OCR logic here
-        import time
-
-        time.sleep(PROCESSING_SLEEP_TIME)
-
-        update_document_status(document_id, "ocr_complete")
-
-        # Publish to next stage
-        publish_to_topic("document-llm", {"document_id": document_id, "company_id": company_id, "stage": "llm"})
-
-        logger.info(f"Completed for {document_id}")
-
+        from ic_cf.workers.cf_extract_ocr_text import cf_extract_ocr_text
+        processor = cf_extract_ocr_text(cloud_event)
+        processor.execute()
     except Exception as e:
-        logger.error(f"Error: {e}")
-        document_id = message.get("document_id") if "message" in locals() else "unknown"
-        update_document_status(document_id, "error", str(e))
+        logger.error(f"❌ Error in cf_extract_ocr_text: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # ===== CLOUD FUNCTION 3: LLM PREDICTION =====
@@ -286,44 +222,16 @@ def cf_extract_ocr_text(cloud_event):
 def cf_predict_invoice_data(cloud_event):
     """
     Cloud Function: Predict invoice data using LLM.
-
     Triggered by: Pub/Sub message on 'document-llm' topic with stage='llm'
     """
     try:
-        import base64
-
-        pubsub_message = base64.b64decode(cloud_event.data["message"]["data"]).decode()
-        message = json.loads(pubsub_message)
-
-        document_id = message.get("document_id")
-        company_id = message.get("company_id")
-        stage = message.get("stage")
-
-        if stage != "llm":
-            return
-
-        logger.info(f"Processing document {document_id}")
-
-        update_document_status(document_id, "llm_predicting")
-
-        # TODO: Add actual LLM logic here
-        import time
-
-        time.sleep(PROCESSING_SLEEP_TIME)
-
-        update_document_status(document_id, "llm_complete")
-
-        # Publish to next stage
-        publish_to_topic(
-            "document-extraction", {"document_id": document_id, "company_id": company_id, "stage": "extraction"}
-        )
-
-        logger.info(f"Completed for {document_id}")
-
+        from ic_cf.workers.cf_predict_invoice_data import cf_predict_invoice_data
+        processor = cf_predict_invoice_data(cloud_event)
+        processor.execute()
     except Exception as e:
-        logger.error(f"Error: {e}")
-        document_id = message.get("document_id") if "message" in locals() else "unknown"
-        update_document_status(document_id, "error", str(e))
+        logger.error(f"❌ Error in cf_predict_invoice_data: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # ===== CLOUD FUNCTION 4: DATA EXTRACTION =====
@@ -333,44 +241,16 @@ def cf_predict_invoice_data(cloud_event):
 def cf_extract_structured_data(cloud_event):
     """
     Cloud Function: Extract and structure invoice data.
-
     Triggered by: Pub/Sub message on 'document-extraction' topic with stage='extraction'
     """
     try:
-        import base64
-
-        pubsub_message = base64.b64decode(cloud_event.data["message"]["data"]).decode()
-        message = json.loads(pubsub_message)
-
-        document_id = message.get("document_id")
-        company_id = message.get("company_id")
-        stage = message.get("stage")
-
-        if stage != "extraction":
-            return
-
-        logger.info(f"Processing document {document_id}")
-
-        update_document_status(document_id, "extraction")
-
-        # TODO: Add actual extraction logic here
-        import time
-
-        time.sleep(PROCESSING_SLEEP_TIME)
-
-        update_document_status(document_id, "extraction_complete")
-
-        # Publish to next stage
-        publish_to_topic(
-            "document-evaluation", {"document_id": document_id, "company_id": company_id, "stage": "evaluation"}
-        )
-
-        logger.info(f"Completed for {document_id}")
-
+        from ic_cf.workers.cf_extract_structured_data import cf_extract_structured_data
+        processor = cf_extract_structured_data(cloud_event)
+        processor.execute()
     except Exception as e:
-        logger.error(f"Error: {e}")
-        document_id = message.get("document_id") if "message" in locals() else "unknown"
-        update_document_status(document_id, "error", str(e))
+        logger.error(f"❌ Error in cf_extract_structured_data: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # ===== CLOUD FUNCTION 5: EVALUATION =====
@@ -380,45 +260,17 @@ def cf_extract_structured_data(cloud_event):
 def cf_run_automated_evaluation(cloud_event):
     """
     Cloud Function: Run automated quality evaluation.
-
     Triggered by: Pub/Sub message on 'document-evaluation' topic with stage='evaluation'
-
     Final stage - marks document as 'completed' when done.
     """
     try:
-        import base64
-
-        pubsub_message = base64.b64decode(cloud_event.data["message"]["data"]).decode()
-        message = json.loads(pubsub_message)
-
-        document_id = message.get("document_id")
-        company_id = message.get("company_id")
-        stage = message.get("stage")
-
-        if stage != "evaluation":
-            return
-
-        logger.info(f"Processing document {document_id}")
-
-        update_document_status(document_id, "evaluation")
-
-        # TODO: Add actual evaluation logic here
-        import time
-
-        time.sleep(PROCESSING_SLEEP_TIME)
-
-        # Final stage - mark as completed
-        update_document_status(document_id, "completed")
-
-        logger.info(f"Completed for {document_id}")
-
+        from ic_cf.workers.cf_run_automated_evaluation import cf_run_automated_evaluation
+        processor = cf_run_automated_evaluation(cloud_event)
+        processor.execute()
     except Exception as e:
-        logger.error(f"Error: {e}")
-        document_id = message.get("document_id") if "message" in locals() else "unknown"
-        update_document_status(document_id, "error", str(e))
-
-
-# ===== CLEANUP ON EXIT =====
+        logger.error(f"❌ Error in cf_run_automated_evaluation: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # ===== CLEANUP ON EXIT =====
