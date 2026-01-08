@@ -12,6 +12,15 @@ import atexit
 from typing import Optional, Tuple, List, Dict, Any
 
 from ic_shared.logging import ComponentLogger
+from ic_shared.configuration.config import (
+    DATABASE_HOST,
+    DATABASE_PORT,
+    DATABASE_NAME,
+    DATABASE_USER,
+    DATABASE_PASSWORD,
+    INSTANCE_CONNECTION_NAME,
+    IS_CLOUD_RUN,
+)
 
 try:
     import pg8000
@@ -215,28 +224,26 @@ def get_connection(
     use_connector: bool = False, instance_connection_name=None
 ) -> Optional[PG8000Connection]:
 
-    # Read environment variables with detailed logging
-    host = host or os.getenv("DATABASE_HOST", "localhost")
-    port = port or int(os.getenv("DATABASE_PORT", 5432))
-    database = database or os.getenv("DATABASE_NAME", "invoice_scanner")
-    user = user or os.getenv("DATABASE_USER", "scanner")
-    password = password or os.getenv("DATABASE_PASSWORD", "password")
+    # Use provided parameters or fall back to config values (no os.getenv duplicates)
+    host = host or DATABASE_HOST
+    port = port or DATABASE_PORT
+    database = database or DATABASE_NAME
+    user = user or DATABASE_USER
+    password = password or DATABASE_PASSWORD
     
     # Detect if running in Cloud (Cloud Run, Cloud Functions, or explicitly requested)
-    is_cloud_run = os.getenv("K_SERVICE") is not None
+    is_cloud_run = IS_CLOUD_RUN
     is_cloud_function = os.getenv("FUNCTION_TARGET") is not None or os.getenv("FUNCTION_SIGNATURE_TYPE") is not None
-    has_instance_connection = os.getenv("INSTANCE_CONNECTION_NAME") is not None
+    has_instance_connection = INSTANCE_CONNECTION_NAME is not None
     
     # Decide connection method: use Cloud SQL Connector if in Cloud or explicitly requested
     if use_connector or is_cloud_run or is_cloud_function or has_instance_connection:
-        cloud_sql_instance = os.getenv("CLOUD_SQL_INSTANCE") 
-        instance_conn_name = os.getenv("INSTANCE_CONNECTION_NAME")
-        instance_connection_name = instance_connection_name or cloud_sql_instance or instance_conn_name
+        instance_conn_name = instance_connection_name or INSTANCE_CONNECTION_NAME
         
-        if not instance_connection_name:
+        if not instance_conn_name:
             logger.error("[DB] ✗ get_connection() FAILURE - INSTANCE_CONNECTION_NAME not set in Cloud environment")
             return None
-        conn = get_connection_pg8000_connector(instance_connection_name, database, user, password)
+        conn = get_connection_pg8000_connector(instance_conn_name, database, user, password)
     else:
         conn = get_connection_pg8000(host, database, user, password, port)
     if not conn:
