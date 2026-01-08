@@ -74,6 +74,7 @@ jobs:
       - name: Build and Push Frontend image
         run: |
           docker build -f ./ic_frontend/Dockerfile \
+                       --build-arg VITE_API_URL=https://invoice-scanner-api-test-447531332666.europe-west1.run.app \
                        -t ${{ steps.set-vars.outputs.registry }}/frontend:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/frontend:${{ github.sha }} \
                        .
@@ -362,6 +363,7 @@ jobs:
       - name: Build and Push Frontend image
         run: |
           docker build -f ./ic_frontend/Dockerfile \
+                       --build-arg VITE_API_URL=https://invoice-scanner-api-prod-447531332666.europe-west1.run.app \
                        -t ${{ steps.set-vars.outputs.registry }}/frontend:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/frontend:${{ github.sha }} \
                        .

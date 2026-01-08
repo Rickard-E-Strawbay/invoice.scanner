@@ -3,6 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Accept API URL as build argument (for Cloud Run deployment)
+ARG VITE_API_URL=""
+
 COPY ic_frontend/package*.json ./
 
 # Install dependencies with legacy peer deps support
@@ -10,7 +13,8 @@ RUN npm install --legacy-peer-deps
 
 COPY ic_frontend/ .
 
-# Build production bundle
+# Build production bundle with API URL if provided
+ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 # Stage 2: Serve with nginx
