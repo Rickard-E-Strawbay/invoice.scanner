@@ -138,20 +138,34 @@ def get_cors_origins():
     """Get allowed CORS origins based on environment.
     
     - Local dev: Always allow localhost:8080
-    - TEST: Allow TEST Cloud Run frontend + localhost
-    - PROD: Allow PROD Cloud Run frontend + localhost
+    - Cloud Run: Allow dynamic FRONTEND_URL + all Cloud Run subdomains
+    
+    Environment variables:
+    - FRONTEND_URL: Specific frontend URL (optional, will be added if set)
+    - FLASK_ENV: development, test, production
+    - K_SERVICE: Set automatically by Cloud Run (used to detect environment)
     """
-    env = os.getenv('FLASK_ENV', 'development')
+    origins = [
+        'http://localhost:8080',
+        'https://localhost:8080'
+    ]
     
-    # Always allow localhost for local development
-    origins = ['http://localhost:8080', 'https://localhost:8080']
+    # Get frontend URL from environment variable if explicitly set
+    frontend_url = os.getenv('FRONTEND_URL')
+    if frontend_url:
+        origins.append(frontend_url)
+        logger.info(f"CORS: Added FRONTEND_URL from env: {frontend_url}")
     
-    if env == 'production':
-        # Production environment
-        origins.append('https://invoice-scanner-frontend-prod-th3siqbveq-ew.a.run.app')
-    else:
-        # Development/Test environment
-        origins.append('https://invoice-scanner-frontend-test-wcpzrlxtjq-ew.a.run.app')
+    # In Cloud Run, allow all frontend services from the same region
+    # This handles the dynamic hash in Cloud Run URLs
+    is_cloud_run = os.getenv('K_SERVICE') is not None
+    if is_cloud_run:
+        # Cloud Run URLs format: name-hash.region.run.app
+        # We allow any service from the same domain
+        cloud_run_domain = os.getenv('GCP_REGION', 'europe-west1')
+        wildcard_origin = f"https://invoice-scanner-frontend-*.{cloud_run_domain}.run.app"
+        origins.append(wildcard_origin)
+        logger.info(f"CORS: Added wildcard Cloud Run origin: {wildcard_origin}")
     
     logger.debug(f"CORS Allowed origins: {origins}")
     return origins
