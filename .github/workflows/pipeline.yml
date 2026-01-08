@@ -74,7 +74,6 @@ jobs:
       - name: Build and Push Frontend image
         run: |
           docker build -f ./ic_frontend/Dockerfile \
-                       --build-arg VITE_API_URL=https://invoice-scanner-api-test-447531332666.europe-west1.run.app \
                        -t ${{ steps.set-vars.outputs.registry }}/frontend:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/frontend:${{ github.sha }} \
                        .
@@ -186,21 +185,7 @@ jobs:
             --cpu=1 \
             --timeout=1800 \
             --max-instances=10 \
-            --set-env-vars "
-              INSTANCE_CONNECTION_NAME=strawbayscannertest:europe-west1:invoice-scanner-test,
-              DATABASE_NAME=invoice_scanner,
-              DATABASE_USER=scanner_test,
-              DATABASE_PASSWORD=$DB_PASSWORD,
-              FLASK_SECRET_KEY=$SECRET_KEY,
-              FLASK_ENV=test,ENVIRONMENT=test,
-              SENDGRID_API_KEY=$SENDGRID_API_KEY,
-              SENDGRID_FROM_EMAIL=noreply@strawbay.io,
-              OPENAI_API_KEY=$OPENAI_API_KEY,
-              GCP_PROJECT=strawbayscannertest,
-              GCP_PROJECT_ID=strawbayscannertest,
-              GCP_REGION=europe-west1,STORAGE_TYPE=gcs,
-              GCS_BUCKET=invoice-scanner-test-docs,
-              PROCESSING_BACKEND=cloud_functions" \
+            --set-env-vars "INSTANCE_CONNECTION_NAME=strawbayscannertest:europe-west1:invoice-scanner-test,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_test,DATABASE_PASSWORD=$DB_PASSWORD,FLASK_SECRET_KEY=$SECRET_KEY,FLASK_ENV=test,ENVIRONMENT=test,SENDGRID_API_KEY=$SENDGRID_API_KEY,SENDGRID_FROM_EMAIL=noreply@strawbay.io,OPENAI_API_KEY=$OPENAI_API_KEY,GCP_PROJECT=strawbayscannertest,GCP_PROJECT_ID=strawbayscannertest,GCP_REGION=europe-west1,STORAGE_TYPE=gcs,GCS_BUCKET=invoice-scanner-test-docs,PROCESSING_BACKEND=cloud_functions,CORS_ORIGINS=*.run.app" \
             --service-account=447531332666-compute@developer.gserviceaccount.com
         env:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
@@ -216,6 +201,16 @@ jobs:
             --member=allUsers \
             --role=roles/run.invoker
 
+      - name: Get API URL
+        run: |
+          API_URL=$(gcloud run services describe invoice-scanner-api-test \
+            --platform=managed \
+            --region=europe-west1 \
+            --project=strawbayscannertest \
+            --format='value(status.url)')
+          echo "API_URL=$API_URL" >> $GITHUB_ENV
+        id: get_api_url
+
       - name: Deploy Frontend to Cloud Run
         run: |
           gcloud run deploy invoice-scanner-frontend-test \
@@ -228,7 +223,8 @@ jobs:
             --cpu=1 \
             --timeout=3600 \
             --max-instances=10 \
-            --set-env-vars "ENVIRONMENT=test"
+            --set-env-vars "ENVIRONMENT=test,VITE_API_URL=${{ env.API_URL }}"
+        id: deploy_frontend_test
 
       - name: Grant public access to Frontend
         run: |
@@ -238,21 +234,13 @@ jobs:
             --member=allUsers \
             --role=roles/run.invoker
 
-      - name: Get service URLs
+      - name: Get Frontend URL
         run: |
-          API_URL=$(gcloud run services describe invoice-scanner-api-test \
-            --platform=managed \
-            --region=europe-west1 \
-            --project=strawbayscannertest \
-            --format='value(status.url)')
-          
           FRONTEND_URL=$(gcloud run services describe invoice-scanner-frontend-test \
             --platform=managed \
             --region=europe-west1 \
             --project=strawbayscannertest \
             --format='value(status.url)')
-          
-          echo "API_URL=$API_URL" >> $GITHUB_ENV
           echo "FRONTEND_URL=$FRONTEND_URL" >> $GITHUB_ENV
 
       - name: Run smoke tests
@@ -363,7 +351,6 @@ jobs:
       - name: Build and Push Frontend image
         run: |
           docker build -f ./ic_frontend/Dockerfile \
-                       --build-arg VITE_API_URL=https://invoice-scanner-api-prod-447531332666.europe-west1.run.app \
                        -t ${{ steps.set-vars.outputs.registry }}/frontend:latest \
                        -t ${{ steps.set-vars.outputs.registry }}/frontend:${{ github.sha }} \
                        .
@@ -476,7 +463,7 @@ jobs:
             --timeout=1800 \
             --max-instances=20 \
             --min-instances=1 \
-            --set-env-vars "INSTANCE_CONNECTION_NAME=strawbayscannerprod:europe-west1:invoice-scanner-prod,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=$DB_PASSWORD,FLASK_SECRET_KEY=$SECRET_KEY,FLASK_ENV=production,ENVIRONMENT=prod,SENDGRID_API_KEY=$SENDGRID_API_KEY,SENDGRID_FROM_EMAIL=noreply@strawbay.io,OPENAI_API_KEY=$OPENAI_API_KEY,GCP_PROJECT=strawbayscannerprod,GCP_PROJECT_ID=strawbayscannerprod,GCP_REGION=europe-west1,STORAGE_TYPE=gcs,GCS_BUCKET=invoice-scanner-prod-docs,PROCESSING_BACKEND=cloud_functions" \
+            --set-env-vars "INSTANCE_CONNECTION_NAME=strawbayscannerprod:europe-west1:invoice-scanner-prod,DATABASE_NAME=invoice_scanner,DATABASE_USER=scanner_prod,DATABASE_PASSWORD=$DB_PASSWORD,FLASK_SECRET_KEY=$SECRET_KEY,FLASK_ENV=production,ENVIRONMENT=prod,SENDGRID_API_KEY=$SENDGRID_API_KEY,SENDGRID_FROM_EMAIL=noreply@strawbay.io,OPENAI_API_KEY=$OPENAI_API_KEY,GCP_PROJECT=strawbayscannerprod,GCP_PROJECT_ID=strawbayscannerprod,GCP_REGION=europe-west1,STORAGE_TYPE=gcs,GCS_BUCKET=invoice-scanner-prod-docs,PROCESSING_BACKEND=cloud_functions,CORS_ORIGINS=*.run.app" \
             --service-account=527148217996-compute@developer.gserviceaccount.com
         env:
           DB_PASSWORD: ${{ env.DB_PASSWORD }}
@@ -492,6 +479,16 @@ jobs:
             --member=allUsers \
             --role=roles/run.invoker
 
+      - name: Get API URL
+        run: |
+          API_URL=$(gcloud run services describe invoice-scanner-api-prod \
+            --platform=managed \
+            --region=europe-west1 \
+            --project=strawbayscannerprod \
+            --format='value(status.url)')
+          echo "API_URL=$API_URL" >> $GITHUB_ENV
+        id: get_api_url
+
       - name: Deploy Frontend to Cloud Run
         run: |
           gcloud run deploy invoice-scanner-frontend-prod \
@@ -505,7 +502,7 @@ jobs:
             --timeout=3600 \
             --max-instances=20 \
             --min-instances=1 \
-            --set-env-vars "ENVIRONMENT=production"
+            --set-env-vars "ENVIRONMENT=production,VITE_API_URL=${{ env.API_URL }}"
 
       - name: Grant public access to Frontend
         run: |
@@ -515,21 +512,13 @@ jobs:
             --member=allUsers \
             --role=roles/run.invoker
 
-      - name: Get service URLs
+      - name: Get Frontend URL
         run: |
-          API_URL=$(gcloud run services describe invoice-scanner-api-prod \
-            --platform=managed \
-            --region=europe-west1 \
-            --project=strawbayscannerprod \
-            --format='value(status.url)')
-          
           FRONTEND_URL=$(gcloud run services describe invoice-scanner-frontend-prod \
             --platform=managed \
             --region=europe-west1 \
             --project=strawbayscannerprod \
             --format='value(status.url)')
-          
-          echo "API_URL=$API_URL" >> $GITHUB_ENV
           echo "FRONTEND_URL=$FRONTEND_URL" >> $GITHUB_ENV
 
       - name: Run smoke tests

@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 import secrets
+import re
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from ic_shared.database.connection import execute_sql
@@ -134,41 +135,65 @@ def refresh_user_session(user_id):
 # =============
 # CORS Configuration
 # =============
+import re
+
+def matches_cors_pattern(origin, allowed_patterns):
+    """Check if origin matches any allowed CORS pattern."""
+    if not origin:
+        return False
+    
+    for pattern in allowed_patterns:
+        # Exact match
+        if origin == pattern:
+            logger.debug(f"CORS: Origin {origin} matches exactly: {pattern}")
+            return True
+        
+        # Wildcard pattern matching (convert * to regex)
+        if '*' in pattern:
+            regex_pattern = pattern.replace('.', r'\.').replace('*', '[a-z0-9-]+')
+            if re.match(f"^{regex_pattern}$", origin):
+                logger.debug(f"CORS: Origin {origin} matches pattern: {pattern}")
+                return True
+    
+    logger.debug(f"CORS: Origin {origin} does NOT match any allowed pattern")
+    return False
+
+
 def get_cors_origins():
-    """Get allowed CORS origins based on environment.
+    """Get allowed CORS origin patterns from environment or defaults.
     
-    - Local dev: Always allow localhost:8080
-    - Cloud Run: Allow dynamic FRONTEND_URL + all Cloud Run subdomains
+    Environment variable CORS_ORIGINS can be set to:
+    - *.run.app (wildcard for Cloud Run)
+    - Exact URL like https://example.com
+    - Multiple patterns separated by comma
     
-    Environment variables:
-    - FRONTEND_URL: Specific frontend URL (optional, will be added if set)
-    - FLASK_ENV: development, test, production
-    - K_SERVICE: Set automatically by Cloud Run (used to detect environment)
+    Falls back to localhost for local development.
     """
-    origins = [
+    patterns = []
+    
+    # Get from environment variable if set (set by pipeline)
+    cors_env = os.getenv('CORS_ORIGINS')
+    if cors_env:
+        # Could be single pattern or comma-separated
+        env_patterns = [p.strip() for p in cors_env.split(',')]
+        patterns.extend(env_patterns)
+        logger.info(f"CORS: Loaded patterns from CORS_ORIGINS env var: {env_patterns}")
+    
+    # Always allow localhost for local development
+    local_patterns = [
         'http://localhost:8080',
-        'https://localhost:8080'
+        'http://localhost:3000',
+        'https://localhost:8080',
+        'https://localhost:3000'
     ]
+    patterns.extend(local_patterns)
     
-    # Get frontend URL from environment variable if explicitly set
-    frontend_url = os.getenv('FRONTEND_URL')
-    if frontend_url:
-        origins.append(frontend_url)
-        logger.info(f"CORS: Added FRONTEND_URL from env: {frontend_url}")
-    
-    # In Cloud Run, allow all frontend services from the same region
-    # This handles the dynamic hash in Cloud Run URLs
-    is_cloud_run = os.getenv('K_SERVICE') is not None
-    if is_cloud_run:
-        # Cloud Run URLs format: name-hash.region.run.app
-        # We allow any service from the same domain
-        cloud_run_domain = os.getenv('GCP_REGION', 'europe-west1')
-        wildcard_origin = f"https://invoice-scanner-frontend-*.{cloud_run_domain}.run.app"
-        origins.append(wildcard_origin)
-        logger.info(f"CORS: Added wildcard Cloud Run origin: {wildcard_origin}")
-    
-    logger.debug(f"CORS Allowed origins: {origins}")
-    return origins
+    logger.debug(f"CORS Allowed patterns: {patterns}")
+    return patterns
+
+
+# Store allowed patterns globally for use in CORS handler
+CORS_PATTERNS = get_cors_origins()
 
 # =============
 # App & Config
@@ -194,8 +219,69 @@ else:
 
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 
-# CORS configuration using flask_cors
-CORS(app, supports_credentials=True, origins=get_cors_origins())
+# CORS configuration with dynamic origin validation
+# Use flask_cors with a custom request_matcher
+from flask_cors import cross_origin
+
+def cors_request_matcher(request):
+    """Custom CORS request matcher that supports wildcard patterns."""
+    origin = request.headers.get('Origin')
+    if not origin:
+        return False
+    
+    return matches_cors_pattern(origin, CORS_PATTERNS)
+
+
+# Initialize CORS with manual handling for better control
+# For development/test: be permissive. For production: be strict.
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'local').lower()
+
+if ENVIRONMENT in ['test', 'prod']:
+    # Cloud Run environment - use dynamic pattern matching
+    logger.info("[CORS] Initializing CORS with dynamic wildcard pattern matching")
+    
+    # Use a custom before_request handler to add CORS headers
+    @app.before_request
+    def handle_preflight():
+        """Handle CORS preflight requests manually."""
+        origin = request.headers.get('Origin')
+        
+        if request.method == 'OPTIONS':
+            # Preflight request
+            if origin and matches_cors_pattern(origin, CORS_PATTERNS):
+                return '', 204, {
+                    'Access-Control-Allow-Origin': origin,
+                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+                    'Access-Control-Allow-Credentials': 'true',
+                    'Access-Control-Max-Age': '3600'
+                }
+            else:
+                logger.warning(f"[CORS] Preflight blocked for origin: {origin}")
+                return '', 403
+    
+    @app.after_request
+    def add_cors_headers(response):
+        """Add CORS headers to all responses."""
+        origin = request.headers.get('Origin')
+        
+        if origin and matches_cors_pattern(origin, CORS_PATTERNS):
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        
+        return response
+    
+else:
+    # Local development - more permissive
+    logger.info("[CORS] Initializing CORS for local development (allowing all origins)")
+    CORS(app, 
+         supports_credentials=True, 
+         origins=['http://localhost:8080', 'https://localhost:8080'],
+         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+         allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'])
+
 
 # Flask-smorest + Swagger configuration
 app.config["API_TITLE"] = "Example API"
