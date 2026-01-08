@@ -137,79 +137,29 @@ def refresh_user_session(user_id):
 # =============
 import re
 
-def matches_cors_pattern(origin, allowed_patterns):
-    """Check if origin matches any allowed CORS pattern."""
-    if not origin:
-        return False
-    
-    # Extract hostname from origin URL (remove protocol)
-    # Origin format: "https://example.com:port" or "http://localhost:3000"
-    from urllib.parse import urlparse
-    try:
-        parsed = urlparse(origin)
-        hostname = parsed.hostname or origin
-    except:
-        hostname = origin
-    
-    logger.debug(f"CORS: Checking origin {origin} (hostname: {hostname}) against patterns")
-    
-    for pattern in allowed_patterns:
-        # Exact match on full origin
-        if origin == pattern:
-            logger.debug(f"CORS: Origin {origin} matches exactly: {pattern}")
-            return True
-        
-        # Exact match on hostname
-        if hostname == pattern:
-            logger.debug(f"CORS: Hostname {hostname} matches exactly: {pattern}")
-            return True
-        
-        # Wildcard pattern matching (convert * to regex) - match against hostname
-        if '*' in pattern:
-            regex_pattern = pattern.replace('.', r'\.').replace('*', '[a-z0-9-]+')
-            if re.match(f"^{regex_pattern}$", hostname):
-                logger.debug(f"CORS: Hostname {hostname} matches pattern: {pattern}")
-                return True
-    
-    logger.debug(f"CORS: Origin {origin} (hostname: {hostname}) does NOT match any allowed pattern {allowed_patterns}")
-    return False
 
-
-def get_cors_origins():
-    """Get allowed CORS origin patterns from environment or defaults.
+# =============
+# CORS Configuration
+# =============
+def get_cors_origins_regex():
+    """Get CORS origins regex pattern for flask-cors"""
+    env = os.getenv('FLASK_ENV', 'development')
     
-    Environment variable CORS_ORIGINS can be set to:
-    - *.run.app (wildcard for Cloud Run)
-    - Exact URL like https://example.com
-    - Multiple patterns separated by comma
+    # Always allow localhost
+    origins = ['http://localhost:8080', 'https://localhost:8080']
     
-    Falls back to localhost for local development.
-    """
-    patterns = []
+    # Add wildcard pattern for Cloud Run domains
+    origins.append('https://.*\\.run\\.app')
     
-    # Get from environment variable if set (set by pipeline)
-    cors_env = os.getenv('CORS_ORIGINS')
-    if cors_env:
-        # Could be single pattern or comma-separated
-        env_patterns = [p.strip() for p in cors_env.split(',')]
-        patterns.extend(env_patterns)
-        logger.info(f"CORS: Loaded patterns from CORS_ORIGINS env var: {env_patterns}")
+    if env == 'production':
+        # Production environment - also accept specific prod frontend URL as fallback
+        origins.append('https://invoice-scanner-frontend-prod.*\\.run\\.app')
+    else:
+        # Development/Test environment
+        origins.append('https://invoice-scanner-frontend-test.*\\.run\\.app')
     
-    # Always allow localhost for local development
-    local_patterns = [
-        'http://localhost:8080',
-        'http://localhost:3000',
-        'https://localhost:8080',
-        'https://localhost:3000'
-    ]
-    patterns.extend(local_patterns)
-    
-    logger.debug(f"CORS Allowed patterns: {patterns}")
-    return patterns
-
-
-# Store allowed patterns globally for use in CORS handler
-CORS_PATTERNS = get_cors_origins()
+    logger.debug(f"CORS origins regex patterns: {origins}")
+    return '|'.join(origins)
 
 # =============
 # App & Config
@@ -235,69 +185,11 @@ else:
 
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 
-# CORS configuration with dynamic origin validation
-# Use flask_cors with a custom request_matcher
-from flask_cors import cross_origin
-
-def cors_request_matcher(request):
-    """Custom CORS request matcher that supports wildcard patterns."""
-    origin = request.headers.get('Origin')
-    if not origin:
-        return False
-    
-    return matches_cors_pattern(origin, CORS_PATTERNS)
-
-
-# Initialize CORS with manual handling for better control
-# For development/test: be permissive. For production: be strict.
-ENVIRONMENT = os.getenv('ENVIRONMENT', 'local').lower()
-
-if ENVIRONMENT in ['test', 'prod']:
-    # Cloud Run environment - use dynamic pattern matching
-    logger.info("[CORS] Initializing CORS with dynamic wildcard pattern matching")
-    
-    # Use a custom before_request handler to add CORS headers
-    @app.before_request
-    def handle_preflight():
-        """Handle CORS preflight requests manually."""
-        origin = request.headers.get('Origin')
-        
-        if request.method == 'OPTIONS':
-            # Preflight request
-            if origin and matches_cors_pattern(origin, CORS_PATTERNS):
-                return '', 204, {
-                    'Access-Control-Allow-Origin': origin,
-                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
-                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-                    'Access-Control-Allow-Credentials': 'true',
-                    'Access-Control-Max-Age': '3600'
-                }
-            else:
-                logger.warning(f"[CORS] Preflight blocked for origin: {origin}")
-                return '', 403
-    
-    @app.after_request
-    def add_cors_headers(response):
-        """Add CORS headers to all responses."""
-        origin = request.headers.get('Origin')
-        
-        if origin and matches_cors_pattern(origin, CORS_PATTERNS):
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
-        
-        return response
-    
-else:
-    # Local development - more permissive
-    logger.info("[CORS] Initializing CORS for local development (allowing all origins)")
-    CORS(app, 
-         supports_credentials=True, 
-         origins=['http://localhost:8080', 'https://localhost:8080'],
-         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-         allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'])
-
+# Configure CORS with regex pattern matching for Cloud Run
+CORS(app, 
+     supports_credentials=True, 
+     origins_regex=get_cors_origins_regex(),
+     allow_headers=['Content-Type', 'Authorization'])
 
 # Flask-smorest + Swagger configuration
 app.config["API_TITLE"] = "Example API"
@@ -358,22 +250,6 @@ def health():
             "error": str(e),
             "timestamp": datetime.now().isoformat()
         }), 503
-
-
-
-
-
-    try:
-        # Minimal health check - just verify the app is responding
-        # Don't require DB to be up (DB connections are lazy-loaded on demand)
-        return jsonify({
-            "status": "healthy",
-            "service": "ic_api",
-            "version": "1.0"
-        }), 200
-    except Exception as e:
-        logger.info(f"Health check failed: {e}")
-        return jsonify({"status": "unhealthy", "error": str(e)}), 503
 
 @blp_live.route("/x")
 def x():
