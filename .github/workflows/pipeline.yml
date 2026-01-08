@@ -184,8 +184,8 @@ jobs:
             --memory=512Mi \
             --cpu=1 \
             --timeout=1800 \
-            --max-instances=10 \            
-            --vpc-connector=run-connector \
+            --max-instances=10 \
+            --vpc-connector=projects/strawbayscannertest/locations/europe-west1/connectors/run-connector \
             --set-env-vars "
               INSTANCE_CONNECTION_NAME=strawbayscannertest:europe-west1:invoice-scanner-test,
               DATABASE_NAME=invoice_scanner,
@@ -240,7 +240,7 @@ jobs:
             --cpu=1 \
             --timeout=3600 \
             --max-instances=10 \
-            --vpc-connector=run-connector \
+            --vpc-connector=projects/strawbayscannertest/locations/europe-west1/connectors/run-connector \
             --set-env-vars "ENVIRONMENT=test,VITE_API_URL=${{ env.API_URL }}"
         id: deploy_frontend_test
 
@@ -481,7 +481,7 @@ jobs:
             --timeout=1800 \
             --max-instances=20 \
             --min-instances=1 \
-            --vpc-connector=run-connector \
+            --vpc-connector=projects/strawbayscannerprod/locations/europe-west1/connectors/run-connector \
             --command sh \
             --args "-c,if [ \"$$FLASK_ENV\" = \"production\" ]; then exec gunicorn --host 0.0.0.0 --port 8080 main:app; else exec python -u main.py --port 8080; fi" \
             --set-env-vars "
@@ -538,7 +538,7 @@ jobs:
             --timeout=3600 \
             --max-instances=20 \
             --min-instances=1 \
-            --vpc-connector=run-connector \
+            --vpc-connector=projects/strawbayscannerprod/locations/europe-west1/connectors/run-connector \
             --set-env-vars "ENVIRONMENT=production,VITE_API_URL=${{ env.API_URL }}"
 
       - name: Grant public access to Frontend
