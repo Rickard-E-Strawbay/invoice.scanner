@@ -120,19 +120,20 @@ jobs:
 
       - name: Deploy Cloud Functions to TEST
         run: |
-          # Sync shared module into CF directory
-          rsync -a --delete "ic_shared/" "ic_cf/shared/"
+          # Sync shared module into CF directory (required before deployment)
+          echo "[DEPLOY] Syncing ic_shared/ → ic_cf/ic_shared/"
+          rsync -av --delete "ic_shared/" "ic_cf/ic_shared/" | head -30
           
-          # Configure git for commit
-          git config user.email "github-actions[bot]@github.com"
-          git config user.name "github-actions[bot]"
+          # Verify sync succeeded
+          if [ ! -d "ic_cf/ic_shared" ]; then
+            echo "❌ FATAL: ic_shared sync failed - ic_cf/ic_shared not found"
+            exit 1
+          fi
           
-          # Commit shared module sync (force add, ignores .gitignore)
-          git add -f ic_cf/shared/
-          git commit -m "Sync shared module for Cloud Functions deployment [auto-sync]" || echo "No changes to commit"
-          git push origin main || echo "No commits to push"
+          echo "✓ Shared module synced successfully"
+          echo ""
           
-          # Deploy Cloud Functions
+          # Deploy Cloud Functions (ic_shared is now available locally)
           chmod +x ic_cf/deploy.sh
           ./ic_cf/deploy.sh strawbayscannertest europe-west1
       - name: Verify Cloud Functions Deployment

@@ -5,25 +5,24 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SHARED_SRC="$ROOT/ic_shared"
 CF_DIR="$ROOT/ic_cf"
-SHARED_DST="$CF_DIR/shared"
+SHARED_DST="$CF_DIR/ic_shared"
 
 PROJECT_ID=${1:-strawbayscannertest}
 REGION=${2:-europe-west1}
 
 echo "[DEPLOY] Starting Cloud Functions deployment to project: $PROJECT_ID"
 echo "[DEPLOY] Region: $REGION"
-echo "[DEPLOY] Using source: $CF_DIR (includes shared/ synced by GitHub Actions pipeline)"
+echo "[DEPLOY] Using source: $CF_DIR (with ic_shared included)"
 echo ""
 
-# Verify ic_shared has been synced by GitHub Actions pipeline
+# Ensure ic_shared is synced to ic_cf/ic_shared (required before gcloud deploy)
+echo "[DEPLOY] Syncing ic_shared → ic_cf/ic_shared..."
+rsync -a --delete "$SHARED_SRC/" "$SHARED_DST/"
 if [ ! -d "$SHARED_DST" ]; then
-    echo "⚠️  WARNING: ic_shared has not been synced to ic_cf/shared/"
-    echo "             This should be done by GitHub Actions pipeline before running this script."
-    echo "             If running manually, sync with: rsync -a --delete '$SHARED_SRC/' '$SHARED_DST/'"
+    echo "❌ FATAL: Sync failed - ic_cf/ic_shared not found"
     exit 1
 fi
-
-echo "✓ ic_shared module available at $SHARED_DST"
+echo "✓ Shared module synced successfully"
 echo ""
 
 # Set current project
