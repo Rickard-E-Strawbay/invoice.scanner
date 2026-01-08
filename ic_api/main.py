@@ -142,20 +142,36 @@ def matches_cors_pattern(origin, allowed_patterns):
     if not origin:
         return False
     
+    # Extract hostname from origin URL (remove protocol)
+    # Origin format: "https://example.com:port" or "http://localhost:3000"
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(origin)
+        hostname = parsed.hostname or origin
+    except:
+        hostname = origin
+    
+    logger.debug(f"CORS: Checking origin {origin} (hostname: {hostname}) against patterns")
+    
     for pattern in allowed_patterns:
-        # Exact match
+        # Exact match on full origin
         if origin == pattern:
             logger.debug(f"CORS: Origin {origin} matches exactly: {pattern}")
             return True
         
-        # Wildcard pattern matching (convert * to regex)
+        # Exact match on hostname
+        if hostname == pattern:
+            logger.debug(f"CORS: Hostname {hostname} matches exactly: {pattern}")
+            return True
+        
+        # Wildcard pattern matching (convert * to regex) - match against hostname
         if '*' in pattern:
             regex_pattern = pattern.replace('.', r'\.').replace('*', '[a-z0-9-]+')
-            if re.match(f"^{regex_pattern}$", origin):
-                logger.debug(f"CORS: Origin {origin} matches pattern: {pattern}")
+            if re.match(f"^{regex_pattern}$", hostname):
+                logger.debug(f"CORS: Hostname {hostname} matches pattern: {pattern}")
                 return True
     
-    logger.debug(f"CORS: Origin {origin} does NOT match any allowed pattern")
+    logger.debug(f"CORS: Origin {origin} (hostname: {hostname}) does NOT match any allowed pattern {allowed_patterns}")
     return False
 
 
