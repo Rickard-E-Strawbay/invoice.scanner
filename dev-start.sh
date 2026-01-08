@@ -76,7 +76,7 @@ docker-compose down -v 2>/dev/null || true
 
 # Pass host IP to docker-compose via environment variable
 export PROCESSING_SERVICE_URL="http://${HOST_IP}:9000"
-docker-compose up -d --build
+docker-compose up -d
 
 echo "⏳ Waiting for services to be healthy..."
 sleep 10
@@ -99,21 +99,24 @@ echo ""
 echo "2️⃣  Starting Cloud Functions Framework in a new terminal..."
 echo ""
 
-if [ ! -f "invoice.scanner.cloud.functions/local_server.sh" ]; then
-    echo "❌ invoice.scanner.cloud.functions/local_server.sh not found"
+if [ ! -f "ic_cf/local_server.sh" ]; then
+    echo "❌ ic_cf/local_server.sh not found"
     exit 1
 fi
 
-chmod +x invoice.scanner.cloud.functions/local_server.sh
+chmod +x ic_cf/local_server.sh
 
 # Start Cloud Functions in a new Terminal window (macOS)
 echo "📱 Opening new Terminal for Cloud Functions Framework..."
 
 # Get the absolute path for the script
-CF_SCRIPT="$ROOT_DIR/invoice.scanner.cloud.functions/local_server.sh"
+CF_SCRIPT="$ROOT_DIR/ic_cf/local_server.sh"
 
 # Open in new Terminal window and run the script
-open -a Terminal "$CF_SCRIPT"
+osascript -e "tell app \"Terminal\" to do script \"cd '$ROOT_DIR/ic_cf' && bash ./local_server.sh\"" &
+
+# Give the new Terminal a moment to start
+sleep 2
 
 echo ""
 echo "✅ All services started!"
@@ -130,11 +133,11 @@ echo "  • No rebuild needed - Vite watches files automatically"
 echo ""
 echo "To view Cloud Functions logs:"
 echo "  • Check the Terminal window that opened automatically"
-echo "  • Or run: docker-compose logs -f api"
+echo "  • Or run: docker-compose logs -f cf"
 echo ""
-echo "Press Ctrl+C in THIS terminal to stop Docker services"
-echo "Press Ctrl+C in the CLOUD FUNCTIONS terminal to stop it"
+echo "📋 Press Ctrl+C in THIS terminal to stop Docker services"
+echo "📋 Press Ctrl+C in the CLOUD FUNCTIONS terminal to stop it"
 echo ""
 
-# Wait indefinitely so docker-compose stays running
-wait
+# Keep docker-compose logs in the foreground
+docker-compose logs -f
