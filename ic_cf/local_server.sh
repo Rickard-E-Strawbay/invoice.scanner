@@ -38,6 +38,7 @@ echo "✓ Dependencies ready"
 export PYTHONUNBUFFERED=1
 export PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
 export PYTHONPATH="$(cd "$SCRIPT_DIR/../" && pwd):$PYTHONPATH"
+export ENVIRONMENT=local
 export DATABASE_HOST="${DATABASE_HOST:-127.0.0.1}"
 export DATABASE_PORT="${DATABASE_PORT:-5432}"
 export DATABASE_NAME="${DATABASE_NAME:-invoice_scanner}"

@@ -2,8 +2,9 @@ from typing import Optional
 import json
 import base64
 
+from ic_shared.configuration.defines import STAGES
 from ic_shared.logging import ComponentLogger
-from ic_shared.database import get_document_status, update_document_status
+from ic_shared.database import update_document_status
 
 PUBSUB_MESSAGE_TEMPLATE = {
     "document_id": None,
@@ -47,8 +48,28 @@ class cf_base:
         self.logger.info(f"NEW STATUS {document_status} for document {self.document_id}")
         return update_document_status(self.document_id, document_status)
     
-    def _publish_to_topic(self, next_topic_name: str, next_stage_name: str):
+    def __find_next_stage(self) -> Optional[str]:
+        try:
+            current_index = STAGES.index(self.stage_name)
+            # Get next topic if it exists
+            if current_index + 1 < len(STAGES):
+                next_stage = STAGES[current_index + 1]
+               
+                return next_stage
+        except (ValueError, IndexError):
+            pass
+        return None
+        
+    
+    def _publish_to_topic(self, stage: Optional[str] = None):
         """Publish message to the specified topic for the next stage."""
+        # Use provided stage or auto-detect next stage from pipeline
+        if stage:
+            next_stage_name = stage
+        else:
+            next_stage_name = self.__find_next_stage()
+
+        next_topic_name = "document-" + next_stage_name if next_stage_name else None
 
         from main import publish_to_topic
         message_data = PUBSUB_MESSAGE_TEMPLATE.copy()

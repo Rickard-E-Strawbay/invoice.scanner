@@ -20,6 +20,7 @@ from ic_shared.configuration.config import (
     DATABASE_PASSWORD,
     INSTANCE_CONNECTION_NAME,
     IS_CLOUD_RUN,
+    IS_LOCAL,
 )
 
 try:
@@ -176,7 +177,7 @@ def get_connection_pg8000(host, database, user, password, port=5432) -> Optional
         logger.error("[DB.TCP] ✗ pg8000 not installed")
         return None
     try:
-        logger.debug(f"Attempting TCP connection to {user}@{host}:{port}/{database}...")
+        # logger.debug(f"Attempting TCP connection to {user}@{host}:{port}/{database}...")
         conn = pg8000.connect(
             host=host,
             port=port,
@@ -186,7 +187,7 @@ def get_connection_pg8000(host, database, user, password, port=5432) -> Optional
             timeout=5,
             ssl_context=None
         )
-        logger.info(f"✓ Connected via TCP: {database}@{host}:{port}")
+        # logger.info(f"✓ Connected via TCP: {database}@{host}:{port}")
         return PG8000Connection(conn)
     except Exception as e:
         logger.error(f"✗ TCP connection failed: {e}")
@@ -231,20 +232,35 @@ def get_connection(
     user = user or DATABASE_USER
     password = password or DATABASE_PASSWORD
     
-    # Detect if running in Cloud (Cloud Run, Cloud Functions, or explicitly requested)
+    # Detect connection mode
+    is_local = IS_LOCAL  # From ENVIRONMENT=local
     is_cloud_run = IS_CLOUD_RUN
     is_cloud_function = os.getenv("FUNCTION_TARGET") is not None or os.getenv("FUNCTION_SIGNATURE_TYPE") is not None
     has_instance_connection = INSTANCE_CONNECTION_NAME is not None
+
+    # logger.debug(f"[DB] Connection mode: is_local={is_local}, is_cloud_run={is_cloud_run}, is_cloud_function={is_cloud_function}, has_instance_connection={has_instance_connection}")
     
-    # Decide connection method: use Cloud SQL Connector if in Cloud or explicitly requested
-    if use_connector or is_cloud_run or is_cloud_function or has_instance_connection:
+    # Connection priority:
+    # 1) LOCAL: Always use TCP if ENVIRONMENT=local (docker-compose or local functions-framework)
+    # 2) CLOUD: Use Cloud SQL Connector if INSTANCE_CONNECTION_NAME is set
+    # 3) REMOTE: Use TCP to remote host
+    
+    if is_local:
+        # Local environment - always use TCP connection
+        # logger.debug(f"[DB.Local] Using TCP connection: {user}@{host}:{port}/{database}")
+        conn = get_connection_pg8000(host, database, user, password, port)
+    elif use_connector or (is_cloud_run or is_cloud_function) and has_instance_connection:
+        # Cloud environment with Cloud SQL Connector
         instance_conn_name = instance_connection_name or INSTANCE_CONNECTION_NAME
         
         if not instance_conn_name:
             logger.error("[DB] ✗ get_connection() FAILURE - INSTANCE_CONNECTION_NAME not set in Cloud environment")
             return None
+        # logger.debug(f"[DB.Cloud] Using Cloud SQL Connector: {instance_conn_name}")
         conn = get_connection_pg8000_connector(instance_conn_name, database, user, password)
     else:
+        # Remote TCP connection
+        # logger.debug(f"[DB.Remote] Using TCP connection: {user}@{host}:{port}/{database}")
         conn = get_connection_pg8000(host, database, user, password, port)
     if not conn:
         logger.error("[DB] ✗ get_connection() FAILURE - Connection is None")
@@ -277,22 +293,22 @@ def execute_sql(sql: str, params: Tuple = None) -> Tuple[List[Dict[str, Any]], b
     """
     conn = None
     try:
-        logger.debug("[execute_sql] 🔍 Step 1: Calling get_connection()...")
+        # logger.debug("[execute_sql] 🔍 Step 1: Calling get_connection()...")
         conn = get_connection()
         if not conn:
             logger.error("[execute_sql] 🔴 Step 1 FAILED: get_connection() returned None")
             return [], False
-        logger.debug("[execute_sql] ✅ Step 2: Connection obtained")
+        # logger.debug("[execute_sql] ✅ Step 2: Connection obtained")
         
-        logger.debug("[execute_sql] 🔍 Step 3: Creating cursor...")
+        # logger.debug("[execute_sql] 🔍 Step 3: Creating cursor...")
         with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            logger.debug("[execute_sql] ✅ Step 4: Cursor created")
-            logger.debug(f"🔍 Step 5: Executing query: {sql[:100]}...")
+            # logger.debug("[execute_sql] ✅ Step 4: Cursor created")
+            # logger.debug(f"🔍 Step 5: Executing query: {sql[:100]}...")
             if params:
                 cursor.execute(sql, params)
             else:
                 cursor.execute(sql)
-            logger.debug("[execute_sql] ✅ Step 6: Query executed")
+            # logger.debug("[execute_sql] ✅ Step 6: Query executed")
             
             # For SELECT queries, fetch and return results
             if sql.strip().upper().startswith('SELECT'):
@@ -300,11 +316,11 @@ def execute_sql(sql: str, params: Tuple = None) -> Tuple[List[Dict[str, Any]], b
                 return [dict(row) for row in results], True
             else:
                 # For UPDATE/INSERT/DELETE, commit and return affected rows count
-                logger.debug("[execute_sql] 🔍 Step 7: Committing transaction...")
+                # logger.debug("[execute_sql] 🔍 Step 7: Committing transaction...")
                 conn.commit()
-                logger.debug("[execute_sql] ✅ Step 8: Commit successful")
+                # logger.debug("[execute_sql] ✅ Step 8: Commit successful")
                 affected_rows = cursor.rowcount
-                logger.info(f"✅ Query executed: {affected_rows} rows affected")
+                # logger.info(f"✅ Query executed: {affected_rows} rows affected")
                 return [{"affected_rows": affected_rows}], True
     
     except Exception as e:
@@ -319,9 +335,9 @@ def execute_sql(sql: str, params: Tuple = None) -> Tuple[List[Dict[str, Any]], b
     finally:
         if conn:
             try:
-                logger.debug("[execute_sql] 🔍 Step 9: Closing connection...")
+                # logger.debug("[execute_sql] 🔍 Step 9: Closing connection...")
                 conn.close()
-                logger.debug("[execute_sql] ✅ Step 10: Connection closed")
+                # logger.debug("[execute_sql] ✅ Step 10: Connection closed")
             except:
                 pass
 

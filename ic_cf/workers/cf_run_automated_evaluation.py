@@ -1,11 +1,7 @@
 from workers.cf_base import cf_base
-from ic_shared.logging import ComponentLogger
-import time
-from ic_shared.configuration.config import PROCESSING_SLEEP_TIME
-from ic_shared.configuration.defines import ENTER, EXIT
-from ic_shared.configuration.defines import EVALUATION_STATUS, EVALUATION_ERROR
 
-logger = ComponentLogger("cf_run_automated_evaluation")
+from ic_shared.configuration.defines import ENTER, EXIT
+from ic_shared.configuration.defines import EVALUATION_STATUS
 
 class cf_run_automated_evaluation(cf_base):
     """Cloud Function entry point for automated evaluation worker."""
@@ -16,20 +12,13 @@ class cf_run_automated_evaluation(cf_base):
     def execute(self):
         """Execute the automated evaluation worker logic."""
         ENTER_STATUS = EVALUATION_STATUS[ENTER]
-        FAILED_STATUS = EVALUATION_ERROR
         EXIT_STATUS = EVALUATION_STATUS[EXIT]
+        # ERROR_STATUS = EVALUATION_STATUS[ERROR]
+        # FAIL_STATUS = EVALUATION_STATUS[FAIL]
 
-        try:
-            self._update_document_status(ENTER_STATUS)
-            
-            # TODO: Add actual evaluation logic here
-            # For now: mock delay to simulate processing
-            time.sleep(PROCESSING_SLEEP_TIME)
-            
-            # Final stage - mark as completed
-            self._update_document_status(EXIT_STATUS)
-            
-            logger.info(f"✓ Completed evaluation for document {self.document_id}")
-        except Exception as e:
-            logger.error(f"❌ Error during evaluation: {e}")
-            self._handle_error("cf_run_automated_evaluation", FAILED_STATUS, str(e))
+        self._update_document_status(ENTER_STATUS)
+
+        # TODO: Add actual evaluation logic here
+
+        self._update_document_status(EXIT_STATUS)
+        # Terminal stage - no next topic

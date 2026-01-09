@@ -41,6 +41,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 import json
 
+from ic_shared.configuration.defines import STAGE_PREPROCESS
 from ic_shared.logging import ComponentLogger
 
 logger = ComponentLogger("ProcessingBackend")
@@ -169,7 +170,7 @@ class LocalCloudFunctionsBackend(ProcessingBackend):
             pubsub_message = {
                 'document_id': document_id,
                 'company_id': company_id,
-                'stage': 'preprocess'
+                'stage': STAGE_PREPROCESS
             }
             
             # Encode as base64 like Pub/Sub does
@@ -378,7 +379,7 @@ class CloudFunctionsBackend(ProcessingBackend):
             message_data = json.dumps({
                 'document_id': document_id,
                 'company_id': company_id,
-                'stage': 'preprocess'  # First stage
+                'stage': STAGE_PREPROCESS # First stage
             }).encode('utf-8')
             
             # Publish to Pub/Sub (this is async - returns immediately)

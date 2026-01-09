@@ -66,7 +66,7 @@ def update_document_status(document_id: str, status: str) -> bool:
     Returns:
         bool: True if update succeeded, False otherwise.
     """
-    logger.info(f"[DB] Updating document {document_id} to status '{status}'")
+    # logger.info(f"[DB] Updating document {document_id} to status '{status}'")
 
     try:
         results, success = execute_sql(

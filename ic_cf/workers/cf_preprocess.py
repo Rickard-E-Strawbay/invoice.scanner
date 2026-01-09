@@ -1,8 +1,7 @@
 from workers.cf_base import cf_base
 
-from ic_shared.configuration.defines import ENTER, EXIT
-from ic_shared.configuration.defines import PREPROCESS_STATUS, PREPROCESS_ERROR
-from ic_shared.configuration.defines import STAGE_OCR, TOPIC_NAME_OCR
+from ic_shared.configuration.defines import ENTER, EXIT, ERROR, FAIL
+from ic_shared.configuration.defines import PREPROCESS_STATUS
 
 class cf_preprocess(cf_base):
     """Cloud Function entry point for preprocessing worker."""
@@ -14,12 +13,14 @@ class cf_preprocess(cf_base):
         """Execute the preprocessing worker logic."""
         ENTER_STATUS = PREPROCESS_STATUS[ENTER]
         EXIT_STATUS = PREPROCESS_STATUS[EXIT]
-        NEXT_TOPIC_NAME = TOPIC_NAME_OCR
-        NEXT_STAGE = STAGE_OCR
+        # ERROR_STATUS = PREPROCESS_STATUS[ERROR]
+        # FAIL_STATUS = PREPROCESS_STATUS[FAIL]
+
 
         self._update_document_status(ENTER_STATUS)
 
-        # self._update_document_status(PREPROCESS_ERROR)
+        # self._update_document_status(ERROR_STATUS)
+        # self._update_document_status(FAIL_STATUS)
 
         self._update_document_status(EXIT_STATUS)
-        self._publish_to_topic(NEXT_TOPIC_NAME, NEXT_STAGE)
+        self._publish_to_topic()
