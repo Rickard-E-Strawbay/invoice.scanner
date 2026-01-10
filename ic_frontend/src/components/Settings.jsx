@@ -8,6 +8,21 @@ function Settings() {
   const { user, isAdmin, checkAuth } = useContext(AuthContext);
   const [activeTab, setActiveTab] = React.useState("profile");
 
+  // Helper function to check if user is Company User (read-only access to company info)
+  const isCompanyUser = () => {
+    return user?.role_key === 10;
+  };
+
+  // Helper function to check if user is Company Admin (can edit company info)
+  const isCompanyAdmin = () => {
+    return user?.role_key === 50;
+  };
+
+  // Helper function to check if user has access to company settings
+  const hasCompanyAccess = () => {
+    return isCompanyAdmin() || isCompanyUser();
+  };
+
   // Check for stored tab preference (from PlansAndBilling navigation)
   useEffect(() => {
     const storedTab = localStorage.getItem("settings-active-tab");
@@ -35,6 +50,7 @@ function Settings() {
     name: user?.name || "",
     email: user?.email || "",
     company_name: user?.company_name || "",
+    company_email: user?.company_email || "",
     organization_id: user?.organization_id || "",
     receive_notifications: user?.receive_notifications ?? true,
     weekly_summary: user?.weekly_summary ?? true,
@@ -76,7 +92,7 @@ function Settings() {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(`${API_BASE_URL}/auth/company-info`, {
+        const response = await fetch(`${API_BASE_URL}/live/company-info`, {
           method: "GET",
           credentials: "include",
           headers: {
@@ -92,6 +108,7 @@ function Settings() {
         setFormData((prev) => ({
           ...prev,
           company_name: data.company_name || "",
+          company_email: data.company_email || "",
           organization_id: data.organization_id || "",
         }));
       } catch (err) {
@@ -109,7 +126,7 @@ function Settings() {
   React.useEffect(() => {
     const fetchPaymentMethods = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/auth/payment-methods`, {
+        const response = await fetch(`${API_BASE_URL}/live/payment-methods`, {
           method: "GET",
           credentials: "include",
           headers: {
@@ -135,7 +152,7 @@ function Settings() {
       try {
         setBillingLoading(true);
         setBillingError(null);
-        const response = await fetch(`${API_BASE_URL}/auth/billing-details`, {
+        const response = await fetch(`${API_BASE_URL}/live/billing-details`, {
           method: "GET",
           credentials: "include",
           headers: {
@@ -201,6 +218,56 @@ function Settings() {
     return Object.keys(errors).length === 0;
   };
 
+  const handleSaveCompany = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`${API_BASE_URL}/live/company-info`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          company_name: formData.company_name,
+          company_email: formData.company_email
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setFormData((prev) => ({
+          ...prev,
+          company_name: data.company.company_name || "",
+          company_email: data.company.company_email || ""
+        }));
+        setMessageModal({
+          show: true,
+          type: "success",
+          title: "Company Updated",
+          message: data.message || "Company information updated successfully"
+        });
+      } else {
+        const error = await response.json();
+        setMessageModal({
+          show: true,
+          type: "error",
+          title: "Update Failed",
+          message: error.error || "Failed to update company information"
+        });
+      }
+    } catch (err) {
+      console.error("Error saving company info:", err);
+      setMessageModal({
+        show: true,
+        type: "error",
+        title: "Error",
+        message: "Error saving company information"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSaveBilling = async () => {
     if (!validateBillingForm()) return;
 
@@ -209,7 +276,7 @@ function Settings() {
       setBillingError(null);
       setBillingSuccess(null);
 
-      const response = await fetch(`${API_BASE_URL}/auth/billing-details`, {
+      const response = await fetch(`${API_BASE_URL}/live/billing-details`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -238,7 +305,7 @@ function Settings() {
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+      const response = await fetch(`${API_BASE_URL}/live/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -323,7 +390,7 @@ function Settings() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+      const response = await fetch(`${API_BASE_URL}/live/change-password`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -379,12 +446,14 @@ function Settings() {
         >
           Profile Settings
         </button>
-        <button 
-          className={`settings-tab ${activeTab === "company" ? "active" : ""}`}
-          onClick={() => setActiveTab("company")}
-        >
-          Company Settings
-        </button>
+        {hasCompanyAccess() && (
+          <button 
+            className={`settings-tab ${activeTab === "company" ? "active" : ""}`}
+            onClick={() => setActiveTab("company")}
+          >
+            Company Settings
+          </button>
+        )}
       </div>
 
       <div className="settings-content">
@@ -538,7 +607,7 @@ function Settings() {
           <>
             {/* Company Section */}
             <section className="settings-section">
-              <h2>Company Information</h2>
+              <h2>Company Information {isCompanyUser() && <span style={{fontSize: '0.8em', color: '#999'}}>(Read-only)</span>}</h2>
               {error && <div style={{ color: '#d32f2f', marginBottom: '1rem' }}>Error: {error}</div>}
               {loading ? (
                 <div style={{ color: '#666', padding: '1rem' }}>Loading company information...</div>
@@ -552,6 +621,7 @@ function Settings() {
                       value={formData.company_name}
                       onChange={handleInputChange}
                       placeholder="Your company name"
+                      disabled={isCompanyUser()}
                     />
                   </div>
 
@@ -566,17 +636,31 @@ function Settings() {
                     />
                   </div>
 
-                  <button className="btn btn-primary" onClick={handleSaveProfile}>
-                    Save Changes
-                  </button>
+                  <div className="form-group">
+                    <label>Company Email</label>
+                    <input
+                      type="email"
+                      name="company_email"
+                      value={formData.company_email}
+                      onChange={handleInputChange}
+                      placeholder="Company email address"
+                      disabled={isCompanyUser()}
+                    />
+                  </div>
+
+                  {isCompanyAdmin() && (
+                    <button className="btn btn-primary" onClick={handleSaveCompany}>
+                      Save Changes
+                    </button>
+                  )}
                 </div>
               )}
             </section>
 
-            {/* Billing Section - Only for Company Admins */}
-            {isAdmin() && (
+            {/* Billing Section - For Company Admins (editable) and Company Users (read-only) */}
+            {hasCompanyAccess() && (
               <section className="settings-section">
-                <h2>Billing Information</h2>
+                <h2>Billing Information {isCompanyUser() && <span style={{fontSize: '0.8em', color: '#999'}}>(Read-only)</span>}</h2>
                 {billingError && (
                   <div className="billing-message error">
                     {billingError}
@@ -600,6 +684,7 @@ function Settings() {
                         onChange={handleBillingInputChange}
                         placeholder="Full name"
                         className={billingErrors.billing_contact_name ? "error" : ""}
+                        disabled={isCompanyUser()}
                       />
                       {billingErrors.billing_contact_name && (
                         <p className="error-message">{billingErrors.billing_contact_name}</p>
@@ -615,6 +700,7 @@ function Settings() {
                         onChange={handleBillingInputChange}
                         placeholder="Email address"
                         className={billingErrors.billing_contact_email ? "error" : ""}
+                        disabled={isCompanyUser()}
                       />
                       {billingErrors.billing_contact_email && (
                         <p className="error-message">{billingErrors.billing_contact_email}</p>
@@ -630,6 +716,7 @@ function Settings() {
                         onChange={handleBillingInputChange}
                         placeholder="Street address"
                         className={billingErrors.street_address ? "error" : ""}
+                        disabled={isCompanyUser()}
                       />
                       {billingErrors.street_address && (
                         <p className="error-message">{billingErrors.street_address}</p>
@@ -645,6 +732,7 @@ function Settings() {
                         onChange={handleBillingInputChange}
                         placeholder="Postal code"
                         className={billingErrors.postal_code ? "error" : ""}
+                        disabled={isCompanyUser()}
                       />
                       {billingErrors.postal_code && (
                         <p className="error-message">{billingErrors.postal_code}</p>
@@ -660,6 +748,7 @@ function Settings() {
                         onChange={handleBillingInputChange}
                         placeholder="City"
                         className={billingErrors.city ? "error" : ""}
+                        disabled={isCompanyUser()}
                       />
                       {billingErrors.city && (
                         <p className="error-message">{billingErrors.city}</p>
@@ -675,6 +764,7 @@ function Settings() {
                         onChange={handleBillingInputChange}
                         placeholder="Country"
                         className={billingErrors.country ? "error" : ""}
+                        disabled={isCompanyUser()}
                       />
                       {billingErrors.country && (
                         <p className="error-message">{billingErrors.country}</p>
@@ -690,6 +780,7 @@ function Settings() {
                         onChange={handleBillingInputChange}
                         placeholder="VAT number"
                         className={billingErrors.vat_number ? "error" : ""}
+                        disabled={isCompanyUser()}
                       />
                       {billingErrors.vat_number && (
                         <p className="error-message">{billingErrors.vat_number}</p>
@@ -703,6 +794,7 @@ function Settings() {
                         value={billingData.payment_method}
                         onChange={handleBillingInputChange}
                         className="form-select"
+                        disabled={isCompanyUser()}
                       >
                         {paymentMethods.map((method) => (
                           <option key={method.key} value={method.key} disabled={!method.enabled}>
@@ -712,7 +804,7 @@ function Settings() {
                       </select>
                     </div>
 
-                    <button className="btn btn-primary" onClick={handleSaveBilling} disabled={billingLoading}>
+                    <button className="btn btn-primary" onClick={handleSaveBilling} disabled={billingLoading || isCompanyUser()}>
                       {billingLoading ? "Saving..." : "Save Changes"}
                     </button>
                   </div>

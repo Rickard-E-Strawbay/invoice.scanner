@@ -41,7 +41,7 @@ function Dashboard() {
         setDocumentsLoading(true);
       }
       setDocumentsError(null);
-      const response = await fetch(`${API_BASE_URL}/auth/documents`, {
+      const response = await fetch(`${API_BASE_URL}/documents/`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -86,7 +86,7 @@ function Dashboard() {
       setRestartingDocumentId(docId);
       setRestartError(null);
       
-      const response = await fetch(`${API_BASE_URL}/auth/documents/${docId}/restart`, {
+      const response = await fetch(`${API_BASE_URL}/documents/${docId}/restart`, {
         method: "POST",
         credentials: "include",
         headers: {
@@ -1068,6 +1068,8 @@ function Dashboard() {
             }
           }} />
         )}
+
+
       </main>
     </div>
   );

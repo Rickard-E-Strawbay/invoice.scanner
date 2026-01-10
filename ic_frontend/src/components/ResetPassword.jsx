@@ -23,7 +23,7 @@ function ResetPassword({ token }) {
   const verifyToken = async () => {
     try {
       setValidating(true);
-      const response = await fetch(`${API_BASE_URL}/auth/verify-reset-token/${token}`, {
+      const response = await fetch(`${API_BASE_URL}/live/verify-reset-token/${token}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -77,7 +77,7 @@ function ResetPassword({ token }) {
 
     try {
       setSubmitting(true);
-      const response = await fetch(`${API_BASE_URL}/auth/reset-password/${token}`, {
+      const response = await fetch(`${API_BASE_URL}/live/reset-password/${token}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

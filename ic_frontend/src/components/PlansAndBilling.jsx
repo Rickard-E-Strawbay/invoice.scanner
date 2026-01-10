@@ -32,7 +32,7 @@ function PlansAndBilling({ onNavigate }) {
 
   const fetchFeatures = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/features`, {
+      const response = await fetch(`${API_BASE_URL}/live/features`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -50,7 +50,7 @@ function PlansAndBilling({ onNavigate }) {
   const fetchBillingData = async () => {
     try {
       setBillingLoading(true);
-      const response = await fetch(`${API_BASE_URL}/auth/billing-details`, {
+      const response = await fetch(`${API_BASE_URL}/live/billing-details`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -74,7 +74,7 @@ function PlansAndBilling({ onNavigate }) {
   const fetchPlans = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/auth/plans`, {
+      const response = await fetch(`${API_BASE_URL}/live/plans`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

@@ -4,7 +4,6 @@ import { API_BASE_URL } from "../utils/api";
 
 function UpgradeModal({ plan, currentPlan, onClose }) {
   const { user, checkAuth } = useContext(AuthContext);
-  if (!plan || !currentPlan) return null;
 
   const [step, setStep] = useState("loading"); // "loading", "billing", "confirm", "processing", "success"
   const [billingDetails, setBillingDetails] = useState(null);
@@ -22,14 +21,10 @@ function UpgradeModal({ plan, currentPlan, onClose }) {
   const [formErrors, setFormErrors] = useState({});
   const [formLoading, setFormLoading] = useState(false);
 
-  useEffect(() => {
-    fetchPaymentMethods();
-    fetchBillingDetails();
-  }, [plan?.id]);
-
+  // Define fetch functions before useEffect
   const fetchPaymentMethods = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/payment-methods`, {
+      const response = await fetch(`${API_BASE_URL}/live/payment-methods`, {
         method: "GET",
         credentials: "include",
         headers: {
@@ -48,13 +43,10 @@ function UpgradeModal({ plan, currentPlan, onClose }) {
 
   const fetchBillingDetails = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/billing-details?_t=${Date.now()}`, {
+      const response = await fetch(`${API_BASE_URL}/live/billing-details?_t=${Date.now()}`, {
         method: "GET",
         headers: { 
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          "Pragma": "no-cache",
-          "Expires": "0"
+          "Content-Type": "application/json"
         },
         credentials: "include",
       });
@@ -76,6 +68,16 @@ function UpgradeModal({ plan, currentPlan, onClose }) {
       setStep("billing");
     }
   };
+
+  useEffect(() => {
+    fetchPaymentMethods();
+    fetchBillingDetails();
+  }, [plan?.id]);
+
+  // Conditional render - only when both plan and currentPlan exist
+  if (!plan || !currentPlan) {
+    return null;
+  }
 
   const validateForm = () => {
     const errors = {};
@@ -100,7 +102,7 @@ function UpgradeModal({ plan, currentPlan, onClose }) {
 
     setFormLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/billing-details`, {
+      const response = await fetch(`${API_BASE_URL}/live/billing-details`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -126,7 +128,7 @@ function UpgradeModal({ plan, currentPlan, onClose }) {
   const handleUpgrade = async () => {
     setStep("processing");
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/change-plan`, {
+      const response = await fetch(`${API_BASE_URL}/live/change-plan`, {
         method: "POST",
         credentials: "include",
         headers: {

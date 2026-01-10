@@ -2,11 +2,11 @@
 Document operations - generic database functions for document management.
 
 These functions are shared across API, Cloud Functions, and other services.
-All operations use execute_sql() for unified connection handling.
+Uses fetch_all() for SELECT queries and execute_sql() for UPDATE/INSERT/DELETE.
 """
 
 from ic_shared.logging import ComponentLogger
-from ic_shared.database.connection import execute_sql
+from ic_shared.database.connection import execute_sql, fetch_all
 
 logger = ComponentLogger("DocumentOperations")
 
@@ -14,7 +14,7 @@ logger = ComponentLogger("DocumentOperations")
 def get_document_status(document_id: str) -> str:
     """
     Retrieve the current status of a document from the database.
-    Uses shared execute_sql() for database access.
+    Uses shared fetch_all() for database access.
 
     Args:
         document_id (str): The unique identifier of the document.
@@ -25,7 +25,7 @@ def get_document_status(document_id: str) -> str:
     logger.info(f"Getting status for document {document_id}")
 
     try:
-        results, success = execute_sql(
+        results, success = fetch_all(
             """
             SELECT status
             FROM documents

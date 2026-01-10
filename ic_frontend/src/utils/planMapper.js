@@ -12,7 +12,7 @@ export const getPlanMap = async () => {
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}/auth/plans`, {
+    const response = await fetch(`${API_BASE_URL}/live/plans`, {
       credentials: "include",
     });
 

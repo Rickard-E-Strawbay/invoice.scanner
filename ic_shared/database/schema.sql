@@ -152,9 +152,10 @@ ON CONFLICT (role_name) DO NOTHING;
 
 -- Insert sample companies for testing
 INSERT INTO users_company (company_email, company_name, organization_id, company_enabled, price_plan_key) VALUES
-('info@strawbay.se', 'Strawbay AB', '559421-9601', TRUE, 1000);
+('info@strawbay.se', 'Strawbay AB', '559421-9601', TRUE, 1000),
+('info@test.se', 'Acme AB', '123456-7890', TRUE, 10);
 
--- Insert sample user
+-- Insert sample users
 INSERT INTO users (email, password_hash, name, role_key, company_id, terms_accepted, user_enabled, terms_version) 
 SELECT 
     'rickard@strawbay.io', 
@@ -167,5 +168,59 @@ SELECT
     '1.0'
 FROM users_company 
 WHERE organization_id = '559421-9601';
+
+INSERT INTO users (email, password_hash, name, role_key, company_id, terms_accepted, user_enabled, terms_version) 
+SELECT 
+    'andy@strawbay.io', 
+    'scrypt:32768:8:1$volUxXkGjGMmZaHy$ef9cfe94c1a1d84dbce69dfa5839570d23827daf5e46b67ffc81bf07ca5aca4da82f03144755b47fa73cff99d8b8cadcb6315a58bdc7d98026d123c2fd12d139',
+    'Andrii Khyzhniak', 
+    1000,
+    id,
+    TRUE,
+    TRUE,
+    '1.0'
+FROM users_company 
+WHERE organization_id = '559421-9601';
+
+INSERT INTO users (email, password_hash, name, role_key, company_id, terms_accepted, user_enabled, terms_version) 
+SELECT 
+    'claes@strawbay.io', 
+    'scrypt:32768:8:1$volUxXkGjGMmZaHy$ef9cfe94c1a1d84dbce69dfa5839570d23827daf5e46b67ffc81bf07ca5aca4da82f03144755b47fa73cff99d8b8cadcb6315a58bdc7d98026d123c2fd12d139',
+    'Claes Ramel', 
+    1000,
+    id,
+    TRUE,
+    TRUE,
+    '1.0'
+FROM users_company 
+WHERE organization_id = '559421-9601';
+
+-- Insert test user as Company Admin
+INSERT INTO users (email, password_hash, name, role_key, company_id, terms_accepted, user_enabled, terms_version) 
+SELECT 
+    'test-admin@test.se', 
+    'scrypt:32768:8:1$volUxXkGjGMmZaHy$ef9cfe94c1a1d84dbce69dfa5839570d23827daf5e46b67ffc81bf07ca5aca4da82f03144755b47fa73cff99d8b8cadcb6315a58bdc7d98026d123c2fd12d139',
+    'Test Company Admin', 
+    50,
+    id,
+    TRUE,
+    TRUE,
+    '1.0'
+FROM users_company 
+WHERE organization_id = '123456-7890';
+
+-- Insert test user as Company Admin
+INSERT INTO users (email, password_hash, name, role_key, company_id, terms_accepted, user_enabled, terms_version) 
+SELECT 
+    'test-user@test.se', 
+    'scrypt:32768:8:1$volUxXkGjGMmZaHy$ef9cfe94c1a1d84dbce69dfa5839570d23827daf5e46b67ffc81bf07ca5aca4da82f03144755b47fa73cff99d8b8cadcb6315a58bdc7d98026d123c2fd12d139',
+    'Test Company User', 
+    10,
+    id,
+    TRUE,
+    TRUE,
+    '1.0'
+FROM users_company 
+WHERE organization_id = '123456-7890';
 
 

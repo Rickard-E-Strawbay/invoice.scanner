@@ -14,7 +14,7 @@ export function AuthProvider({ children }) {
 
   const checkAuth = async () => {
     try {
-      const res = await apiGet("/auth/me");
+      const res = await apiGet("/live/me");
       if (res.ok) {
         try {
           const data = await res.json();

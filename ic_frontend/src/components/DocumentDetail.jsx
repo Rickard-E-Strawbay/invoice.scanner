@@ -57,29 +57,10 @@ function DocumentDetail({ document, onClose, onSave }) {
         document_name: document.document_name || "",
       }));
 
-      // Load preview if status allows it
-      const allowedStatuses = ["uploaded", "preprocessing", "preprocess_error", "failed_preprocessing"];
-      if (allowedStatuses.includes(document.status)) {
-        setPreviewLoading(true);
-        fetch(`${API_BASE_URL}/auth/documents/${document.id}/preview`, {
-          credentials: "include",
-        })
-          .then(res => {
-            if (res.ok) {
-              return res.blob().then(blob => {
-                const url = URL.createObjectURL(blob);
-                setPreviewUrl(url);
-              });
-            }
-          })
-          .catch(err => {
-            console.error("Failed to load preview:", err);
-            setPreviewUrl(null);
-          })
-          .finally(() => setPreviewLoading(false));
-      } else {
-        setPreviewUrl(null);
-      }
+      // Set preview URL directly - no need to fetch and convert
+      // Browser will fetch it automatically with credentials
+      setPreviewUrl(`${API_BASE_URL}/documents/${document.id}/preview`);
+      setPreviewLoading(false);
 
       if (document.training_data) {
         try {
@@ -119,7 +100,7 @@ function DocumentDetail({ document, onClose, onSave }) {
 
     try {
       // Only send document_name for now (invoice data will be stored separately)
-      const response = await fetch(`${API_BASE_URL}/auth/documents/${document.id}`, {
+      const response = await fetch(`${API_BASE_URL}/documents/${document.id}`, {
         method: "PUT",
         credentials: "include",
         headers: {
@@ -195,25 +176,49 @@ function DocumentDetail({ document, onClose, onSave }) {
             <button
               onClick={() => setIsMaximized(!isMaximized)}
               style={{
-                background: isMaximized ? "#7265cf" : "white",
+                background: "none",
                 border: "none",
                 borderRadius: "4px",
                 fontSize: "1rem",
                 cursor: "pointer",
-                color: isMaximized ? "white" : "#7265cf",
+                color: "#666",
                 padding: "0.5rem 0.75rem",
                 transition: "all 0.2s ease",
-                fontWeight: "600",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}
               onMouseEnter={(e) => {
-                e.target.style.background = isMaximized ? "#6055b8" : "#f5f5f5";
+                e.target.style.opacity = "0.7";
               }}
               onMouseLeave={(e) => {
-                e.target.style.background = isMaximized ? "#7265cf" : "white";
+                e.target.style.opacity = "1";
               }}
               title={isMaximized ? "Exit fullscreen" : "Maximize"}
             >
-              {isMaximized ? "⛶" : "⬜"}
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {isMaximized ? (
+                  <>
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                  </>
+                ) : (
+                  <>
+                    <path d="M14 3h7a1 1 0 0 1 1 1v7" />
+                    <path d="M3 14v7a1 1 0 0 0 1 1h7" />
+                    <path d="M6 9h12v8H6z" />
+                    <path d="M9 14v4h6v-6" />
+                  </>
+                )}
+              </svg>
             </button>
             <button
               onClick={onClose}
@@ -303,34 +308,27 @@ function DocumentDetail({ document, onClose, onSave }) {
               overflow: "auto",
               flex: 1,
             }}>
-              {previewLoading ? (
-                <div>Loading preview...</div>
-              ) : previewUrl ? (
-                document.raw_filename?.toLowerCase().endsWith('.pdf') ? (
-                  <iframe 
-                    src={previewUrl} 
-                    title="Document preview"
-                    allow="fullscreen"
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      border: "none",
-                      borderRadius: "4px",
-                    }}
-                  />
-                ) : (
-                  <img 
-                    src={previewUrl} 
-                    alt="Document preview" 
-                    style={{
-                      maxWidth: "100%",
-                      maxHeight: "100%",
-                      objectFit: "contain",
-                    }}
-                  />
-                )
+              {document.raw_filename?.toLowerCase().endsWith('.pdf') ? (
+                <iframe 
+                  src={`${API_BASE_URL}/documents/${document.id}/preview`}
+                  title="Document preview" 
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    border: "none",
+                    borderRadius: "4px",
+                  }}
+                />
               ) : (
-                <div>📄 Preview not available</div>
+                <img 
+                  src={`${API_BASE_URL}/documents/${document.id}/preview`}
+                  alt="Document preview" 
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "100%",
+                    objectFit: "contain",
+                  }}
+                />
               )}
             </div>
           </div>

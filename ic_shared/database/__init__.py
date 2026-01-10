@@ -6,7 +6,8 @@ EXPORTS (two levels of clarity):
 LEVEL 1 - connection.py (internal implementation):
   - get_connection: Unified factory (auto-detects Cloud Run vs Local)
   - RealDictCursor: pg8000 wrapper for dict-like row access
-  - execute_sql: Execute SQL with auto transaction management
+  - fetch_all: Execute SELECT queries and return results
+  - execute_sql: Execute UPDATE/INSERT/DELETE with auto transaction management
 
 LEVEL 2 - __init__.py (this file - re-exports everything):
   All of the above via single import point
@@ -14,13 +15,14 @@ LEVEL 2 - __init__.py (this file - re-exports everything):
 USAGE:
   # These are equivalent:
   from ic_shared.configuration.config import get_connection, execute_sql, DB_CONFIG
-  from ic_shared.database import get_connection, execute_sql
-  from ic_shared.database.connection import get_connection, execute_sql
+  from ic_shared.database import get_connection, execute_sql, fetch_all
+  from ic_shared.database.connection import get_connection, execute_sql, fetch_all
 """
 
 from .connection import (
     get_connection,
     RealDictCursor,
+    fetch_all,
     execute_sql,
 )
 from .document_operations import (
@@ -32,6 +34,7 @@ __all__ = [
     # Connection functions (from connection.py)
     'get_connection',
     'RealDictCursor',
+    'fetch_all',
     'execute_sql',
     # Document operations (from document_operations.py)
     'get_document_status',

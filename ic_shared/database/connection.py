@@ -271,14 +271,12 @@ def get_connection(
 # Utility Functions for Direct SQL Execution
 # -----------------------------------------------
 
-def execute_sql(sql: str, params: Tuple = None) -> Tuple[List[Dict[str, Any]], bool]:
+def fetch_all(sql: str, params: Tuple = None) -> Tuple[List[Dict[str, Any]], bool]:
     """
-    Execute raw SQL query and return results.
-    
-    Used by containers to execute arbitrary SQL queries for debugging/maintenance.
+    Execute a SELECT query and return all results as list of dicts.
     
     Args:
-        sql: SQL query to execute (can be SELECT, UPDATE, INSERT, DELETE)
+        sql: SQL SELECT query to execute
         params: Optional tuple of query parameters for parameterized queries
     
     Returns:
@@ -287,44 +285,98 @@ def execute_sql(sql: str, params: Tuple = None) -> Tuple[List[Dict[str, Any]], b
         - success: Boolean indicating if query executed successfully
     
     Example:
-        results, success = execute_sql("SELECT * FROM documents WHERE id = %s", (doc_id,))
+        results, success = fetch_all("SELECT * FROM users WHERE id = %s", (user_id,))
         if success:
-            logger.info(f"Found {len(results)} documents")
+            logger.info(f"Found {len(results)} users")
     """
     conn = None
     try:
-        # logger.debug("[execute_sql] 🔍 Step 1: Calling get_connection()...")
         conn = get_connection()
         if not conn:
-            logger.error("[execute_sql] 🔴 Step 1 FAILED: get_connection() returned None")
+            logger.error("[fetch_all] 🔴 get_connection() returned None")
             return [], False
-        # logger.debug("[execute_sql] ✅ Step 2: Connection obtained")
         
-        # logger.debug("[execute_sql] 🔍 Step 3: Creating cursor...")
-        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-            # logger.debug("[execute_sql] ✅ Step 4: Cursor created")
-            # logger.debug(f"🔍 Step 5: Executing query: {sql[:100]}...")
-            if params:
-                cursor.execute(sql, params)
-            else:
-                cursor.execute(sql)
-            # logger.debug("[execute_sql] ✅ Step 6: Query executed")
-            
-            # For SELECT queries, fetch and return results
-            if sql.strip().upper().startswith('SELECT'):
-                results = cursor.fetchall()
-                return [dict(row) for row in results], True
-            else:
-                # For UPDATE/INSERT/DELETE, commit and return affected rows count
-                # logger.debug("[execute_sql] 🔍 Step 7: Committing transaction...")
-                conn.commit()
-                # logger.debug("[execute_sql] ✅ Step 8: Commit successful")
-                affected_rows = cursor.rowcount
-                # logger.info(f"✅ Query executed: {affected_rows} rows affected")
-                return [{"affected_rows": affected_rows}], True
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        if params:
+            cursor.execute(sql, params)
+        else:
+            cursor.execute(sql)
+        
+        results = cursor.fetchall()
+        cursor.close()
+        
+        return [dict(row) for row in results], True
     
     except Exception as e:
-        logger.error(f"🔴 Query execution failed: {e}")
+        logger.error(f"🔴 fetch_all failed: {e}")
+        return [], False
+    
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+
+
+def execute_sql(sql: str, params: Tuple = None) -> Tuple[List[Dict[str, Any]], bool]:
+    """
+    Execute UPDATE/INSERT/DELETE query and return results.
+    
+    Args:
+        sql: SQL UPDATE/INSERT/DELETE query to execute
+        params: Optional tuple of query parameters for parameterized queries
+    
+    Returns:
+        Tuple of (results, success)
+        - results: List of dicts if RETURNING clause used, else [{"affected_rows": count}]
+        - success: Boolean indicating if query executed successfully
+    
+    Example:
+        results, success = execute_sql(
+            "UPDATE users SET name = %s WHERE id = %s RETURNING id",
+            ("John", user_id)
+        )
+    """
+    conn = None
+    try:
+        conn = get_connection()
+        if not conn:
+            logger.error("[execute_sql] 🔴 get_connection() returned None")
+            return [], False
+        
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        if params:
+            cursor.execute(sql, params)
+        else:
+            cursor.execute(sql)
+        
+        # For statements with RETURNING, fetch results
+        # For statements without RETURNING, just commit (pg8000 doesn't support rowcount without results)
+        has_returning = 'RETURNING' in sql.upper()
+        
+        if has_returning:
+            results = cursor.fetchall()
+            cursor.close()
+        else:
+            # No RETURNING - no result set to fetch
+            # pg8000 doesn't support rowcount without fetchall(), so just close
+            results = []
+            cursor.close()
+        
+        # Commit transaction
+        conn.commit()
+        
+        if results:
+            # RETURNING clause was used
+            return [dict(row) for row in results], True
+        else:
+            # No RETURNING clause - assume success if no exception was raised
+            # (pg8000 doesn't provide rowcount without a result set)
+            return [{"affected_rows": 1}], True
+    
+    except Exception as e:
+        logger.error(f"🔴 execute_sql failed: {e}")
         if conn:
             try:
                 conn.rollback()
@@ -335,9 +387,7 @@ def execute_sql(sql: str, params: Tuple = None) -> Tuple[List[Dict[str, Any]], b
     finally:
         if conn:
             try:
-                # logger.debug("[execute_sql] 🔍 Step 9: Closing connection...")
                 conn.close()
-                # logger.debug("[execute_sql] ✅ Step 10: Connection closed")
             except:
                 pass
 
@@ -346,5 +396,6 @@ def execute_sql(sql: str, params: Tuple = None) -> Tuple[List[Dict[str, Any]], b
 __all__ = [
     'get_connection',          # Unified connection factory (TCP or Cloud SQL Connector)
     'RealDictCursor',          # pg8000 cursor wrapper (dict-like rows)
-    'execute_sql',             # Execute raw SQL with automatic transaction management
+    'fetch_all',               # Execute SELECT queries and return list of dicts
+    'execute_sql',             # Execute UPDATE/INSERT/DELETE with automatic transaction management
 ]
