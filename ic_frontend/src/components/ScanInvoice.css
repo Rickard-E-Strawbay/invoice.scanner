@@ -20,12 +20,12 @@
 }
 
 .upload-section {
-  margin-bottom: 1.5rem;
+  margin-bottom: 0;
 }
 
 .upload-area {
   background: #ffffff;
-  border: 2px dashed #9b7cff;
+  border: 2px dashed #d0d5e0;
   border-radius: 12px;
   padding: 2rem;
   text-align: center;
@@ -34,15 +34,15 @@
 }
 
 .upload-area:hover {
-  background: #f4f0ff;
-  border-color: #7a5cc4;
+  background: #fafbfc;
+  border-color: #bcc1d0;
 }
 
 .upload-area.drag-active {
-  background: #f0e8ff;
-  border-color: #7265cf;
+  background: #f5f7fa;
+  border-color: #9b7cff;
   border-width: 2px;
-  box-shadow: 0 0 0 3px rgba(114, 101, 207, 0.1);
+  box-shadow: 0 0 0 3px rgba(155, 124, 255, 0.1);
 }
 
 .upload-label {

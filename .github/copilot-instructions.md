@@ -11,6 +11,7 @@ You have deep knowledge of its architecture, design patterns, and coding convent
 - make sure that the over arching architecture and design patterns are followed when making changes.
 - prioritize maintainability and readability in all code suggestions.
 - be aware of deployment and environment differences (local, test, prod) when suggesting code changes.
+- always keep these instructions in mind when working on the project.
 
 ## Project Overview
 **Invoice Scanner** is a multi-service document processing platform for automated invoice scanning and data extraction. Architecture spans:

@@ -1,12 +1,12 @@
 import React, { useContext, useState, useEffect } from "react";
 import { AuthContext } from "../contexts/AuthContext";
 import { getPlanName, clearPlanCache } from "../utils/planMapper";
-import ScanInvoice from "./ScanInvoice";
 import Settings from "./Settings";
 import Admin from "./Admin";
 import PlansAndBilling from "./PlansAndBilling";
 import DocumentDetail from "./DocumentDetail";
 import "./Dashboard.css";
+import "./ScanInvoice.css";
 import { API_BASE_URL } from "../utils/api";
 
 function Dashboard() {
@@ -28,10 +28,134 @@ function Dashboard() {
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const [sortBy, setSortBy] = useState("created_at");
   const [sortOrder, setSortOrder] = useState("desc");
+  
+  // Upload state
+  const [uploadedImage, setUploadedImage] = useState(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [uploadDocumentId, setUploadDocumentId] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [uploadDocumentName, setUploadDocumentName] = useState("");
+  const [uploadSectionExpanded, setUploadSectionExpanded] = useState(() => {
+    // Initialize from sessionStorage, default to true (expanded)
+    const cached = sessionStorage.getItem("uploadSectionExpanded");
+    return cached ? JSON.parse(cached) : true;
+  });
 
   const handleLogout = async () => {
     await logout();
   };
+
+  // Upload handlers
+  const handleImageUpload = async (file) => {
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ["image/jpeg", "image/png", "application/pdf"];
+    if (!allowedTypes.includes(file.type)) {
+      setUploadError("Invalid file type. Please upload JPG, PNG, or PDF.");
+      return;
+    }
+
+    // Set document name from filename without extension
+    const fileName = file.name.split('.').slice(0, -1).join('.');
+    setUploadDocumentName(fileName);
+
+    // Preview
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setUploadedImage(event.target?.result);
+    };
+    reader.readAsDataURL(file);
+
+    // Upload to backend
+    await uploadDocumentToBackend(file);
+  };
+
+  const uploadDocumentToBackend = async (file) => {
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(`${API_BASE_URL}/documents/upload`, {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Upload failed");
+      }
+
+      const data = await response.json();
+      setUploadedFile(file);
+      setUploadDocumentId(data.document?.id);
+      console.log("✅ Document uploaded successfully:", data);
+      
+      // Switch to "To Do" tab to show the newly uploaded document
+      setActiveTab("to-do");
+      
+      // Immediately refresh documents list
+      await fetchDocuments();
+      
+      // Clear upload form after 1.5 seconds
+      setTimeout(() => {
+        handleUploadCancel();
+      }, 1500);
+    } catch (err) {
+      console.error("❌ Upload error:", err);
+      setUploadError(err.message || "Failed to upload document");
+      setUploadedImage(null);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setIsDragActive(true);
+    } else if (e.type === "dragleave") {
+      setIsDragActive(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      handleImageUpload(files[0]);
+    }
+  };
+
+  const handleFileInputChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleImageUpload(file);
+    }
+  };
+
+  const handleUploadCancel = () => {
+    setUploadedImage(null);
+    setUploadedFile(null);
+    setUploadDocumentId(null);
+    setUploadDocumentName("");
+    setUploadError(null);
+  };
+
+  // Cache upload section expanded state in sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem("uploadSectionExpanded", JSON.stringify(uploadSectionExpanded));
+  }, [uploadSectionExpanded]);
 
   // Fetch documents from backend
   const fetchDocuments = async (isPolling = false) => {
@@ -439,19 +563,6 @@ function Dashboard() {
             </span>
             <span>Manage Invoices</span>
           </button>
-          <button 
-            onClick={() => setCurrentView("scan-invoice")}
-            className={`nav-item ${currentView === "scan-invoice" ? "active" : ""}`}
-            style={{ border: "none", background: "none", cursor: "pointer", width: "100%", textAlign: "left" }}
-          >
-            <span className="nav-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14"></path>
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              </svg>
-            </span>
-            <span>Scan/Update</span>
-          </button>
         </nav>
         <div className="sidebar-footer">
           <div 
@@ -566,7 +677,128 @@ function Dashboard() {
         {currentView === "scanned-invoices" && (
           <>
             <div className="content-header">
-              <h1>Scanned Invoices</h1>
+              <h1>Manage Invoices</h1>
+            </div>
+
+            {/* Upload Section - Collapsible Accordion */}
+            <div style={{ marginBottom: "0" }}>
+              <button
+                onClick={() => setUploadSectionExpanded(!uploadSectionExpanded)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  padding: "0.375rem 1rem",
+                  background: "#f5f7fa",
+                  border: "1px solid #e8ecf1",
+                  borderRadius: uploadSectionExpanded ? "6px 6px 0 0" : "6px",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  color: "#333",
+                  width: "100%",
+                  textAlign: "left",
+                  transition: "all 0.2s"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#eff0f5";
+                  e.currentTarget.style.borderColor = "#d0d5e0";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#f5f7fa";
+                  e.currentTarget.style.borderColor = "#e8ecf1";
+                }}
+              >
+                <svg 
+                  width="20" 
+                  height="20" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2"
+                  style={{
+                    transform: uploadSectionExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                    transition: "transform 0.2s",
+                    flexShrink: 0
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+                <span>Upload Invoices</span>
+              </button>
+
+              {uploadSectionExpanded && (
+                <div className="upload-section" style={{ 
+                  marginTop: "0",
+                  borderTop: "none",
+                  borderRadius: "0 0 6px 6px",
+                  border: "1px solid #e8ecf1",
+                  borderTop: "none",
+                  padding: "1rem"
+                }}>
+                  <div 
+                    className={`upload-area ${isDragActive ? "drag-active" : ""}`}
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                  >
+                    <input
+                      type="file"
+                      id="file-input-dashboard"
+                      onChange={handleFileInputChange}
+                      accept="image/*,.pdf"
+                      style={{ display: "none" }}
+                      disabled={isUploading}
+                    />
+                    <label htmlFor="file-input-dashboard" className="upload-label">
+                      <div className="upload-icon">
+                        {isUploading ? (
+                          <div className="spinner">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                          </div>
+                        ) : (
+                          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                          </svg>
+                        )}
+                      </div>
+                      <p className="upload-title">{isUploading ? "Uploading..." : "Upload Invoice"}</p>
+                      <p className="upload-subtitle">Drag and drop or click to select file</p>
+                      <p className="upload-formats">Accepted formats: JPG, PNG, PDF</p>
+                    </label>
+                  </div>
+
+                  {uploadError && (
+                    <div style={{
+                      marginTop: "1rem",
+                      padding: "1rem",
+                      background: "#fee",
+                      borderRadius: "6px",
+                      borderLeft: "4px solid #ef4444",
+                      color: "#991b1b"
+                    }}>
+                      {uploadError}
+                    </div>
+                  )}
+
+                  {uploadDocumentId && (
+                    <div style={{
+                      marginTop: "1rem",
+                      padding: "1rem",
+                      background: "#f0fdf4",
+                      borderRadius: "6px",
+                      borderLeft: "4px solid #10b981",
+                      color: "#166534"
+                    }}>
+                      ✓ Document uploaded successfully! ID: {uploadDocumentId}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="tabs">
@@ -648,11 +880,11 @@ function Dashboard() {
               ) : invoices.length === 0 ? (
                 <div className="empty-state">
                   <div className="empty-icon">
-                    <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                       <polyline points="14 2 14 8 20 8"/>
-                      <line x1="12" y1="19" x2="12" y2="5"/>
-                      <line x1="9" y1="10" x2="15" y2="10"/>
+                      <line x1="12" y1="11" x2="12" y2="17"/>
+                      <line x1="9" y1="14" x2="15" y2="14"/>
                     </svg>
                   </div>
                   <p className="empty-title">No invoices scanned yet</p>
@@ -661,11 +893,11 @@ function Dashboard() {
               ) : getFilteredInvoices().length === 0 ? (
                 <div className="empty-state">
                   <div className="empty-icon">
-                    <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                       <polyline points="14 2 14 8 20 8"/>
-                      <line x1="12" y1="19" x2="12" y2="5"/>
-                      <line x1="9" y1="10" x2="15" y2="10"/>
+                      <line x1="12" y1="11" x2="12" y2="17"/>
+                      <line x1="9" y1="14" x2="15" y2="14"/>
                     </svg>
                   </div>
                   <p className="empty-title">No invoices found</p>
@@ -1045,10 +1277,6 @@ function Dashboard() {
               )}
             </div>
           </>
-        )}
-
-        {currentView === "scan-invoice" && (
-          <ScanInvoice onBack={() => setCurrentView("overview")} />
         )}
 
         {currentView === "settings" && (
