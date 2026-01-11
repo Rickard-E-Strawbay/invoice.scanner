@@ -129,3 +129,10 @@ def get_cors_origins_regex():
     
     logger.debug(f"CORS origins regex patterns: {origins}")
     return '|'.join(origins)
+
+def get_peppol_structured_data_fields():
+    from ic_shared.utils.peppol_manager import PeppolManager
+
+    peppol_manager = PeppolManager()
+    scheme = peppol_manager.get_peppol_scheme()
+    return scheme

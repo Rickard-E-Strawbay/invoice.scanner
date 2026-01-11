@@ -3,7 +3,7 @@
   "$id": "https://example.com/schemas/peppol-invoice-complete.json",
   "Title": "PEPPOL BIS Billing 3.0 Invoice - Complete",
   "PeppolVersion": "3.0",
-  "PeppolUrl":"https://docs.peppol.eu/poacc/billing/3.0",
+  "PeppolUrl": "https://docs.peppol.eu/poacc/billing/3.0",
   "Description": "Complete PEPPOL BIS Billing 3.0 invoice schema with all ~130 business terms (BTs), UBL XPaths, obligation metadata, and conditions.",
   "Type": "object",
   "Properties": {
@@ -47,7 +47,8 @@
               "Obligation": "required",
               "ConditionalDescription": "",
               "BT-ID": "BT-5",
-              "UBL-XPath": "/Invoice/ID"
+              "UBL-XPath": "/Invoice/ID",
+              "map": "invoiceNumber"
             },
             "IssueDate": {
               "Type": "string",
@@ -57,7 +58,8 @@
               "Obligation": "required",
               "ConditionalDescription": "",
               "BT-ID": "BT-6",
-              "UBL-XPath": "/Invoice/IssueDate"
+              "UBL-XPath": "/Invoice/IssueDate",
+              "map": "dates.invoiceDate"
             },
             "InvoiceTypeCode": {
               "Type": "string",
@@ -66,7 +68,8 @@
               "Obligation": "required",
               "ConditionalDescription": "",
               "BT-ID": "BT-7",
-              "UBL-XPath": "/Invoice/InvoiceTypeCode"
+              "UBL-XPath": "/Invoice/InvoiceTypeCode",
+              "map": "type"
             },
             "DocumentCurrencyCode": {
               "Type": "string",
@@ -75,7 +78,8 @@
               "Obligation": "required",
               "ConditionalDescription": "",
               "BT-ID": "BT-8",
-              "UBL-XPath": "/Invoice/DocumentCurrencyCode"
+              "UBL-XPath": "/Invoice/DocumentCurrencyCode",
+              "map": "currency.invoiceCurrency"
             },
             "TaxCurrencyCode": {
               "Type": "string",
@@ -84,7 +88,8 @@
               "Obligation": "optional",
               "ConditionalDescription": "",
               "BT-ID": "BT-9",
-              "UBL-XPath": "/Invoice/TaxCurrencyCode"
+              "UBL-XPath": "/Invoice/TaxCurrencyCode",
+              "map": "currency.baseCurrency"
             },
             "BuyerReference": {
               "Type": "string",
@@ -93,7 +98,8 @@
               "Obligation": "conditional",
               "ConditionalDescription": "Mandatory if OrderReference is absent.",
               "BT-ID": "BT-10",
-              "UBL-XPath": "/Invoice/BuyerReference"
+              "UBL-XPath": "/Invoice/BuyerReference",
+              "map": "debtor.customerNumber"
             },
             "OrderReference": {
               "Type": "string",
@@ -102,7 +108,8 @@
               "Obligation": "conditional",
               "ConditionalDescription": "Mandatory if BuyerReference is absent. Best practice to always include.",
               "BT-ID": "BT-11",
-              "UBL-XPath": "/Invoice/OrderReference/ID"
+              "UBL-XPath": "/Invoice/OrderReference/ID",
+              "map": "debtor.ourOrderNumber"
             },
             "Notes": {
               "Type": "string",
@@ -111,7 +118,8 @@
               "Obligation": "optional",
               "ConditionalDescription": "",
               "BT-ID": "BT-116",
-              "UBL-XPath": "/Invoice/Note"
+              "UBL-XPath": "/Invoice/Note",
+              "map": "debtor.remark"
             }
           },
           "Required": [
@@ -621,7 +629,8 @@
               "Example": "2025-01-15",
               "Description": "Contract issue date.",
               "Obligation": "optional",
-              "ConditionalDescription": ""
+              "ConditionalDescription": "",
+              "map": "dates.invoiceDate"
             }
           }
         },
@@ -1216,7 +1225,8 @@
               "Obligation": "required",
               "ConditionalDescription": "",
               "BT-ID": "BT-110",
-              "UBL-XPath": "/Invoice/TaxTotal/TaxAmount"
+              "UBL-XPath": "/Invoice/TaxTotal/TaxAmount",
+              "map": "totals.totalVat"
             },
             "TaxAmountInAccountingCurrency": {
               "Type": "number",
@@ -1296,7 +1306,8 @@
               "Obligation": "required",
               "ConditionalDescription": "",
               "BT-ID": "BT-106",
-              "UBL-XPath": "/Invoice/LegalMonetaryTotal/LineExtensionAmount"
+              "UBL-XPath": "/Invoice/LegalMonetaryTotal/LineExtensionAmount",
+              "map": "calculated_from_articleRows"
             },
             "AllowancesTotalAmount": {
               "Type": "number",
@@ -1304,7 +1315,8 @@
               "Description": "Total allowances before tax.",
               "Obligation": "optional",
               "ConditionalDescription": "",
-              "BT-ID": "BT-107"
+              "BT-ID": "BT-107",
+              "map": "debtor.fees.administration"
             },
             "ChargesTotalAmount": {
               "Type": "number",
@@ -1312,7 +1324,8 @@
               "Description": "Total charges before tax.",
               "Obligation": "optional",
               "ConditionalDescription": "",
-              "BT-ID": "BT-108"
+              "BT-ID": "BT-108",
+              "map": "debtor.fees.freight"
             },
             "TaxExclusiveAmount": {
               "Type": "number",
@@ -1320,7 +1333,8 @@
               "Description": "Total before tax.",
               "Obligation": "required",
               "ConditionalDescription": "",
-              "BT-ID": "BT-109"
+              "BT-ID": "BT-109",
+              "map": "totals.totalExclVat"
             },
             "TaxInclusiveAmount": {
               "Type": "number",
@@ -1328,7 +1342,8 @@
               "Description": "Total including tax.",
               "Obligation": "required",
               "ConditionalDescription": "",
-              "BT-ID": "BT-112"
+              "BT-ID": "BT-112",
+              "map": "totals.totalToPay"
             },
             "PaidAmount": {
               "Type": "number",
@@ -1344,7 +1359,8 @@
               "Description": "Rounding adjustment.",
               "Obligation": "optional",
               "ConditionalDescription": "",
-              "BT-ID": "BT-114"
+              "BT-ID": "BT-114",
+              "map": "totals.totalRoundOff"
             },
             "PayableAmount": {
               "Type": "number",
@@ -1352,7 +1368,8 @@
               "Description": "Amount due for payment.",
               "Obligation": "required",
               "ConditionalDescription": "",
-              "BT-ID": "BT-115"
+              "BT-ID": "BT-115",
+              "map": "totals.totalToPay"
             }
           },
           "Required": [
@@ -1436,7 +1453,8 @@
               "Obligation": "required",
               "ConditionalDescription": "",
               "BT-ID": "BT-9",
-              "UBL-XPath": "/Invoice/DueDate"
+              "UBL-XPath": "/Invoice/DueDate",
+              "map": "dates.expireDate"
             },
             "PayeeAccount": {
               "Type": "object",

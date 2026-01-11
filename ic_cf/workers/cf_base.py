@@ -63,15 +63,26 @@ class cf_base:
         raw_format = doc["raw_format"]
         file_path = f"raw/{self.document_id}.{raw_format}"
         
+        self.logger.info(f"Fetching document from storage: {file_path}")
+        
         storage = get_storage_service()
-        file_content = storage.get(file_path)
+        try:
+            file_content = storage.get(file_path)
+        except Exception as e:
+            raise ValueError(f"Failed to fetch document from storage '{file_path}': {str(e)}")
         
         if file_content is None:
             raise ValueError(f"Document file not found in storage: {file_path}")
         
+        self.logger.info(f"✅ Document fetched successfully, size: {len(file_content)} bytes, format: .{raw_format}")
+        
+        # Create filename for MIME type detection - format: <id>.<raw_format>
+        filename = f"{self.document_id}.{raw_format}"
+        
         return {
             "id": self.document_id,
             "raw_format": raw_format,
+            "filename": filename,
             "content": file_content
         }
     

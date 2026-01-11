@@ -19,6 +19,7 @@ function Dashboard() {
   const [invoices, setInvoices] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [documentsError, setDocumentsError] = useState(null);
+  const [peppolSections, setPeppolSections] = useState({});
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [currentView, setCurrentView] = useState("overview");
   const [selectedDocument, setSelectedDocument] = useState(null);
@@ -46,6 +47,37 @@ function Dashboard() {
   const handleLogout = async () => {
     await logout();
   };
+
+  // Load PEPPOL structure once on mount and cache it
+  useEffect(() => {
+    const loadPeppolStructure = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/documents/peppol`, {
+          method: "GET",
+          credentials: "include",
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setPeppolSections(data.peppol_sections || {});
+          // Cache both sections and order in sessionStorage
+          sessionStorage.setItem("peppol_sections", JSON.stringify(data.peppol_sections || {}));
+          sessionStorage.setItem("peppol_sections_order", JSON.stringify(data.sections_order || []));
+        }
+      } catch (err) {
+        console.error("Error loading PEPPOL structure:", err);
+      }
+    };
+    
+    // Try to load from cache first
+    const cached = sessionStorage.getItem("peppol_sections");
+    if (cached) {
+      setPeppolSections(JSON.parse(cached));
+    }
+    
+    // Always fetch to ensure fresh data
+    loadPeppolStructure();
+  }, []);
 
   // Upload handlers
   const handleImageUpload = async (file) => {
@@ -1271,6 +1303,7 @@ function Dashboard() {
               {selectedDocument && (
                 <DocumentDetail 
                   document={selectedDocument} 
+                  peppolSections={peppolSections}
                   onClose={() => setSelectedDocument(null)}
                   onSave={fetchDocuments}
                 />

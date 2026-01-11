@@ -1,17 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { API_BASE_URL } from "../utils/api";
 
-function DocumentDetail({ document, onClose, onSave }) {
+function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
+  // Get sections order from sessionStorage (set by Dashboard)
+  const sectionsOrder = JSON.parse(sessionStorage.getItem("peppol_sections_order") || "[]");
+  
   const [invoiceData, setInvoiceData] = useState({
     document_name: "",
-    invoice_number: "",
-    invoice_date: "",
-    vendor_name: "",
-    amount: "",
-    vat: "",
-    total: "",
-    due_date: "",
-    reference: "",
   });
   
   const [isLoading, setIsLoading] = useState(false);
@@ -22,6 +17,15 @@ function DocumentDetail({ document, onClose, onSave }) {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [expandedSections, setExpandedSections] = useState({});
+  const [showNonMandatory, setShowNonMandatory] = useState(false);
+
+  const toggleSection = (sectionName) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionName]: !prev[sectionName]
+    }));
+  };
 
   const togglePreview = () => {
     if (showPreview) {
@@ -52,39 +56,60 @@ function DocumentDetail({ document, onClose, onSave }) {
   // Initialize invoice data and preview from document
   useEffect(() => {
     if (document) {
-      setInvoiceData(prev => ({
-        ...prev,
+      const newInvoiceData = {
         document_name: document.document_name || "",
-      }));
+      };
+      
+      // If invoice_data_peppol_final exists, populate fields from it
+      if (document.invoice_data_peppol_final) {
+        let peppol_final = document.invoice_data_peppol_final;
+        
+        // Parse if it's a JSON string
+        if (typeof peppol_final === 'string') {
+          try {
+            peppol_final = JSON.parse(peppol_final);
+          } catch (e) {
+            console.warn('Failed to parse invoice_data_peppol_final:', e);
+            peppol_final = {};
+          }
+        }
+        
+        // Flatten the PEPPOL structure and populate fields
+        Object.entries(peppol_final).forEach(([sectionName, sectionFields]) => {
+          if (typeof sectionFields === 'object' && sectionFields !== null) {
+            Object.entries(sectionFields).forEach(([fieldName, fieldValue]) => {
+              newInvoiceData[fieldName] = fieldValue;
+            });
+          }
+        });
+      }
+      
+      setInvoiceData(newInvoiceData);
 
       // Set preview URL directly - no need to fetch and convert
       // Browser will fetch it automatically with credentials
       setPreviewUrl(`${API_BASE_URL}/documents/${document.id}/preview`);
       setPreviewLoading(false);
-
-      if (document.training_data) {
-        try {
-          const data = typeof document.training_data === 'string' 
-            ? JSON.parse(document.training_data) 
-            : document.training_data;
-          
-          setInvoiceData(prev => ({
-            ...prev,
-            invoice_number: data.invoice_number || "",
-            invoice_date: data.invoice_date || "",
-            vendor_name: data.vendor_name || "",
-            amount: data.amount || "",
-            vat: data.vat || "",
-            total: data.total || "",
-            due_date: data.due_date || "",
-            reference: data.reference || "",
-          }));
-        } catch (e) {
-          console.error("Error parsing training_data:", e);
-        }
-      }
     }
   }, [document]);
+  
+  // Initialize PEPPOL fields in state when they're available
+  useEffect(() => {
+    if (Object.keys(peppolSections).length > 0) {
+      setInvoiceData(prev => {
+        const updated = { ...prev };
+        // Iterate through sections and fields
+        Object.entries(peppolSections).forEach(([sectionName, fieldsInSection]) => {
+          Object.keys(fieldsInSection).forEach(fieldName => {
+            if (!(fieldName in updated)) {
+              updated[fieldName] = "";
+            }
+          });
+        });
+        return updated;
+      });
+    }
+  }, [peppolSections]);
 
   const handleFieldChange = (field, value) => {
     setInvoiceData(prev => ({
@@ -99,14 +124,39 @@ function DocumentDetail({ document, onClose, onSave }) {
     setSuccess(false);
 
     try {
-      // Only send document_name for now (invoice data will be stored separately)
+      // Build PEPPOL structure organized by sections
+      const peppol_final = {};
+      
+      Object.entries(peppolSections).forEach(([sectionName, fieldsInSection]) => {
+        const sectionData = {};
+        let hasData = false;
+        
+        Object.keys(fieldsInSection).forEach(fieldName => {
+          if (invoiceData[fieldName]) {
+            sectionData[fieldName] = invoiceData[fieldName];
+            hasData = true;
+          }
+        });
+        
+        // Only add section if it has data
+        if (hasData) {
+          peppol_final[sectionName] = sectionData;
+        }
+      });
+      
+      // Also save document_name
+      const body = {
+        document_name: invoiceData.document_name,
+        invoice_data_peppol_final: peppol_final
+      };
+      
       const response = await fetch(`${API_BASE_URL}/documents/${document.id}`, {
         method: "PUT",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ document_name: invoiceData.document_name }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -131,6 +181,49 @@ function DocumentDetail({ document, onClose, onSave }) {
   };
 
   return (
+    <>
+      <style>{`
+        .info-icon {
+          position: relative;
+          cursor: help;
+        }
+        
+        .tooltip-content {
+          position: fixed;
+          background: #1f2937;
+          color: white;
+          padding: 0.75rem;
+          border-radius: 6px;
+          font-size: 0.85rem;
+          width: 220px;
+          text-align: left;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          white-space: normal;
+          z-index: 99999;
+          pointer-events: auto;
+          opacity: 0;
+          visibility: hidden;
+          transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+        
+        .tooltip-content::before {
+          content: '';
+          position: absolute;
+          bottom: -5px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 0;
+          height: 0;
+          border-left: 5px solid transparent;
+          border-right: 5px solid transparent;
+          border-top: 5px solid #1f2937;
+        }
+        
+        .info-icon:hover .tooltip-content {
+          opacity: 1;
+          visibility: visible;
+        }
+      `}</style>
     <div style={{
       position: "fixed",
       top: 0,
@@ -383,8 +476,8 @@ function DocumentDetail({ document, onClose, onSave }) {
                 ▶
               </button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "1rem", height: "100%", minHeight: 0 }}>
+              <div style={{ flexShrink: 0 }}>
                 <label style={{ display: "block", fontWeight: "500", marginBottom: "0.5rem" }}>
                   Document Name
                 </label>
@@ -409,166 +502,222 @@ function DocumentDetail({ document, onClose, onSave }) {
                   }}
                 />
               </div>
-              <div>
-                <label style={{ display: "block", fontWeight: "500", marginBottom: "0.5rem" }}>
-                  Invoice Number
-                </label>
-                <input
-                  type="text"
-                  value={invoiceData.invoice_number}
-                  onChange={(e) => handleFieldChange("invoice_number", e.target.value)}
-                  placeholder="e.g., INV-2024-001"
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: "1px solid #d0d0d0",
-                    borderRadius: "6px",
-                    fontSize: "0.95rem",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
+              
+              {/* PEPPOL Sections - Scrollable Container */}
+              {Object.keys(peppolSections).length > 0 && (
+                <div style={{ 
+                  marginTop: "0.5rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  minHeight: 0,
+                  flex: 1
+                }}>
+                  <div style={{ marginBottom: "1rem", flexShrink: 0 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+                      <p style={{ margin: 0, fontSize: "0.85rem", color: "#666", fontWeight: "500" }}>
+                        Invoice Sections ({
+                          sectionsOrder.filter(sectionName => {
+                            const fieldsInSection = peppolSections[sectionName] || {};
+                            const filteredFields = Object.entries(fieldsInSection)
+                              .filter(([fieldName, fieldInfo]) => {
+                                if (fieldInfo.Obligation === "required") return true;
+                                return showNonMandatory;
+                              })
+                              .reduce((acc, [fieldName, fieldInfo]) => {
+                                acc[fieldName] = fieldInfo;
+                                return acc;
+                              }, {});
+                            return Object.keys(filteredFields).length > 0;
+                          }).length
+                        })
+                      </p>
+                      <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={showNonMandatory}
+                          onChange={(e) => {
+                            console.log("Checkbox clicked! New value:", e.target.checked);
+                            setShowNonMandatory(e.target.checked);
+                          }}
+                          style={{ cursor: "pointer" }}
+                        />
+                        <span style={{ color: "#666" }}>Show Non-Mandatory</span>
+                      </label>
+                    </div>
+                  </div>
 
-              <div>
-                <label style={{ display: "block", fontWeight: "500", marginBottom: "0.5rem" }}>
-                  Invoice Date
-                </label>
-                <input
-                  type="date"
-                  value={invoiceData.invoice_date}
-                  onChange={(e) => handleFieldChange("invoice_date", e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: "1px solid #d0d0d0",
-                    borderRadius: "6px",
-                    fontSize: "0.95rem",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontWeight: "500", marginBottom: "0.5rem" }}>
-                  Vendor Name
-                </label>
-                <input
-                  type="text"
-                  value={invoiceData.vendor_name}
-                  onChange={(e) => handleFieldChange("vendor_name", e.target.value)}
-                  placeholder="e.g., Acme Corp"
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: "1px solid #d0d0d0",
-                    borderRadius: "6px",
-                    fontSize: "0.95rem",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontWeight: "500", marginBottom: "0.5rem" }}>
-                  Amount
-                </label>
-                <input
-                  type="number"
-                  value={invoiceData.amount}
-                  onChange={(e) => handleFieldChange("amount", e.target.value)}
-                  placeholder="e.g., 1000.00"
-                  step="0.01"
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: "1px solid #d0d0d0",
-                    borderRadius: "6px",
-                    fontSize: "0.95rem",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontWeight: "500", marginBottom: "0.5rem" }}>
-                  VAT
-                </label>
-                <input
-                  type="number"
-                  value={invoiceData.vat}
-                  onChange={(e) => handleFieldChange("vat", e.target.value)}
-                  placeholder="e.g., 250.00"
-                  step="0.01"
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: "1px solid #d0d0d0",
-                    borderRadius: "6px",
-                    fontSize: "0.95rem",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontWeight: "500", marginBottom: "0.5rem" }}>
-                  Total
-                </label>
-                <input
-                  type="number"
-                  value={invoiceData.total}
-                  onChange={(e) => handleFieldChange("total", e.target.value)}
-                  placeholder="e.g., 1250.00"
-                  step="0.01"
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: "1px solid #d0d0d0",
-                    borderRadius: "6px",
-                    fontSize: "0.95rem",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontWeight: "500", marginBottom: "0.5rem" }}>
-                  Due Date
-                </label>
-                <input
-                  type="date"
-                  value={invoiceData.due_date}
-                  onChange={(e) => handleFieldChange("due_date", e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: "1px solid #d0d0d0",
-                    borderRadius: "6px",
-                    fontSize: "0.95rem",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontWeight: "500", marginBottom: "0.5rem" }}>
-                  Reference
-                </label>
-                <input
-                  type="text"
-                  value={invoiceData.reference}
-                  onChange={(e) => handleFieldChange("reference", e.target.value)}
-                  placeholder="e.g., PO-2024-123"
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    border: "1px solid #d0d0d0",
-                    borderRadius: "6px",
-                    fontSize: "0.95rem",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
+                  <div style={{ 
+                    overflowY: "auto",
+                    paddingRight: "0.5rem",
+                    flex: 1,
+                    minHeight: 0
+                  }}>
+                    {sectionsOrder.map((sectionName) => {
+                      const fieldsInSection = peppolSections[sectionName] || {};
+                      
+                      // Filter fields based on showNonMandatory
+                      const filteredFields = Object.entries(fieldsInSection)
+                        .filter(([fieldName, fieldInfo]) => {
+                          if (fieldInfo.Obligation === "required") return true;
+                          return showNonMandatory;
+                        })
+                        .reduce((acc, [fieldName, fieldInfo]) => {
+                          acc[fieldName] = fieldInfo;
+                          return acc;
+                        }, {});
+                      
+                      // Hide section if no fields after filtering
+                      if (Object.keys(filteredFields).length === 0) return null;
+                      
+                      const hasFields = Object.keys(filteredFields).length > 0;
+                      return (
+                      <div key={sectionName}>
+                        <button
+                          onClick={() => toggleSection(sectionName)}
+                          style={{
+                            width: "100%",
+                            padding: "0.75rem 1rem",
+                            background: expandedSections[sectionName] ? "#f3f4f6" : "#ffffff",
+                            border: "1px solid #e5e7eb",
+                            borderRadius: "4px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.75rem",
+                            fontSize: "0.9rem",
+                            fontWeight: "500",
+                            color: "#1f2937",
+                            marginBottom: "0.5rem",
+                            transition: "all 0.2s ease",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.target.style.background = expandedSections[sectionName] ? "#f3f4f6" : "#f9fafb";
+                            e.target.style.borderColor = "#9ca3af";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.background = expandedSections[sectionName] ? "#f3f4f6" : "#ffffff";
+                            e.target.style.borderColor = "#e5e7eb";
+                          }}
+                        >
+                          <span style={{ display: "inline-block", transform: expandedSections[sectionName] ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s", width: "14px" }}>
+                            ▶
+                          </span>
+                          <span>{sectionName}</span>
+                          <span style={{ marginLeft: "auto", fontSize: "0.8rem", color: "#9ca3af" }}>
+                            ({Object.keys(filteredFields).length})
+                          </span>
+                        </button>
+                        
+                        {expandedSections[sectionName] && (
+                          <div style={{ 
+                            padding: "1rem", 
+                            background: "#f9fafb",
+                            borderRadius: "0 0 6px 6px",
+                            border: "1px solid #e5e7eb",
+                            borderTop: "none",
+                            marginBottom: "0.5rem"
+                          }}>
+                            {hasFields ? (
+                              <div style={{ 
+                                display: "grid", 
+                                gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", 
+                                gap: "1rem"
+                              }}>
+                              {Object.entries(filteredFields)
+                                .map(([fieldName, fieldInfo]) => (
+                                <div key={fieldName}>
+                                  <label 
+                                    style={{ 
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "0.5rem",
+                                      fontWeight: "500", 
+                                      marginBottom: "0.5rem",
+                                      color: "#374151",
+                                      cursor: "help",
+                              }}
+                            >
+                              <div
+                                className="info-icon"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "18px",
+                                  height: "18px",
+                                  borderRadius: "50%",
+                                  border: "1px solid #9ca3af",
+                                  fontSize: "0.75rem",
+                                  color: "#9ca3af",
+                                  fontWeight: "600",
+                                  cursor: "pointer",
+                                }}
+                                onMouseEnter={(e) => {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const tooltip = e.currentTarget.querySelector('.tooltip-content');
+                                  if (tooltip) {
+                                    tooltip.style.top = (rect.top - tooltip.offsetHeight - 10) + "px";
+                                    tooltip.style.left = (rect.left + rect.width / 2 - 110) + "px";
+                                  }
+                                }}
+                              >
+                                i
+                                <div className="tooltip-content">
+                                  <a 
+                                    href={`https://docs.peppol.eu/poacc/billing/3.0/#${fieldInfo["BT-ID"]}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{
+                                      color: "#60a5fa",
+                                      textDecoration: "none",
+                                      fontWeight: "600",
+                                      cursor: "pointer",
+                                    }}
+                                    onMouseEnter={(e) => e.target.style.textDecoration = "underline"}
+                                    onMouseLeave={(e) => e.target.style.textDecoration = "none"}
+                                  >
+                                    {fieldInfo["BT-ID"]} ↗
+                                  </a>
+                                  <div style={{ marginTop: "0.5rem", fontSize: "0.8rem", color: "#e5e7eb" }}>
+                                    {fieldInfo["Description"]}
+                                  </div>
+                                </div>
+                              </div>
+                              <span style={{ borderBottom: "1px dotted #9ca3af" }}>
+                                {fieldName}
+                              </span>
+                            </label>
+                            <input
+                              type="text"
+                              value={invoiceData[fieldName] || ""}
+                              onChange={(e) => handleFieldChange(fieldName, e.target.value)}
+                              placeholder={fieldInfo["Example"] || `Enter ${fieldName}`}
+                              title={fieldInfo["Description"]}
+                              style={{
+                                width: "100%",
+                                padding: "0.75rem",
+                                border: "1px solid #d0d0d0",
+                                borderRadius: "6px",
+                                fontSize: "0.95rem",
+                                boxSizing: "border-box",
+                              }}
+                            />
+                          </div>
+                        ))}
+                              </div>
+                            ) : (
+                              <p style={{ margin: 0, color: "#9ca3af", fontSize: "0.9rem" }}>
+                                No mandatory fields in this section.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      );
+                    })}
+                    </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -755,6 +904,7 @@ function DocumentDetail({ document, onClose, onSave }) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

@@ -47,6 +47,10 @@ export DATABASE_PASSWORD="${DATABASE_PASSWORD:-scanner_local}"
 export BASE_DOCUMENTS_DIR="$(cd "$SCRIPT_DIR/../documents" && pwd)"
 
 echo ""
+echo "🔧 Running setup tasks..."
+$PYTHON_CMD "$SCRIPT_DIR/setup_environment.py"
+echo ""
+
 echo "Starting functions-framework on port 9000..."
 echo "Target: cf_preprocess_document (main entry point)"
 echo ""

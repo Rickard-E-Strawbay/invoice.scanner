@@ -83,8 +83,19 @@ class cf_predict_invoice_data(cf_base):
             self.logger.warning(f"⚠️  Unexpected content_type type: {type(content_type_json).__name__}, using 'pdf_text' fallback")
             content_type = "pdf_text"
         
-        self.logger.info(f"✅ Final content_type: {content_type}")
-        return content_type
+        # Normalize content_type - LLM may return "text" instead of "pdf_text"
+        content_type_mapping = {
+            "text": "pdf_text",
+            "image": "image",
+            "pdf_text": "pdf_text",
+            "pdf_scanned": "pdf_scanned"
+        }
+        normalized_type = content_type_mapping.get(content_type, "pdf_text")
+        if normalized_type != content_type:
+            self.logger.warning(f"⚠️  Normalized content_type: '{content_type}' → '{normalized_type}'")
+        
+        self.logger.info(f"✅ Final content_type: {normalized_type}")
+        return normalized_type
     
     def _save_invoice_data(self, invoice_data: dict, raw_response: str):
         """Save extracted invoice data to database."""

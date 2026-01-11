@@ -2,6 +2,7 @@ from flask_smorest import Api, Blueprint
 from flask import jsonify, request, session
 import uuid
 import os
+import json
 from datetime import datetime
 from ic_shared.database.connection import fetch_all, execute_sql
 from ic_shared.logging import ComponentLogger
@@ -301,53 +302,47 @@ def restart_document(doc_id):
         logger.info(f"Document {doc_id} status reset to preprocessing")
         
         # ========== TRIGGER ASYNC PROCESSING ==========
+        task_id = None
+        processing_error = None
         try:
-            import requests
-            
-            # Call processing service via HTTP to trigger task
-            processing_url = os.environ.get('PROCESSING_SERVICE_URL', 'http://localhost:5002')
-            
-            response = requests.post(
-                f'{processing_url}/api/tasks/orchestrate',
-                json={
-                    'document_id': str(doc_uuid),
-                    'company_id': str(company_id)
-                },
-                timeout=10
-            )
-            
-            task_id = response.json().get('task_id', 'processing-queued')
-            logger.info(f"Processing task queued: {task_id}")
-            
-            return jsonify({
-                "message": "Document processing restarted",
-                "document": {
-                    "id": updated_doc["id"],
-                    "status": updated_doc["status"],
-                    "created_at": updated_doc["created_at"].isoformat() if updated_doc["created_at"] else None
-                },
-                "task_id": task_id
-            }), 200
+            processing_backend = init_processing_backend()
+            if processing_backend:
+                result = processing_backend.trigger_task(str(doc_uuid), str(company_id))
+                task_id = result.get('task_id')
+                backend_status = result.get('status')
                 
-        except Exception as e:
-            # Log error but still return success since status is reset
-            logger.info(f"Warning: Failed to queue processing task: {str(e)}")
-            return jsonify({
-                "message": "Document status reset, processing will begin shortly",
-                "document": {
-                    "id": updated_doc["id"],
-                    "status": updated_doc["status"],
-                    "created_at": updated_doc["created_at"].isoformat() if updated_doc["created_at"] else None
-                }
-            }), 200
+                # Check if processing backend returned an error
+                if backend_status in ['service_unavailable', 'service_error']:
+                    processing_error = result.get('error', 'Unknown error')
+                    logger.error(f"❌ PROCESSING ERROR: {processing_error}")
+                else:
+                    logger.info(f"✅ Processing task restarted via {processing_backend.backend_type}")
+            else:
+                logger.warning(f"⚠️  Processing backend not initialized")
+                task_id = None
+        except Exception as task_error:
+            logger.error(f"❌ Error triggering processing: {task_error}")
+            processing_error = str(task_error)
+            task_id = None
+        
+        return jsonify({
+            "message": "Document processing restarted" if not processing_error else "Document status reset but processing failed",
+            "document": {
+                "id": updated_doc["id"],
+                "status": updated_doc["status"],
+                "created_at": updated_doc["created_at"].isoformat() if updated_doc["created_at"] else None
+            },
+            "task_id": task_id,
+            "processing_error": processing_error if processing_error else None
+            }), 200 if not processing_error else 202
     
     except Exception as e:
-        logger.info(f"Unexpected error: {e}")
-        return jsonify({"error": "An unexpected error occurred"}), 500
+        logger.error(f"Error in restart_document: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @blp_documents.route("/", methods=["GET"])
 def get_documents():
-    """Get all documents for the authenticated user's company."""
+    """Get all documents for the authenticated user's company with PEPPOL mandatory fields structure."""
     try:
         # Check authentication
         if "user_id" not in session:
@@ -357,10 +352,15 @@ def get_documents():
         if not company_id:
             return jsonify({"error": "Company info not found in session"}), 400
         
+        # Get mandatory PEPPOL fields structure
+        from ic_shared.utils.peppol_manager import PeppolManager
+        peppol_manager = PeppolManager()
+        mandatory_fields = peppol_manager.get_mandatory_fields()
+        
         sql = """
             SELECT d.id, d.company_id, d.uploaded_by, d.raw_format, d.raw_filename, 
                    d.document_name, d.processed_image_filename, d.content_type, d.status, d.predicted_accuracy, 
-                   d.is_training, d.created_at, d.updated_at,
+                   d.is_training, d.created_at, d.updated_at, d.invoice_data_peppol_final,
                    ds.status_name
             FROM documents d
             LEFT JOIN document_status ds ON d.status = ds.status_key
@@ -374,7 +374,8 @@ def get_documents():
         
         documents = results if results else []
         return jsonify({
-            "documents": [dict(doc) for doc in documents]
+            "documents": [dict(doc) for doc in documents],
+            "peppol_mandatory_fields": mandatory_fields
         }), 200
     
     except Exception as e:
@@ -419,14 +420,7 @@ def update_document(doc_id):
         # Extract allowed fields from request data
         allowed_fields = {
             "document_name": data.get("document_name"),
-            "invoice_number": data.get("invoice_number"),
-            "invoice_date": data.get("invoice_date"),
-            "vendor_name": data.get("vendor_name"),
-            "amount": data.get("amount"),
-            "vat": data.get("vat"),
-            "total": data.get("total"),
-            "due_date": data.get("due_date"),
-            "reference": data.get("reference"),
+            "invoice_data_peppol_final": data.get("invoice_data_peppol_final"),
         }
         
         # Check if document_name is being changed and if it's unique within the company
@@ -443,20 +437,68 @@ def update_document(doc_id):
                     "error": "A document with this name already exists in your company"
                 }), 409
         
-        # Update the document with document_name only
-        # TODO: Create separate invoice_data table for extracted data
+        # Update the document with document_name and merge invoice_data_peppol_final
+        # If peppol_final is provided, merge it with existing data (only fill empty fields)
+        peppol_final_json = None
+        if allowed_fields["invoice_data_peppol_final"]:
+            try:
+                peppol_final_data = allowed_fields["invoice_data_peppol_final"]
+                
+                # Convert to JSON string if it's a dict
+                if isinstance(peppol_final_data, dict):
+                    peppol_final_json = json.dumps(peppol_final_data)
+                else:
+                    peppol_final_json = peppol_final_data
+                
+                # Merge with existing data: only fill empty fields
+                # Get existing peppol_final data
+                current_sql = "SELECT invoice_data_peppol_final FROM documents WHERE id = %s"
+                current_results, current_success = fetch_all(current_sql, (str(doc_uuid),))
+                
+                if current_success and current_results:
+                    existing_final_raw = current_results[0].get("invoice_data_peppol_final")
+                    
+                    if existing_final_raw:
+                        # Parse existing data
+                        if isinstance(existing_final_raw, str):
+                            existing_final = json.loads(existing_final_raw)
+                        else:
+                            existing_final = existing_final_raw if existing_final_raw else {}
+                        
+                        # Ensure peppol_final_data is a dict
+                        if isinstance(peppol_final_data, str):
+                            peppol_final_data = json.loads(peppol_final_data)
+                        
+                        # Merge: new data only fills empty fields
+                        for section_name, section_fields in peppol_final_data.items():
+                            if section_name not in existing_final:
+                                existing_final[section_name] = {}
+                            
+                            if isinstance(section_fields, dict):
+                                # Only add fields that don't exist in existing data
+                                for field_name, field_value in section_fields.items():
+                                    if field_name not in existing_final[section_name]:
+                                        existing_final[section_name][field_name] = field_value
+                        
+                        peppol_final_json = json.dumps(existing_final)
+                
+            except Exception as merge_error:
+                logger.error(f"Error merging PEPPOL data: {str(merge_error)}")
+                raise ValueError(f"Failed to merge PEPPOL data: {str(merge_error)}")
+        
+        # Update the document
         update_sql = """
             UPDATE documents
-            SET document_name = %s, updated_at = CURRENT_TIMESTAMP
+            SET document_name = %s, invoice_data_peppol_final = %s, updated_at = CURRENT_TIMESTAMP
             WHERE id = %s
             RETURNING id, company_id, uploaded_by, raw_format, raw_filename, 
                       document_name, processed_image_filename, content_type, status, 
                       predicted_accuracy, is_training, created_at, updated_at
         """
-        update_results, update_success = execute_sql(update_sql, (allowed_fields["document_name"], str(doc_uuid)))
+        update_results, update_success = execute_sql(update_sql, (allowed_fields["document_name"], peppol_final_json, str(doc_uuid)))
         
         if not update_success or not update_results:
-            logger.info(f"Error: Failed to update document")
+            logger.error(f"Database error: Failed to update document {doc_id}")
             return jsonify({"error": "Failed to update document"}), 500
         
         updated_doc = update_results[0]
@@ -553,3 +595,22 @@ def get_document_preview(doc_id):
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+
+
+@blp_documents.route("/peppol", methods=["GET"])
+def get_peppol_structure():
+    """Get the PEPPOL structure with all fields (mandatory and non-mandatory) with document order preserved."""
+    try:
+        from ic_shared.utils.peppol_manager import PeppolManager
+        peppol_manager = PeppolManager()
+        all_fields = peppol_manager.get_all_fields()
+        sections_order = peppol_manager.get_sections_order()
+        
+        return jsonify({
+            "sections_order": sections_order,
+            "peppol_sections": all_fields
+        }), 200
+    
+    except Exception as e:
+        logger.info(f"Error: {e}")
+        return jsonify({"error": "Failed to fetch PEPPOL structure"}), 500

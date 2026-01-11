@@ -17,6 +17,18 @@ class DocumentClassifier:
     
     CLASSIFICATION_PROMPT = """Analyze this document and classify it.
 
+IMPORTANT: An "invoice" contains:
+- An invoice number or reference
+- A seller/vendor information
+- A buyer/customer information  
+- Line items with amounts
+- Total amount
+- Payment terms or due date
+- Tax information (if applicable)
+
+If most of these elements are present, it's an "invoice".
+If it's just a receipt, bill, quote, or other document type, classify as "not_invoice".
+
 Return ONLY a JSON object with these fields (no other text):
 {
     "content_classification": "image" | "pdf_text" | "pdf_scanned",
@@ -135,9 +147,9 @@ Return ONLY a JSON object with these fields (no other text):
             try:
                 text_content = file_content.decode('utf-8', errors='ignore')[:2000]
                 if text_content:
-                    content_classification = "text"
+                    content_classification = "pdf_text"  # Treat as text content
             except Exception:
-                content_classification = "binary"
+                content_classification = "image"  # Fallback to image classification
                 text_content = None
         
         # If we have text content, classify via text API
