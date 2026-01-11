@@ -5,7 +5,7 @@ from ic_shared.configuration.defines import ENTER, EXIT, ERROR
 from ic_shared.configuration.defines import LLM_STATUS
 
 
-from ic_cf.incoive_llm_prediction.prediction_manager import PredictionManager
+from incoive_llm_prediction.prediction_manager import PredictionManager
 
 class cf_predict_invoice_data(cf_base):
     """Cloud Function entry point for LLM prediction worker."""

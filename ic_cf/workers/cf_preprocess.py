@@ -5,7 +5,7 @@ from ic_shared.configuration.defines import ENTER, EXIT, ERROR, FAIL
 from ic_shared.configuration.defines import PREPROCESS_STATUS
 from ic_shared.database.connection import execute_sql
 
-from ic_cf.incoive_llm_prediction.document_classifier import DocumentClassifier
+from incoive_llm_prediction.document_classifier import DocumentClassifier
 
 class cf_preprocess(cf_base):
     """Cloud Function entry point for preprocessing worker."""
