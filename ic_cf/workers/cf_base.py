@@ -51,7 +51,7 @@ class cf_base:
         """Fetch document metadata and raw file content from storage."""
         
         # 1. Get document metadata from database
-        sql = "SELECT id, raw_filename FROM documents WHERE id = %s"
+        sql = "SELECT raw_format FROM documents WHERE id = %s"
         results, success = fetch_all(sql, (str(self.document_id),))
         
         if not success or not results:
@@ -59,9 +59,9 @@ class cf_base:
         
         doc = results[0]
         
-        # 2. Get raw file from storage
-        _, ext = os.path.splitext(doc["raw_filename"])
-        file_path = f"raw/{self.document_id}{ext}"
+        # 2. Get raw file from storage using format: raw/{id}.{raw_format}
+        raw_format = doc["raw_format"]
+        file_path = f"raw/{self.document_id}.{raw_format}"
         
         storage = get_storage_service()
         file_content = storage.get(file_path)
@@ -70,8 +70,8 @@ class cf_base:
             raise ValueError(f"Document file not found in storage: {file_path}")
         
         return {
-            "id": doc["id"],
-            "filename": doc["raw_filename"],
+            "id": self.document_id,
+            "raw_format": raw_format,
             "content": file_content
         }
     

@@ -489,9 +489,9 @@ def get_document_preview(doc_id):
             return jsonify({"error": "Invalid document ID format"}), 400
         
         # Get document details
-        doc_results, doc_success = execute_sql(
+        doc_results, doc_success = fetch_all(
             """
-            SELECT id, raw_filename, status FROM documents
+            SELECT raw_format, raw_filename, status FROM documents
             WHERE id = %s AND company_id = %s
             """,
             (str(doc_uuid), str(company_id))
@@ -502,23 +502,23 @@ def get_document_preview(doc_id):
         
         doc = doc_results[0]
         
-        # Check if status allows preview
-        # llowed_statuses = ["uploaded", "preprocessing", "preprocess_error"]
-        # if doc["status"] not in allowed_statuses:
-        #    return jsonify({
-        #        "error": f"Preview not available for status: {doc['status']}"
-        #     }), 400
+        # Get raw_format from result
+        raw_format = doc.get("raw_format")
         
-        # Get file using storage service
-        _, ext = os.path.splitext(doc["raw_filename"])
-        file_storage_path = f"raw/{doc['id']}{ext}"
+        if not raw_format:
+            logger.error(f"❌ raw_format not found in document. Got: {doc}")
+            return jsonify({"error": "Document format not found in database"}), 400
+        
+        file_storage_path = f"raw/{doc_uuid}.{raw_format}"
+        logger.info(f"📂 Retrieving preview: doc_id={doc_uuid}, format={raw_format}, path={file_storage_path}")
         
         try:
             storage_service = get_storage_service()
             file_content = storage_service.get(file_storage_path)
+            logger.info(f"✅ Retrieved file content, size: {len(file_content) if file_content else 0} bytes")
         except Exception as e:
-            logger.error(f"Error initializing storage service: {e}", exc_info=True)
-            return jsonify({"error": "Storage service not initialized"}), 500
+            logger.error(f"❌ Error retrieving file from storage: {e}", exc_info=True)
+            return jsonify({"error": f"Storage error: {str(e)}"}), 500
         
         if file_content is None:
             return jsonify({"error": "File not found in storage"}), 404
@@ -527,15 +527,18 @@ def get_document_preview(doc_id):
         from flask import send_file
         from io import BytesIO
         
+        # Build file extension from raw_format (e.g., "pdf" -> ".pdf")
+        ext = f".{raw_format}".lower()
+        
         # Determine MIME type based on file extension
         mime_type = "application/octet-stream"
-        if ext.lower() in [".pdf"]:
+        if ext in [".pdf"]:
             mime_type = "application/pdf"
-        elif ext.lower() in [".jpg", ".jpeg"]:
+        elif ext in [".jpg", ".jpeg"]:
             mime_type = "image/jpeg"
-        elif ext.lower() in [".png"]:
+        elif ext in [".png"]:
             mime_type = "image/png"
-        elif ext.lower() in [".tiff", ".tif"]:
+        elif ext in [".tiff", ".tif"]:
             mime_type = "image/tiff"
         
         return send_file(
@@ -546,5 +549,7 @@ def get_document_preview(doc_id):
         )
     
     except Exception as e:
-        print(f"Unexpected error in get_document_preview: {e}")
-        return jsonify({"error": "An unexpected error occurred"}), 500
+        logger.error(f"❌ Unexpected error in get_document_preview: {e}", exc_info=True)
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
