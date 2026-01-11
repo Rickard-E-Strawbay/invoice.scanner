@@ -63,12 +63,12 @@ if [[ "$PROJECT_ID" == *"prod"* ]]; then
     GCS_BUCKET="invoice-scanner-prod-docs"
     DB_USER="scanner_prod"
     DB_PASSWORD=$(gcloud secrets versions access latest --secret=db_password_prod --project="$PROJECT_ID" 2>/dev/null || echo "")
-    OPENAI_API_KEY=$(gcloud secrets versions access latest --secret=openai_api_key_prod --project="$PROJECT_ID" 2>/dev/null || echo "")
+    OPENAI_API_KEY=$(gcloud secrets versions access latest --secret=openai_api_key_prod --project="$PROJECT_ID" 2>/dev/null || gcloud secrets versions access latest --secret=openai_api_key --project="$PROJECT_ID" 2>/dev/null || echo "")
 else
     GCS_BUCKET="invoice-scanner-test-docs"
     DB_USER="scanner_test"
     DB_PASSWORD=$(gcloud secrets versions access latest --secret=db_password_test --project="$PROJECT_ID" 2>/dev/null || echo "")
-    OPENAI_API_KEY=$(gcloud secrets versions access latest --secret=openai_api_key_test --project="$PROJECT_ID" 2>/dev/null || echo "")
+    OPENAI_API_KEY=$(gcloud secrets versions access latest --secret=openai_api_key_test --project="$PROJECT_ID" 2>/dev/null || gcloud secrets versions access latest --secret=openai_api_key --project="$PROJECT_ID" 2>/dev/null || echo "")
 fi
 
 # Verify secrets were retrieved
