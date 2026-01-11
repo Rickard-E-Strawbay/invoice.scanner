@@ -521,7 +521,8 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
                             const filteredFields = Object.entries(fieldsInSection)
                               .filter(([fieldName, fieldInfo]) => {
                                 if (fieldInfo.Obligation === "required") return true;
-                                return showNonMandatory;
+                                if (showNonMandatory) return true;
+                                return invoiceData[fieldName]; // Show if has value
                               })
                               .reduce((acc, [fieldName, fieldInfo]) => {
                                 acc[fieldName] = fieldInfo;
@@ -555,11 +556,12 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
                     {sectionsOrder.map((sectionName) => {
                       const fieldsInSection = peppolSections[sectionName] || {};
                       
-                      // Filter fields based on showNonMandatory
+                      // Filter fields: mandatory + filled + (all if showNonMandatory)
                       const filteredFields = Object.entries(fieldsInSection)
                         .filter(([fieldName, fieldInfo]) => {
                           if (fieldInfo.Obligation === "required") return true;
-                          return showNonMandatory;
+                          if (showNonMandatory) return true;
+                          return invoiceData[fieldName]; // Show if has value
                         })
                         .reduce((acc, [fieldName, fieldInfo]) => {
                           acc[fieldName] = fieldInfo;
@@ -696,7 +698,7 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
                               style={{
                                 width: "100%",
                                 padding: "0.75rem",
-                                border: "1px solid #d0d0d0",
+                                border: fieldInfo.Obligation === "required" ? "2px solid #6b7280" : "1px solid #d0d0d0",
                                 borderRadius: "6px",
                                 fontSize: "0.95rem",
                                 boxSizing: "border-box",
