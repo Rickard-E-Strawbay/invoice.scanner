@@ -325,7 +325,8 @@ def get_storage_service() -> StorageService:
     
     else:
         logger.info("[get_storage_service] Using LocalStorageService")
-        return LocalStorageService()
+        from ic_shared.configuration.defines import BASE_DOCUMENTS_DIR
+        return LocalStorageService(base_path=str(BASE_DOCUMENTS_DIR))
 
 
 # Singleton instance (lazy loaded)

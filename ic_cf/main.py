@@ -49,6 +49,7 @@ import json
 from google.cloud import pubsub_v1
 from datetime import datetime
 from typing import Dict, Any
+from ic_shared.configuration.config import IS_LOCAL
 
 # Import ComponentLogger instead of standard logging
 
@@ -157,8 +158,15 @@ def simulate_pubsub_message(topic_name: str, message_data: Dict[str, Any]) -> No
 
 def publish_to_topic(topic_name: str, message_data: Dict[str, Any]) -> bool:
     """Publish message to Pub/Sub topic to trigger next stage."""
+    
+    # Use local simulation if running in local environment
+    if IS_LOCAL:
+        logger.info("[Pub/Sub] 📨 [LOCAL] Simulating Pub/Sub message")
+        simulate_pubsub_message(topic_name, message_data)
+        return True
+    
     try:
-        logger.info(f"� Publishing message to {topic_name}: {message_data}")
+        logger.info(f"📤 Publishing message to {topic_name}: {message_data}")
         publisher = pubsub_v1.PublisherClient()
         topic_path = publisher.topic_path(PROJECT_ID, topic_name)
         message_json = json.dumps(message_data).encode("utf-8")
@@ -169,7 +177,7 @@ def publish_to_topic(topic_name: str, message_data: Dict[str, Any]) -> bool:
         return True
     except Exception as e:
         if "DefaultCredentialsError" in type(e).__name__:
-            logger.info("[Pub/Sub] 📨 [LOCAL] Simulating Pub/Sub message")
+            logger.info("[Pub/Sub] 📨 [LOCAL] Simulating Pub/Sub message (fallback)")
             simulate_pubsub_message(topic_name, message_data)
             return True
         else:

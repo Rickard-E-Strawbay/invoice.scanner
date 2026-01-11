@@ -10,12 +10,10 @@ google-cloud-logging==3.5.0
 cloud-sql-python-connector==1.19.0
 pg8000==1.31.1
 
-# Protocol Buffers
-protobuf==4.25.0
+# LLM / AI
+openai>=2.15.0
 
-# CloudEvents
-cloudevents==1.10.1
+# PDF Processing
+pdfplumber==0.10.3
+PyMuPDF==1.23.8          # PDF rendering to image for scanned PDFs
 
-# Utilities
-requests==2.31.0
-python-dotenv==1.0.0

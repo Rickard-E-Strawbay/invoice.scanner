@@ -1,10 +1,14 @@
 from typing import Optional
 import json
 import base64
+import os
 
 from ic_shared.configuration.defines import STAGES
 from ic_shared.logging import ComponentLogger
 from ic_shared.database import update_document_status
+from ic_shared.database.connection import fetch_all
+from ic_shared.utils.storage_service import get_storage_service
+
 
 PUBSUB_MESSAGE_TEMPLATE = {
     "document_id": None,
@@ -43,6 +47,34 @@ class cf_base:
             "stage": stage
         }   
     
+    def _fetch_document(self):
+        """Fetch document metadata and raw file content from storage."""
+        
+        # 1. Get document metadata from database
+        sql = "SELECT id, raw_filename FROM documents WHERE id = %s"
+        results, success = fetch_all(sql, (str(self.document_id),))
+        
+        if not success or not results:
+            raise ValueError(f"Document not found: {self.document_id}")
+        
+        doc = results[0]
+        
+        # 2. Get raw file from storage
+        _, ext = os.path.splitext(doc["raw_filename"])
+        file_path = f"raw/{self.document_id}{ext}"
+        
+        storage = get_storage_service()
+        file_content = storage.get(file_path)
+        
+        if file_content is None:
+            raise ValueError(f"Document file not found in storage: {file_path}")
+        
+        return {
+            "id": doc["id"],
+            "filename": doc["raw_filename"],
+            "content": file_content
+        }
+    
     def _update_document_status(self, document_status: str, error_message: Optional[str] = None):
         """Update document status in the database."""
         self.logger.info(f"NEW STATUS {document_status} for document {self.document_id}")
@@ -77,7 +109,7 @@ class cf_base:
         message_data["company_id"] = self.company_id
         message_data["stage"] = next_stage_name
 
-        self.logger.info(f"PUBLISH {self.document_id} to topic {next_topic_name} for stage {next_stage_name}")
+        print(f"PUBLISH {self.document_id} to topic {next_topic_name} for stage {next_stage_name}")
         publish_to_topic(next_topic_name, message_data)
     
     def _handle_error(self,failed_status: str, error_msg: str):

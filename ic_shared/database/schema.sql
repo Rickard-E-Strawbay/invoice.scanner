@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS documents(
     raw_filename VARCHAR(255),
     document_name VARCHAR(255),
     processed_image_filename VARCHAR(255),
-    content_type VARCHAR(100),
+    content_type TEXT,
     status VARCHAR(50) DEFAULT 'uploaded',
     error_message TEXT,
     predicted_accuracy DECIMAL(5, 2),
@@ -137,12 +137,12 @@ INSERT INTO document_status (sequence, status_key, status_name, status_descripti
 
 INSERT INTO price_plans
 (price_plan_key, plan_name, plan_description, price_per_month, features) VALUES
-( 1000,'Admin', 'Unlimited', 0, '{}'),
+( 1000,'Admin', 'Unlimited', 0, '{"api_access": true, "ftp_integration": true, "auto_export": true,"email_scan": false, "batch_scanning": true, "batch_download": true}'),
 ( 40,'Enterprise', 'Up to 20k invoices per month (€13c/invoice)', 1400, '{"api_access": true, "ftp_integration": true, "auto_export": true,"email_scan": false, "batch_scanning": true, "batch_download": true}'),
 ( 30,'Large', 'Up to 5k invoices per month (€18c/invoice)', 909, '{"api_access": true, "ftp_integration": true, "auto_export": true,"email_scan": false, "batch_scanning": true, "batch_download": true}'),
 ( 20,'Medium', 'Up to 1k invoices per month (€28c/invoice)', 272, '{"api_access": false, "ftp_integration": true, "auto_export": false,"email_scan": false, "batch_scanning": true, "batch_download": true}'),
 ( 15,'Basic', 'Up to 100 invoices per month (€36c/invoice)', 36, '{"api_access": false, "ftp_integration": false, "auto_export": false,"email_scan": false, "batch_scanning": false, "batch_download": false}'),
-( 10,'Starter', 'Up to 10 invoices per month', 0, '{}');
+( 10,'Starter', 'Up to 10 invoices per month', 0, '{"api_access": false, "ftp_integration": false, "auto_export": false,"email_scan": false, "batch_scanning": false, "batch_download": false}');
 
 INSERT INTO user_roles (role_name, role_key, role_description) VALUES
 ('Strawbay Admin', 1000, 'System Admin with access to approve new Companies'),

@@ -24,6 +24,16 @@ function PlansAndBilling({ onNavigate }) {
     name: f.feature_name
   }));
 
+  // DEBUG: Log to verify features data
+  useEffect(() => {
+    console.log("DEBUG PlansAndBilling - features from API:", features);
+    console.log("DEBUG PlansAndBilling - allFeatures array:", allFeatures);
+    console.log("DEBUG PlansAndBilling - plans from API:", plans);
+    if (plans.length > 0) {
+      console.log("DEBUG PlansAndBilling - first plan features object:", plans[0].features);
+    }
+  }, [features, allFeatures, plans]);
+
   useEffect(() => {
     fetchPlans();
     fetchFeatures();

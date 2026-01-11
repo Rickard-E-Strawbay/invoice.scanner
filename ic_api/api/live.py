@@ -281,9 +281,12 @@ def get_features():
     """Get all available features with their descriptions."""
     try:
         import json
+        import os
         from pathlib import Path
         
-        features_dir = Path(__file__).parent / "features"
+        # Get features directory (same pattern as email_templates_loader)
+        current_dir = os.path.dirname(os.path.abspath(__file__))  # /app/api
+        features_dir = Path(os.path.dirname(current_dir)) / "features"  # /app/features
         features = []
         
         if features_dir.exists():

@@ -44,6 +44,7 @@ export DATABASE_PORT="${DATABASE_PORT:-5432}"
 export DATABASE_NAME="${DATABASE_NAME:-invoice_scanner}"
 export DATABASE_USER="${DATABASE_USER:-scanner_local}"
 export DATABASE_PASSWORD="${DATABASE_PASSWORD:-scanner_local}"
+export BASE_DOCUMENTS_DIR="$(cd "$SCRIPT_DIR/../documents" && pwd)"
 
 echo ""
 echo "Starting functions-framework on port 9000..."
