@@ -12,7 +12,7 @@ from datetime import datetime
 from ic_shared.logging import ComponentLogger
 from api.helpers import warm_up
 from api.helpers import get_cors_origins_regex
-from ic_shared.configuration.config import IS_CLOUD_RUN
+from ic_shared.configuration.config import IS_CLOUD_RUN, ENVIRONMENT
 
 from api.auth import blp_auth
 from api.admin import blp_admin
@@ -42,12 +42,24 @@ else:
 
 app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
 
-# Configure CORS - allow all origins in development, restrict in production
+# Configure CORS - dynamically based on ENVIRONMENT variable
 if IS_CLOUD_RUN:
-    # Production: specific origins
+    # Cloud Run: use environment-specific origins
+    if ENVIRONMENT in ["test", "staging"]:
+        cors_origins = [
+            "https://invoice-scanner-frontend-test-wcpzrlxtjq-ew.a.run.app",
+            "https://invoice-scanner-frontend-test.run.app"
+        ]
+    else:  # prod or other
+        cors_origins = [
+            "https://invoice-scanner-frontend-prod.run.app",
+            "https://invoice-scanner-frontend-prod-wcpzrlxtjq-ew.a.run.app"
+        ]
+    logger.info(f"CORS configured for '{ENVIRONMENT}' environment: {cors_origins}")
+    
     CORS(app, 
          supports_credentials=True,
-         origins=["https://invoice-scanner-frontend-prod.run.app"],
+         origins=cors_origins,
          allow_headers=['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires', '*'],
          expose_headers=['Content-Type', 'Authorization', 'Cache-Control'])
 else:

@@ -21,7 +21,9 @@ logger = ComponentLogger("Configuration")
 # ===== DATABASE CONFIGURATION =====
 
 # Environment detection
+ENVIRONMENT = os.getenv("ENVIRONMENT", "local")  # local, test, prod
 IS_CLOUD_RUN = os.getenv('K_SERVICE') is not None
+IS_LOCAL = ENVIRONMENT == "local"
 
 # Database connection settings
 DATABASE_HOST = os.getenv('DATABASE_HOST', LOCAL_DATABASE_HOST)
@@ -30,8 +32,6 @@ DATABASE_USER = os.getenv('DATABASE_USER', LOCAL_DATABASE_USER)
 DATABASE_PASSWORD = os.getenv('DATABASE_PASSWORD', LOCAL_DATABASE_PASSWORD)
 DATABASE_NAME = os.getenv('DATABASE_NAME', LOCAL_DATABASE_NAME)
 INSTANCE_CONNECTION_NAME = os.getenv('INSTANCE_CONNECTION_NAME')  # Cloud Run only
-
-IS_LOCAL = os.getenv("ENVIRONMENT") == "local"
 
 logger.info(f"Environment: {'Cloud Run' if IS_CLOUD_RUN else 'Local'}")
 logger.info(f"Driver: pg8000 (Pure Python PostgreSQL)")
