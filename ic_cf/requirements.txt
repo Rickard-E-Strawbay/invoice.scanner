@@ -5,6 +5,7 @@ functions-framework[cloudevents]==3.5.0
 google-cloud-pubsub==2.20.0
 google-cloud-secret-manager==2.16.0
 google-cloud-logging==3.5.0
+google-cloud-storage==2.14.0
 
 # Database & ORM
 cloud-sql-python-connector==1.19.0
