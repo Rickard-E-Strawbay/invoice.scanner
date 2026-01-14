@@ -4,7 +4,9 @@ import uuid
 import os
 import json
 from datetime import datetime
+from ic_shared.configuration.defines import PEPPOL_DEFAULTS 
 from ic_shared.database.connection import fetch_all, execute_sql
+from ic_shared.database.document_operations import merge_peppol_json, apply_peppol_json_template, reshape_to_peppol_format
 from ic_shared.logging import ComponentLogger
 from ic_shared.utils.storage_service import get_storage_service
 from lib.processing_backend import init_processing_backend
@@ -241,6 +243,7 @@ def get_document_processing_status(doc_id):
 
 @blp_documents.route("/<doc_id>/restart", methods=["POST"])
 def restart_document(doc_id):
+    
     """
     Restart document processing from the beginning.
     
@@ -340,6 +343,72 @@ def restart_document(doc_id):
         logger.error(f"Error in restart_document: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+
+@blp_documents.route("/<doc_id>/details", methods=["GET"])
+def get_document_details(doc_id):
+    """Get full document details with invoice data (peppol and user-corrected)."""
+    try:
+        # Check authentication
+        if "user_id" not in session:
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        company_id = session.get("company_id")
+        if not company_id:
+            return jsonify({"error": "Company info not found in session"}), 400
+        
+        # Fetch document details
+        sql = """
+            SELECT d.id, d.company_id, d.uploaded_by, d.raw_format, d.raw_filename, 
+                   d.document_name, d.processed_image_filename, d.content_type, d.status, d.predicted_accuracy, 
+                   d.is_training, d.created_at, d.updated_at, 
+                   d.invoice_data_raw,
+                   d.invoice_data_peppol,
+                   d.invoice_data_user_corrected,
+                   d.invoice_data_peppol_final,
+                   ds.status_name
+            FROM documents d
+            LEFT JOIN document_status ds ON d.status = ds.status_key
+            WHERE d.id = %s AND d.company_id = %s
+        """
+        results, success = fetch_all(sql, (doc_id, company_id))
+
+        if not success or not results:
+            return jsonify({"error": "Document not found or access denied"}), 404
+        
+        document = dict(results[0])
+        
+        dict_invoice_data_peppol = {}
+        try:
+            dict_invoice_data_peppol = document.get("invoice_data_peppol")
+            if dict_invoice_data_peppol:
+                dict_invoice_data_peppol = json.loads(dict_invoice_data_peppol)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"Failed to parse invoice_data_peppol for document {doc_id}")
+
+       
+
+        dict_invoice_data_user_corrected = {}
+        try:
+            dict_invoice_data_user_corrected = document.get("invoice_data_user_corrected")
+            if dict_invoice_data_user_corrected:
+                dict_invoice_data_user_corrected = json.loads(dict_invoice_data_user_corrected)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"Failed to parse invoice_data_user_corrected for document {doc_id}")
+
+        dict_invoice_data_peppol_final = merge_peppol_json(dict_invoice_data_peppol, dict_invoice_data_user_corrected)
+        dict_invoice_data_peppol_final = apply_peppol_json_template(dict_invoice_data_peppol_final, PEPPOL_DEFAULTS)
+        
+        # Convert merged data back to JSON string (same format as DB storage)
+        document["invoice_data_peppol_final"] = json.dumps(dict_invoice_data_peppol_final) if dict_invoice_data_peppol_final else json.dumps({})
+        
+        return jsonify({
+            "document": dict(document)
+        }), 200
+    
+    except Exception as e:
+        logger.info(f"Error: {e}")
+        return jsonify({"error": "Failed to fetch document details"}), 500
+
 @blp_documents.route("/", methods=["GET"])
 def get_documents():
     """Get all documents for the authenticated user's company with PEPPOL mandatory fields structure."""
@@ -361,6 +430,7 @@ def get_documents():
             SELECT d.id, d.company_id, d.uploaded_by, d.raw_format, d.raw_filename, 
                    d.document_name, d.processed_image_filename, d.content_type, d.status, d.predicted_accuracy, 
                    d.is_training, d.created_at, d.updated_at, d.invoice_data_peppol_final,
+                   d.invoice_data_raw, d.invoice_data_peppol,
                    ds.status_name
             FROM documents d
             LEFT JOIN document_status ds ON d.status = ds.status_key
@@ -405,9 +475,9 @@ def update_document(doc_id):
         except ValueError:
             return jsonify({"error": "Invalid document ID format"}), 400
         
-        # First, verify the document belongs to the user's company and get current name
+        # First, verify document belongs to company and fetch full data
         sql = """
-            SELECT id, document_name FROM documents
+            SELECT id, document_name, invoice_data_peppol, invoice_data_user_corrected FROM documents
             WHERE id = %s AND company_id = %s
         """
         results, success = fetch_all(sql, (str(doc_uuid), str(company_id)))
@@ -417,16 +487,19 @@ def update_document(doc_id):
         
         existing_doc = results[0]
         
-        # Extract allowed fields from request data
-        allowed_fields = {
-            "document_name": data.get("document_name"),
-            "invoice_data_peppol_final": data.get("invoice_data_peppol_final"),
-        }
+        # Extract delta (changes) from request
+        delta_data = data.get("invoice_data_user_corrected", {})
         
-        # Check if document_name is being changed and if it's unique within the company
-        new_document_name = allowed_fields["document_name"]
+        # Extract deleted_line_numbers if provided
+        deleted_line_numbers = data.get("deleted_line_numbers", [])
+
+        # Apply reshaping to delta
+        delta_data_reshaped = reshape_to_peppol_format(delta_data)
+
+        new_document_name = data.get("document_name")
+                
+        # Check if document_name is being changed and if it's unique
         if new_document_name and new_document_name != existing_doc["document_name"]:
-            # Check for duplicates (ignore NULL values)
             dup_sql = """
                 SELECT id FROM documents
                 WHERE company_id = %s AND document_name = %s AND id != %s
@@ -437,71 +510,97 @@ def update_document(doc_id):
                     "error": "A document with this name already exists in your company"
                 }), 409
         
-        # Update the document with document_name and merge invoice_data_peppol_final
-        # If peppol_final is provided, merge it with existing data (only fill empty fields)
-        peppol_final_json = None
-        if allowed_fields["invoice_data_peppol_final"]:
-            try:
-                peppol_final_data = allowed_fields["invoice_data_peppol_final"]
-                
-                # Convert to JSON string if it's a dict
-                if isinstance(peppol_final_data, dict):
-                    peppol_final_json = json.dumps(peppol_final_data)
-                else:
-                    peppol_final_json = peppol_final_data
-                
-                # Merge with existing data: only fill empty fields
-                # Get existing peppol_final data
-                current_sql = "SELECT invoice_data_peppol_final FROM documents WHERE id = %s"
-                current_results, current_success = fetch_all(current_sql, (str(doc_uuid),))
-                
-                if current_success and current_results:
-                    existing_final_raw = current_results[0].get("invoice_data_peppol_final")
-                    
-                    if existing_final_raw:
-                        # Parse existing data
-                        if isinstance(existing_final_raw, str):
-                            existing_final = json.loads(existing_final_raw)
-                        else:
-                            existing_final = existing_final_raw if existing_final_raw else {}
-                        
-                        # Ensure peppol_final_data is a dict
-                        if isinstance(peppol_final_data, str):
-                            peppol_final_data = json.loads(peppol_final_data)
-                        
-                        # Merge: new data only fills empty fields
-                        for section_name, section_fields in peppol_final_data.items():
-                            if section_name not in existing_final:
-                                existing_final[section_name] = {}
-                            
-                            if isinstance(section_fields, dict):
-                                # Only add fields that don't exist in existing data
-                                for field_name, field_value in section_fields.items():
-                                    if field_name not in existing_final[section_name]:
-                                        existing_final[section_name][field_name] = field_value
-                        
-                        peppol_final_json = json.dumps(existing_final)
-                
-            except Exception as merge_error:
-                logger.error(f"Error merging PEPPOL data: {str(merge_error)}")
-                raise ValueError(f"Failed to merge PEPPOL data: {str(merge_error)}")
+        # Parse existing data from database
+        existing_user_corrected = {}
+        try:
+            if existing_doc.get("invoice_data_user_corrected"):
+                existing_user_corrected = json.loads(existing_doc["invoice_data_user_corrected"])
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"Could not parse existing invoice_data_user_corrected, starting fresh")
         
-        # Update the document
+        existing_peppol = {}
+        try:
+            if existing_doc.get("invoice_data_peppol"):
+                existing_peppol = json.loads(existing_doc["invoice_data_peppol"])
+        except (json.JSONDecodeError, TypeError):
+            logger.warning(f"Could not parse existing invoice_data_peppol")
+        
+        # Merge delta into existing user_corrected
+        # Using merge_peppol_json: delta (slave) merged into existing (master)
+        merged_user_corrected = merge_peppol_json(existing_user_corrected, delta_data_reshaped)
+        
+        logger.info(f"✓ Merged delta into user_corrected data")
+        
+        # Merge user_corrected into peppol to create final (peppol is base, user_corrected overrides)
+        merged_peppol_final = merge_peppol_json(existing_peppol, merged_user_corrected)
+        
+        logger.info(f"✓ Merged user_corrected into peppol for final document")
+        
+        # Handle deleted line numbers if provided
+        if deleted_line_numbers:
+            logger.info(f"Processing {len(deleted_line_numbers)} deleted line(s): {deleted_line_numbers}")
+            
+            # Remove deleted lines from merged_user_corrected
+            if "line_items" in merged_user_corrected and isinstance(merged_user_corrected["line_items"], list):
+                # Filter out items where line_number is in deleted_line_numbers
+                original_count = len(merged_user_corrected["line_items"])
+                logger.info(f"line_items before deletion: {[item.get('line_number') for item in merged_user_corrected['line_items']]}")
+                merged_user_corrected["line_items"] = [
+                    item for item in merged_user_corrected["line_items"]
+                    if not ("line_number" in item and 
+                            int(item["line_number"].get("v", 0) if isinstance(item["line_number"], dict) else item["line_number"]) in deleted_line_numbers)
+                ]
+                deleted_count = original_count - len(merged_user_corrected["line_items"])
+                logger.info(f"✓ Removed {deleted_count} line(s) from merged_user_corrected")
+            
+            # Remove deleted lines from merged_peppol_final
+            if "line_items" in merged_peppol_final and isinstance(merged_peppol_final["line_items"], list):
+                original_count = len(merged_peppol_final["line_items"])
+                logger.info(f"line_items before deletion: {[item.get('line_number') for item in merged_peppol_final['line_items']]}")
+                merged_peppol_final["line_items"] = [
+                    item for item in merged_peppol_final["line_items"]
+                    if not ("line_number" in item and 
+                            int(item["line_number"].get("v", 0) if isinstance(item["line_number"], dict) else item["line_number"]) in deleted_line_numbers)
+                ]
+                deleted_count = original_count - len(merged_peppol_final["line_items"])
+                logger.info(f"✓ Removed {deleted_count} line(s) from merged_peppol_final")
+        
+        # Check if anything actually changed
+        if existing_user_corrected == merged_user_corrected and new_document_name == existing_doc["document_name"]:
+            logger.info(f"No changes detected, skipping database update")
+            return jsonify({
+                "message": "No changes to save",
+                "document": dict(existing_doc)
+            }), 200
+        
+        # Convert to JSON for database storage
+        user_corrected_json = json.dumps(merged_user_corrected)
+        peppol_final_json = json.dumps(merged_peppol_final)
+        
+        # Update both fields in single UPDATE statement
         update_sql = """
             UPDATE documents
-            SET document_name = %s, invoice_data_peppol_final = %s, updated_at = CURRENT_TIMESTAMP
+            SET document_name = %s, 
+                invoice_data_user_corrected = %s,
+                invoice_data_peppol_final = %s,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = %s
             RETURNING id, company_id, uploaded_by, raw_format, raw_filename, 
                       document_name, processed_image_filename, content_type, status, 
                       predicted_accuracy, is_training, created_at, updated_at
         """
-        update_results, update_success = execute_sql(update_sql, (allowed_fields["document_name"], peppol_final_json, str(doc_uuid)))
+        update_results, update_success = execute_sql(
+            update_sql, 
+            (new_document_name or existing_doc["document_name"], user_corrected_json, peppol_final_json, str(doc_uuid))
+        )
         
         if not update_success or not update_results:
             logger.error(f"Database error: Failed to update document {doc_id}")
             return jsonify({"error": "Failed to update document"}), 500
         
         updated_doc = update_results[0]
+        
+        logger.info(f"✓ Document {doc_id} saved successfully with delta merge")
         
         return jsonify({
             "message": "Document updated successfully",
@@ -599,6 +698,7 @@ def get_document_preview(doc_id):
 
 @blp_documents.route("/peppol", methods=["GET"])
 def get_peppol_structure():
+
     """Get the PEPPOL structure with all fields (mandatory and non-mandatory) with document order preserved."""
     try:
         from ic_shared.utils.peppol_manager import PeppolManager
@@ -614,3 +714,27 @@ def get_peppol_structure():
     except Exception as e:
         logger.info(f"Error: {e}")
         return jsonify({"error": "Failed to fetch PEPPOL structure"}), 500
+
+@blp_documents.route("/peppolv2", methods=["GET"])    
+def get_peppol_structure_v2_endpoint():
+    """Get the PEPPOL 3.0 XML schema (V2 version) with mapid attributes."""
+    try:
+        from ic_shared.utils.storage_service import get_storage_service
+        from flask import Response
+        
+        storage = get_storage_service()
+        
+        # Get XML schema from storage service (works in both local and Cloud Functions)
+        xml_schema = storage.get_schema("3_0_peppol.xml")
+        
+        if not xml_schema:
+            logger.error("❌ Failed to load PEPPOL schema XML from storage")
+            return jsonify({"error": "PEPPOL schema not found"}), 404
+        
+        logger.info(f"✅ Successfully retrieved PEPPOL V2 schema ({len(xml_schema)} bytes)")
+        # Return XML with proper content-type
+        return Response(xml_schema, mimetype='application/xml'), 200
+    
+    except Exception as e:
+        logger.error(f"❌ Error in get_peppol_structure_v2_endpoint: {e}", exc_info=True)
+        return jsonify({"error": "Failed to fetch PEPPOL structure V2"}), 500

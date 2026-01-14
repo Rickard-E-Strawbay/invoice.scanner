@@ -73,9 +73,9 @@ services:
       db:
         condition: service_healthy
     volumes:
-      # Mount only specific directories, NOT /app root (preserves Docker build copies)
-      - ./ic_api/lib:/app/lib
-      - ./ic_api/documents:/app/documents
+      # Mount source directories for hot-reload during development
+      - ./ic_api:/app/ic_api
+      - ./ic_shared:/app/ic_shared
       - ./documents:/app/documents
     networks:
       - ic_network

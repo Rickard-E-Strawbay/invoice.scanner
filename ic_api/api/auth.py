@@ -10,6 +10,8 @@ from lib.email_service import (
 )
 from lib.password_validator import validate_password_strength
 from api.helpers import refresh_user_session
+from models.user import UserCreate, UserLogin
+from pydantic import ValidationError
 import uuid
 import re   
 
@@ -78,16 +80,21 @@ def signup():
     data = request.get_json()
     logger.info(f"Request received: {data}")
     
-    if not data or not data.get("email") or not data.get("password"):
-        logger.info(f"Missing email or password")
+    # Validate with Pydantic
+    try:
+        user_create = UserCreate(**data)
+        email = user_create.email
+        password = user_create.password
+    except ValidationError as e:
+        logger.info(f"Validation error: {e}")
+        return jsonify({"error": "Invalid request data", "details": e.errors()}), 400
+    except TypeError:
+        logger.info(f"Missing required fields")
         return jsonify({"error": "Email and password required"}), 400
     
     if not data.get("company_name") or not data.get("organization_id"):
         logger.info(f"Missing company_name or organization_id")
         return jsonify({"error": "Company name and organization ID required"}), 400
-    
-    email = data.get("email")
-    password = data.get("password")
     
     # Validate password strength
     password_validation = validate_password_strength(password)
@@ -236,14 +243,20 @@ def signup():
 def login():
     """Authenticate user and create session."""
     data = request.get_json()
-    logger.info(f"Request received for email: {data.get('email') if data else 'N/A'}")
     
-    if not data or not data.get("email") or not data.get("password"):
+    # Validate with Pydantic
+    try:
+        user_login = UserLogin(**data)
+        email = user_login.email
+        password = user_login.password
+    except ValidationError as e:
+        logger.info(f"Validation error: {e}")
+        return jsonify({"error": "Invalid request data", "details": e.errors()}), 400
+    except TypeError:
         logger.info(f"Missing email or password")
         return jsonify({"error": "Email and password required"}), 400
     
-    email = data.get("email")
-    password = data.get("password")
+    logger.info(f"Request received for email: {email}")
     
     # Get user and check if company is enabled
     sql = """

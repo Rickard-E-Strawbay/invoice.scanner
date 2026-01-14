@@ -1,10 +1,12 @@
 from ic_shared.configuration.config import OPENAI_API_KEY, OPENAI_MODEL_NAME
 from ic_shared.logging import ComponentLogger
+from ic_shared.utils.storage_service import get_storage_service
 import openai
 from pathlib import Path
 import base64
 import mimetypes
 import json
+import xml.etree.ElementTree as ET
 
 logger = ComponentLogger("PredictionManager")
 
@@ -13,6 +15,8 @@ class PredictionManager:
     
     def __init__(self):
         self.prompt_templates = self._load_prompt_templates()
+        self.xml_schema = self._load_xml_schema()
+        self.json_schema = self._load_json_template()
     
     def _load_prompt_templates(self):
         # Load prompt templates from a file or database
@@ -30,6 +34,102 @@ class PredictionManager:
             raise FileNotFoundError(f"Prompt template not found: {file_path}")
 
         return templates
+    
+    def _load_xml_schema(self) -> str:
+        """Load PEPPOL XML schema with all field metadata via storage service."""
+        try:
+            storage = get_storage_service()
+            # Try to load from storage (works in both local and Cloud Functions)
+            xml_content = storage.get_schema("3_0_peppol.xml")
+            if xml_content:
+                logger.info("Loaded PEPPOL XML schema from storage")
+                return xml_content
+            else:
+                logger.warning("PEPPOL XML schema not found in storage")
+                return "<Invoice><!-- Schema not available --></Invoice>"
+        except Exception as e:
+            logger.error(f"Failed to load XML schema: {e}")
+            return "<Invoice><!-- Schema not available --></Invoice>"
+    
+    def _load_json_template(self) -> dict:
+        """Load invoice JSON template from storage service."""
+        try:
+            storage = get_storage_service()
+            # Try to load from storage (works in both local and Cloud Functions)
+            json_content = storage.get_schema("inovice_template.json")  # Note: filename has typo
+            if json_content:
+                logger.info("Loaded invoice JSON template from storage")
+                return json.loads(json_content)
+            else:
+                logger.warning("Invoice JSON template not found in storage")
+                return {}
+        except Exception as e:
+            logger.error(f"Failed to load JSON template: {e}")
+            return {}
+    
+    # def _generate_json_schema(self) -> dict:
+    #     """Generate JSON schema from XML with mapid references."""
+    #     try:
+    #         root = ET.fromstring(self.xml_schema)
+    #         schema = {}
+            
+    #         # Extract all elements with mapid attribute
+    #         for elem in root.iter():
+    #             mapid = elem.get('mapid')
+    #             if mapid:
+    #                 display_name = elem.get('DisplayName', mapid)
+    #                 description = elem.get('Description', '')
+    #                 schema[mapid] = {
+    #                     "type": "string",
+    #                     "description": description or display_name
+    #                 }
+            
+    #         return schema
+    #     except Exception as e:
+    #         logger.warning(f"Could not parse XML schema: {str(e)}")
+    #         return {}
+    
+    # def _get_xml_schema_snippet(self) -> str:
+    #     """Extract human-readable XML schema for LLM prompt."""
+    #     try:
+    #         root = ET.fromstring(self.xml_schema)
+    #         lines = []
+            
+    #         # Build readable schema with mapid and DisplayName
+    #         for elem in root.iter():
+    #             if elem.tag.endswith('}') or elem.tag.startswith('cbc:') or elem.tag.startswith('cac:'):
+    #                 mapid = elem.get('mapid')
+    #                 display_name = elem.get('DisplayName')
+                    
+    #                 if mapid:
+    #                     tag_name = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
+    #                     lines.append(f"  - mapid=\"{mapid}\": {display_name} ({tag_name})")
+            
+    #         return "\n".join(lines[:100])  # Limit to 100 items for prompt size
+    #     except Exception as e:
+    #         logger.warning(f"Could not generate schema snippet: {str(e)}")
+    #         return "<!-- Schema not available -->"
+    
+    # def _get_json_schema_snippet(self) -> str:
+    #     """Generate JSON output schema for LLM prompt."""
+    #     # Create a sample JSON structure with mapid keys
+    #     sample_json = {}
+        
+    #     # Group by context for readability
+    #     contexts = {}
+    #     for mapid in self.json_schema:
+    #         context = mapid.split('.')[0]
+    #         if context not in contexts:
+    #             contexts[context] = []
+    #         contexts[context].append(mapid)
+        
+    #     # Build sample JSON
+    #     for context in sorted(contexts.keys()):
+    #         for mapid in sorted(contexts[context])[:10]:  # Limit items
+    #             sample_json[mapid] = ""
+        
+    #     # Return formatted JSON with comments
+    #     return json.dumps(sample_json, indent=2)
     
     def get_prompt(self, template_name: str) -> str:
         """Get prompt template by name."""
@@ -54,8 +154,18 @@ class PredictionManager:
             filename = document.get('filename', 'unknown')
             file_content = document.get('content', b'')
             prompt = self.get_prompt("predict_invoice")
+
+            str_xml_blob  = str(self.xml_schema)
+            str_json_blob = json.dumps(self.json_schema, indent=2)
             
+            # Replace placeholders with actual schema data
+            prompt = prompt.replace("{{xml_structure}}", str_xml_blob)
+            prompt = prompt.replace("{{json_blob}}", str_json_blob)
             logger.info(f"Predicting invoice for {filename} (content_type={content_type})")
+
+            print("************************************")
+            print(prompt)
+            print("************************************")
             
             # Route based on content type
             if content_type == "image":
@@ -128,14 +238,20 @@ class PredictionManager:
         
         # Extract text from PDF
         import io
+        num_pages = 0
         with pdfplumber.open(io.BytesIO(file_content)) as pdf:
             text_content = ""
             for page in pdf.pages:
+                num_pages += 1  
                 text_content += page.extract_text() or ""
         
         # Truncate to avoid token limits (5000 chars ~= 1250 tokens)
-        text_content = text_content[:5000]
-        logger.info(f"Extracted {len(text_content)} chars from text PDF")
+        text_content_length = len(text_content)
+        if text_content_length > 5000:
+            logger.warning("Truncateing extracted text from {num_pages} pages from PDF to 5000 characters")
+            text_content = text_content[:5000]
+        else:
+            logger.info(f"Extracted {text_content_length} characters of text from {num_pages} pages from PDF")       
         
         messages = [
             {

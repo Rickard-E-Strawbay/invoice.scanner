@@ -28,6 +28,9 @@ from .connection import (
 from .document_operations import (
     get_document_status,
     update_document_status,
+    merge_peppol_json,
+    apply_peppol_json_template,
+    reshape_to_peppol_format,
 )
 
 __all__ = [
@@ -39,6 +42,9 @@ __all__ = [
     # Document operations (from document_operations.py)
     'get_document_status',
     'update_document_status',
+    'merge_peppol_json',
+    'apply_peppol_json_template',
+    'reshape_to_peppol_format',
     # Configuration (from config.py)
     'DB_CONFIG',
     'DATABASE_URL',

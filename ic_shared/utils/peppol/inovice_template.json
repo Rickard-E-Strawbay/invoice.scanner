@@ -1,0 +1,77 @@
+{
+    "meta": {
+        "invoice_number": {"v":"", "p":null},
+        "invoice_date": {"v":"", "p":null},
+        "due_date": {"v":"", "p":null},
+        "invoice_note": {"v":"", "p":null},
+        "currency_code": {"v":"", "p":null},
+        "buyer_reference": {"v":"", "p":null}
+    },
+    "order": {
+        "reference_number": {"v":"", "p":null},
+        "document_id": {"v":"", "p":null},
+        "issue_date": {"v":"", "p":null}
+    },
+    "supplier": {
+        "peppol_id": {"v":"", "p":null},
+        "gln": {"v":"", "p":null},
+        "name": {"v":"", "p":null},
+        "address": {
+            "street": {"v":"", "p":null},
+            "city": {"v":"", "p":null},
+            "postal_code": {"v":"", "p":null},
+            "country": {"v":"", "p":null}
+        },
+        "vat_number": {"v":"", "p":null},
+        "tax_scheme": {"v":"", "p":null},
+        "legal_name": {"v":"", "p":null},
+        "legal_registration_number": {"v":"", "p":null}
+    },
+    "customer": {
+        "peppol_id": {"v":"", "p":null},
+        "name": {"v":"", "p":null},
+        "address": {
+            "street": {"v":"", "p":null},
+            "city": {"v":"", "p":null},
+            "postal_code": {"v":"", "p":null},
+            "country": {"v":"", "p":null}
+        },
+        "legal_name": {"v":"", "p":null},
+        "legal_registration_number": {"v":"", "p":null}
+    },
+    "payment": {
+        "payment_means_code": {"v":"", "p":null}
+    },
+    "tax_exchange_rate": {
+        "source_currency": {"v":"", "p":null},
+        "target_currency": {"v":"", "p":null},
+        "calculation_rate": {"v":"", "p":null},
+        "date": {"v":"", "p":null}
+    },
+    "tax_total": {
+        "total_tax_amount": {"v":"", "p":null},
+        "taxable_amount": {"v":"", "p":null},
+        "tax_amount": {"v":"", "p":null},
+        "tax_category": {"v":"", "p":null},
+        "tax_scheme": {"v":"", "p":null}
+    },
+    "totals": {
+        "line_extension_amount": {"v":"", "p":null},
+        "tax_exclusive_amount": {"v":"", "p":null},
+        "tax_inclusive_amount": {"v":"", "p":null},
+        "payable_amount": {"v":"", "p":null}
+    },
+    "line_items": [
+        {
+            "quantity": {"v":"", "p":null},
+            "unit": {"v":"", "p":null},
+            "line_total": {"v":"", "p":null},
+            "description": {"v":"", "p":null},
+            "tax_category": {"v":"", "p":null},
+            "tax_rate": {"v":"", "p":null},
+            "tax_amount": {"v":"", "p":null},
+            "unit_price": {"v":"", "p":null},
+            "base_quantity": {"v":"", "p":null}
+        }
+    ]
+}

@@ -1,13 +1,221 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { API_BASE_URL } from "../utils/api";
+import { AuthContext } from "../contexts/AuthContext";
 
-function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
-  // Get sections order from sessionStorage (set by Dashboard)
-  const sectionsOrder = JSON.parse(sessionStorage.getItem("peppol_sections_order") || "[]");
+// Formatera JSON med kompakta objekter för {"v": value, "p": probability} struktur
+const formatJsonCompact = (obj, indent = 0) => {
+  const spaces = "  ".repeat(indent);
+  
+  if (obj === null || obj === undefined) {
+    return "null";
+  }
+  
+  if (typeof obj !== "object") {
+    if (typeof obj === "string") {
+      return `"${obj}"`;
+    }
+    return String(obj);
+  }
+  
+  if (Array.isArray(obj)) {
+    if (obj.length === 0) return "[]";
+    const items = obj.map(item => `${spaces}  ${formatJsonCompact(item, indent + 1)}`).join(",\n");
+    return `[\n${items}\n${spaces}]`;
+  }
+  
+  // Checks om objektet är {"v": ..., "p": ...} struktur
+  if (obj.hasOwnProperty("v") && obj.hasOwnProperty("p") && Object.keys(obj).length === 2) {
+    const value = typeof obj.v === "string" ? `"${obj.v}"` : formatJsonCompact(obj.v);
+    const probability = obj.p !== null && obj.p !== undefined ? obj.p : "null";
+    return `{"v": ${value}, "p": ${probability}}`;
+  }
+  
+  // Vanligt objekt - multi-line format
+  const keys = Object.keys(obj);
+  if (keys.length === 0) return "{}";
+  
+  const lines = keys.map(key => {
+    const value = obj[key];
+    if (value !== null && typeof value === "object" && value.hasOwnProperty("v") && value.hasOwnProperty("p") && Object.keys(value).length === 2) {
+      // Kompakt format för {"v", "p"}
+      const v = typeof value.v === "string" ? `"${value.v}"` : formatJsonCompact(value.v);
+      const p = value.p !== null && value.p !== undefined ? value.p : "null";
+      return `${spaces}  "${key}": {"v": ${v}, "p": ${p}}`;
+    } else {
+      return `${spaces}  "${key}": ${formatJsonCompact(value, indent + 1)}`;
+    }
+  }).join(",\n");
+  
+  return `{\n${lines}\n${spaces}}`;
+};
+
+function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
+  const { user } = useContext(AuthContext);
+  const isAdmin = user?.role_key === 1000 || user?.role_key === 50;
+  
+  // Parse XML schema once
+  const [peppol_sections, setPeppolSections] = useState({});
+  const [showAdvancedAnalysis, setShowAdvancedAnalysis] = useState(false);
+  const [activeAnalysisTab, setActiveAnalysisTab] = useState("extraction");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  
+  // Parse XML on mount or when peppolSections changes
+  useEffect(() => {
+    if (peppolSections && typeof peppolSections === 'string') {
+      try {
+        console.log('[XML Parse] Starting PEPPOL XML parse...');
+        console.log('[XML Parse] Received XML length:', peppolSections.length, 'bytes');
+        
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(peppolSections, "application/xml");
+
+        // Tvinga fram felmeddelandet från parsern
+        const parseErrors = xmlDoc.getElementsByTagName("parsererror");
+        if (parseErrors.length > 0) {
+            console.error('[XML Parse] ❌ Ett fel uppstod vid parsing.');
+            
+            // 1. Skriv ut felmeddelandet (innehåller ofta radnummer)
+            console.error('Feldetaljer:', parseErrors[0].textContent);
+
+            // 2. Hitta den sista giltiga noden innan felet
+            // Vi letar i hela dokumentet efter det sista elementet som inte är parsererror
+            const allNodes = xmlDoc.getElementsByTagName('*');
+            let lastValidNode = null;
+            
+            for (let i = 0; i < allNodes.length; i++) {
+                if (allNodes[i].tagName !== 'parsererror' && !allNodes[i].closest('parsererror')) {
+                    lastValidNode = allNodes[i];
+                }
+            }
+
+            if (lastValidNode) {
+                console.log('%c Sista lyckade noden innan krasch: ', 'background: #222; color: #bada55');
+                console.log('Tagg-namn:', lastValidNode.tagName);
+                console.log('Innehåll (förkortat):', lastValidNode.outerHTML.substring(0, 200) + '...');
+                console.log('Mapid:', lastValidNode.getAttribute('mapid'));
+            }
+            return
+
+        }
+
+
+
+        /*
+        const allElements = xmlDoc.getElementsByTagName('*');
+        console.log(`[XML Parse] Totalt antal element i dokumentet: ${allElements.length}`);
+
+        const mapidData = Array.from(allElements)
+          .filter(el => el.hasAttribute('mapid'))
+          .map(el => ({
+            tag: el.tagName,
+            mapid: el.getAttribute('mapid'),
+            namespace: el.namespaceURI
+          }));
+
+        console.table(mapidData); // Skapar en snygg tabell i konsolen med alla träffar
+        */
+        
+        // Get namespace URLs
+        const cbcNS = "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2";
+        const cacNS = "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2";
+         
+        // Debug: Count ALL elements with mapid BEFORE parsing
+        // Use getElementsByTagName('*') to find all elements, then filter by hasAttribute
+        const allElementsWithMapid = Array.from(xmlDoc.getElementsByTagName('*')).filter(el => el.hasAttribute('mapid'));
+        const cbcMapidElements = allElementsWithMapid.filter(el => el.namespaceURI === cbcNS);
+ 
+        // Step 1: Collect ALL CBC fields from entire XML tree
+        const allFields = {};
+        let fieldsWithMapid = 0;
+        let fieldsWithoutMapid = 0;
+        const fieldsWithMapidList = [];
+        const contextOrder = ['Invoice.Meta', 'Supplier', 'Customer', 'Payee', 'Tax Representative', 'Delivery', 'Payment', 'Charges.Discounts', 'Tax', 'Totals', 'LineItem'];
+        
+        function collectAllFields(elem) {
+          for (let child of elem.children) {
+            const namespace = child.namespaceURI;
+            const btId = child.getAttribute('BT-ID');
+            const mapid = child.getAttribute('mapid');
+            
+            // Index by mapid (always present on CBC elements)
+            if (namespace === cbcNS && mapid) {
+              fieldsWithMapid++;
+              fieldsWithMapidList.push({ btId, mapid });
+              
+              // Extract all attributes
+              const advancedAttr = child.getAttribute('Advanced');
+              const obligationAttr = child.getAttribute('Obligation');
+              const displayName = child.getAttribute('DisplayName');
+              
+              const fieldInfo = {
+                'mapid': mapid,
+                'BT-ID': btId || 'N/A',
+                'TagName': child.localName,
+                'DisplayName': displayName || child.localName,
+                'DisplayContext': child.getAttribute('DisplayContext') || 'Other',
+                'Description': child.getAttribute('Description') || '',
+                'Obligation': obligationAttr || 'optional',
+                'Type': child.getAttribute('Type') || '',
+                'Example': child.getAttribute('Example') || '',
+                'UBL-XPath': child.getAttribute('UBL-XPath') || '',
+                'Advanced': advancedAttr === 'true',
+                'ConditionalDescription': child.getAttribute('ConditionalDescription') || ''
+              };
+              
+              allFields[mapid] = fieldInfo;
+            }
+            
+            // RECURSIVE: Always recurse into ALL child elements
+            collectAllFields(child);
+          }
+        }
+        
+        // Collect all fields starting from root
+        const root = xmlDoc.documentElement;
+        collectAllFields(root);
+        
+        console.log(`[XML Parse] Total fields collected: ${Object.keys(allFields).length}`);
+        
+        // Step 2: Group fields by DisplayContext
+        const sections = {};
+        contextOrder.forEach(context => {
+          sections[context] = { fields: {}, nested: {} };
+        });
+        
+        Object.entries(allFields).forEach(([mapid, fieldInfo]) => {
+          const context = fieldInfo.DisplayContext || 'Other';
+          if (!sections[context]) {
+            sections[context] = { fields: {}, nested: {} };
+          }
+          sections[context].fields[mapid] = fieldInfo;
+        });
+        
+        // Remove empty sections
+        const finalSections = Object.fromEntries(
+          Object.entries(sections).filter(([_, section]) => Object.keys(section.fields).length > 0)
+        );
+        
+        console.log('[XML Parse] Parse complete. Sections:', Object.keys(finalSections));
+        console.log('[XML Parse] Fields WITH mapid:', fieldsWithMapid);
+        console.log('[XML Parse] Fields WITHOUT mapid (ERROR):', fieldsWithoutMapid);
+        if (fieldsWithMapid > 0) {
+          console.log('[XML Parse] First 5 fields with mapid:', fieldsWithMapidList.slice(0, 5));
+        }
+        if (fieldsWithoutMapid > 0) {
+          console.error(`[XML Parse] ❌ CRITICAL: ${fieldsWithoutMapid} fields are missing mapid attribute!`);
+        }
+        setPeppolSections(finalSections);
+      } catch (err) {
+        console.error('Error parsing PEPPOL XML:', err);
+      }
+    }
+  }, [peppolSections]);
   
   const [invoiceData, setInvoiceData] = useState({
     document_name: "",
   });
+  
+  const [originalInvoiceData, setOriginalInvoiceData] = useState({});
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -19,11 +227,92 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
   const [isMaximized, setIsMaximized] = useState(false);
   const [expandedSections, setExpandedSections] = useState({});
   const [showNonMandatory, setShowNonMandatory] = useState(false);
+  const [lineItems, setLineItems] = useState([{ id: 0 }]); // Start with 1 empty line item
+  const [expandedLineItems, setExpandedLineItems] = useState({}); // Track which line items are expanded
+  const [nextLineItemId, setNextLineItemId] = useState(1); // Counter for unique IDs
+  const [deletedLineNumbers, setDeletedLineNumbers] = useState([]); // Track deleted line_numbers for backend
+  const [fullDocument, setFullDocument] = useState(document);
+  const [loadingFullData, setLoadingFullData] = useState(false);
+
+  // Fetch full document details from backend when component mounts
+  useEffect(() => {
+    const loadFullDocumentDetails = async () => {
+      if (document?.id) {
+        setLoadingFullData(true);
+        try {
+          const response = await fetch(`${API_BASE_URL}/documents/${document.id}/details`, {
+            method: "GET",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setFullDocument(data.document);
+          } else {
+            console.warn("Failed to fetch full document details");
+            setFullDocument(document);
+          }
+        } catch (err) {
+          console.error("Error loading full document details:", err);
+          setFullDocument(document);
+        } finally {
+          setLoadingFullData(false);
+        }
+      }
+    };
+
+    loadFullDocumentDetails();
+  }, [document?.id]);
 
   const toggleSection = (sectionName) => {
     setExpandedSections(prev => ({
       ...prev,
       [sectionName]: !prev[sectionName]
+    }));
+  };
+
+  // Line Items functions
+  const addLineItem = () => {
+    const newLineItem = { id: nextLineItemId };
+    setLineItems([...lineItems, newLineItem]);
+    // Auto-set line_number to last line_number + 1
+    const lastLineNumber = lineItems.length; // Since 1-indexed, length = max+1
+    const newLineItemNumber = lastLineNumber + 1;
+    setInvoiceData(prev => ({
+      ...prev,
+      [`line_item_${nextLineItemId}.line_number`]: String(newLineItemNumber)
+    }));
+    setNextLineItemId(nextLineItemId + 1);
+    // Auto-expand the new line item
+    setExpandedLineItems(prev => ({
+      ...prev,
+      [newLineItem.id]: true
+    }));
+  };
+
+  const removeLineItem = (id) => {
+    if (lineItems.length > 1) { // Keep at least 1 line item
+      // Get line_number before removing
+      const lineNumber = parseInt(invoiceData[`line_item_${id}.line_number`] || '0');
+      if (lineNumber > 0) {
+        setDeletedLineNumbers(prev => [...prev, lineNumber]);
+      }
+      setLineItems(lineItems.filter(item => item.id !== id));
+      setExpandedLineItems(prev => {
+        const newExpanded = { ...prev };
+        delete newExpanded[id];
+        return newExpanded;
+      });
+    }
+  };
+
+  const toggleLineItem = (id) => {
+    setExpandedLineItems(prev => ({
+      ...prev,
+      [id]: !prev[id]
     }));
   };
 
@@ -55,61 +344,153 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
 
   // Initialize invoice data and preview from document
   useEffect(() => {
-    if (document) {
+    if (fullDocument) {
       const newInvoiceData = {
-        document_name: document.document_name || "",
+        document_name: fullDocument.document_name || "",
       };
       
       // If invoice_data_peppol_final exists, populate fields from it
-      if (document.invoice_data_peppol_final) {
-        let peppol_final = document.invoice_data_peppol_final;
+      // Structure: { "meta": { "invoice_number": {"v": "...", "p": 0.9}, ... }, ... }
+      if (fullDocument.invoice_data_peppol_final) {
+        let peppol_final = fullDocument.invoice_data_peppol_final;
         
         // Parse if it's a JSON string
         if (typeof peppol_final === 'string') {
           try {
             peppol_final = JSON.parse(peppol_final);
           } catch (e) {
-            console.warn('Failed to parse invoice_data_peppol_final:', e);
+            console.warn('[Form Init] Failed to parse invoice_data_peppol_final:', e);
             peppol_final = {};
           }
         }
         
-        // Flatten the PEPPOL structure and populate fields
-        Object.entries(peppol_final).forEach(([sectionName, sectionFields]) => {
-          if (typeof sectionFields === 'object' && sectionFields !== null) {
-            Object.entries(sectionFields).forEach(([fieldName, fieldValue]) => {
-              newInvoiceData[fieldName] = fieldValue;
-            });
+        console.log('[Form Init] Raw invoice_data_peppol_final:', peppol_final);
+        
+        // Helper: Navigate nested object using dot notation (e.g., "meta.invoice_number")
+        const getNestedValue = (obj, path) => {
+          const parts = path.split('.');
+          let current = obj;
+          
+          for (let part of parts) {
+            if (current && typeof current === 'object' && part in current) {
+              current = current[part];
+            } else {
+              return null;
+            }
           }
-        });
+          
+          return current;
+        };
+        
+        // Helper: Extract value from {"v": value, "p": probability} format
+        const extractValue = (item) => {
+          if (!item) return null;
+          
+          // If it's {"v": ..., "p": ...} format, extract value
+          if (typeof item === 'object' && item.v !== undefined) {
+            return item.v;
+          }
+          
+          // If it's simple string/number, return as-is
+          if (typeof item === 'string' || typeof item === 'number') {
+            return String(item);
+          }
+          
+          return null;
+        };
+        
+        // Flatten all nested paths - create mapid-keyed structure
+        const flattenNested = (obj, prefix = '') => {
+          const result = {};
+          
+          for (const [key, value] of Object.entries(obj || {})) {
+            const mapid = prefix ? `${prefix}.${key}` : key;
+            
+            if (value === null || value === undefined) {
+              continue;
+            }
+            
+            // If it's {"v": ..., "p": ...} format, extract and store
+            if (typeof value === 'object' && value.v !== undefined && value.p !== undefined) {
+              const extracted = extractValue(value);
+              if (extracted) {
+                result[mapid] = extracted;
+              }
+            }
+            // If it's a nested object (but NOT {"v": ..., "p": ...}), recurse
+            else if (typeof value === 'object' && !Array.isArray(value)) {
+              Object.assign(result, flattenNested(value, mapid));
+            }
+          }
+          
+          return result;
+        };
+        
+        const flattenedData = flattenNested(peppol_final);
+        console.log('[Form Init] Flattened data structure:', flattenedData);
+        console.log('[Form Init] Total fields extracted:', Object.keys(flattenedData).length);
+        
+        // Populate newInvoiceData with flattened structure
+        Object.assign(newInvoiceData, flattenedData);
+        
+        // Handle line_items - populate lineItems state and invoiceData
+        if (peppol_final.line_items && Array.isArray(peppol_final.line_items)) {
+          console.log('[Form Init] Found line_items array:', peppol_final.line_items);
+          
+          const newLineItems = [];
+          let nextId = 0;
+          
+          peppol_final.line_items.forEach((lineItemData, index) => {
+            const lineId = nextId++;
+            newLineItems.push({ id: lineId });
+            
+            // Map each field from the line item data
+            // Add line_number based on index (1-indexed)
+            newInvoiceData[`line_item_${lineId}.line_number`] = String(index + 1);
+            
+            // Extract values for each field
+            const fieldMap = {
+              'quantity': 'quantity',
+              'unit': 'unit',
+              'line_total': 'line_total',
+              'description': 'description',
+              'tax_category': 'tax_category',
+              'tax_rate': 'tax_rate',
+              'tax_amount': 'tax_amount',
+              'tax_scheme': 'tax_scheme',
+              'unit_price': 'unit_price',
+              'base_quantity': 'base_quantity',
+              'line_number': 'line_number'
+            };
+            
+            for (const [dataKey, fieldKey] of Object.entries(fieldMap)) {
+              if (lineItemData[dataKey]) {
+                const value = extractValue(lineItemData[dataKey]);
+                if (value) {
+                  newInvoiceData[`line_item_${lineId}.${fieldKey}`] = value;
+                }
+              }
+            }
+          });
+          
+          setLineItems(newLineItems);
+          setNextLineItemId(nextId);
+          console.log('[Form Init] Populated line items. New lineItems state:', newLineItems);
+        }
+        
+        console.log('[Form Init] Final newInvoiceData:', newInvoiceData);
       }
       
       setInvoiceData(newInvoiceData);
+      // Store original data for change tracking
+      setOriginalInvoiceData(JSON.parse(JSON.stringify(newInvoiceData)));
 
       // Set preview URL directly - no need to fetch and convert
       // Browser will fetch it automatically with credentials
-      setPreviewUrl(`${API_BASE_URL}/documents/${document.id}/preview`);
+      setPreviewUrl(`${API_BASE_URL}/documents/${fullDocument.id}/preview`);
       setPreviewLoading(false);
     }
-  }, [document]);
-  
-  // Initialize PEPPOL fields in state when they're available
-  useEffect(() => {
-    if (Object.keys(peppolSections).length > 0) {
-      setInvoiceData(prev => {
-        const updated = { ...prev };
-        // Iterate through sections and fields
-        Object.entries(peppolSections).forEach(([sectionName, fieldsInSection]) => {
-          Object.keys(fieldsInSection).forEach(fieldName => {
-            if (!(fieldName in updated)) {
-              updated[fieldName] = "";
-            }
-          });
-        });
-        return updated;
-      });
-    }
-  }, [peppolSections]);
+  }, [fullDocument]);
 
   const handleFieldChange = (field, value) => {
     setInvoiceData(prev => ({
@@ -124,33 +505,75 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
     setSuccess(false);
 
     try {
-      // Build PEPPOL structure organized by sections
-      const peppol_final = {};
-      
-      Object.entries(peppolSections).forEach(([sectionName, fieldsInSection]) => {
-        const sectionData = {};
-        let hasData = false;
-        
-        Object.keys(fieldsInSection).forEach(fieldName => {
-          if (invoiceData[fieldName]) {
-            sectionData[fieldName] = invoiceData[fieldName];
-            hasData = true;
-          }
-        });
-        
-        // Only add section if it has data
-        if (hasData) {
-          peppol_final[sectionName] = sectionData;
+      // Create delta - only include fields that have been changed
+      const deltaFlat = {};
+      Object.entries(invoiceData).forEach(([key, value]) => {
+        const originalValue = originalInvoiceData[key];
+        // Check if field value differs from original
+        if (value !== originalValue) {
+          deltaFlat[key] = value;
         }
       });
       
-      // Also save document_name
+      console.log("[Save] Delta (flat mapids):", deltaFlat);
+      
+      // Ensure all line_numbers are included in delta (needed for deletion logic)
+      // Even if line_number wasn't changed, we need it for backend to identify which lines to delete
+      lineItems.forEach(lineItem => {
+        const lineNumber = invoiceData[`line_item_${lineItem.id}.line_number`];
+        if (lineNumber && !deltaFlat[`line_item_${lineItem.id}.line_number`]) {
+          deltaFlat[`line_item_${lineItem.id}.line_number`] = lineNumber;
+        }
+      });
+      
+      // Convert flat delta to structured format matching invoice_template.json
+      // Extract: section_name.field_name -> section_name: { field_name: value }
+      const userCorrected = {};
+      Object.entries(deltaFlat).forEach(([mapid, value]) => {
+        // Skip special fields like document_name
+        if (mapid === 'document_name') return;
+        
+        // Parse mapid format: "section.field" or "line_item_0.field"
+        const parts = mapid.split('.');
+        if (parts.length >= 2) {
+          const firstPart = parts[0];
+          const fieldName = parts.slice(1).join('.');
+          
+          // Handle line items separately (line_item_0.quantity -> line_items[0].quantity)
+          if (firstPart.startsWith('line_item_')) {
+            if (!userCorrected['line_items']) {
+              userCorrected['line_items'] = [];
+            }
+            // Extract line ID from "line_item_0"
+            const lineIdMatch = firstPart.match(/line_item_(\d+)/);
+            if (lineIdMatch) {
+              const lineIndex = parseInt(lineIdMatch[1]);
+              // Ensure array is large enough
+              while (userCorrected['line_items'].length <= lineIndex) {
+                userCorrected['line_items'].push({});
+              }
+              userCorrected['line_items'][lineIndex][fieldName] = value;
+            }
+          } else {
+            // Regular sections (meta, supplier, etc)
+            if (!userCorrected[firstPart]) {
+              userCorrected[firstPart] = {};
+            }
+            userCorrected[firstPart][fieldName] = value;
+          }
+        }
+      });
+      
+      console.log("[Save] User corrected (structured):", userCorrected);
+      
+      // Send delta to backend for merge with existing data
       const body = {
         document_name: invoiceData.document_name,
-        invoice_data_peppol_final: peppol_final
+        invoice_data_user_corrected: userCorrected,
+        deleted_line_numbers: deletedLineNumbers
       };
       
-      const response = await fetch(`${API_BASE_URL}/documents/${document.id}`, {
+      const response = await fetch(`${API_BASE_URL}/documents/${fullDocument.id}`, {
         method: "PUT",
         credentials: "include",
         headers: {
@@ -240,12 +663,13 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
         background: "white",
         borderRadius: isMaximized ? "0" : "8px",
         width: isMaximized ? "100%" : "90%",
-        maxWidth: isMaximized ? "100%" : "900px",
-        maxHeight: isMaximized ? "100%" : "90vh",
+        maxWidth: isMaximized ? "100%" : "1200px",
+        height: isMaximized ? "100%" : "92vh",
         display: "flex",
         flexDirection: "column",
         boxShadow: isMaximized ? "none" : "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
         position: "relative",
+        boxSizing: "border-box",
       }}>
         {/* Header */}
         <div style={{
@@ -266,6 +690,7 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
             </p>
           </div>
           <div style={{ display: "flex", gap: "0.5rem" }}>
+
             <button
               onClick={() => setIsMaximized(!isMaximized)}
               style={{
@@ -488,7 +913,7 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
                   onBlur={(e) => {
                     // If field is empty on blur, fill with raw_filename without extension
                     if (!e.target.value.trim()) {
-                      const nameWithoutExt = document.raw_filename.split('.').slice(0, -1).join('.');
+                      const nameWithoutExt = fullDocument.raw_filename.split('.').slice(0, -1).join('.');
                       handleFieldChange("document_name", nameWithoutExt);
                     }
                   }}
@@ -504,7 +929,7 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
               </div>
               
               {/* PEPPOL Sections - Scrollable Container */}
-              {Object.keys(peppolSections).length > 0 && (
+              {Object.keys(peppol_sections).length > 0 && (
                 <div style={{ 
                   marginTop: "0.5rem",
                   display: "flex",
@@ -514,36 +939,63 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
                 }}>
                   <div style={{ marginBottom: "1rem", flexShrink: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                      <p style={{ margin: 0, fontSize: "0.85rem", color: "#666", fontWeight: "500" }}>
-                        Invoice Sections ({
-                          sectionsOrder.filter(sectionName => {
-                            const fieldsInSection = peppolSections[sectionName] || {};
-                            const filteredFields = Object.entries(fieldsInSection)
-                              .filter(([fieldName, fieldInfo]) => {
-                                if (fieldInfo.Obligation === "required") return true;
-                                if (showNonMandatory) return true;
-                                return invoiceData[fieldName]; // Show if has value
-                              })
-                              .reduce((acc, [fieldName, fieldInfo]) => {
-                                acc[fieldName] = fieldInfo;
-                                return acc;
-                              }, {});
-                            return Object.keys(filteredFields).length > 0;
-                          }).length
+                      <p style={{ margin: 0, fontSize: "0.85rem", color: "#666", fontWeight: "500", display: "none" }}>
+                        PEPPOL Sections ({
+                          (() => {
+                            const hasVisibleNested = (nested) => {
+                              if (!nested) return false;
+                              for (let nestedName of Object.keys(nested)) {
+                                const nestedData = nested[nestedName];
+                                const nestedFields = nestedData.fields || nestedData;
+                                for (let [btId, fieldInfo] of Object.entries(nestedFields)) {
+                                  const mapid = fieldInfo.map || btId;
+                                  if (fieldInfo.Obligation === "required" || showNonMandatory || invoiceData[mapid]) {
+                                    return true;
+                                  }
+                                }
+                                if (hasVisibleNested(nestedData.nested)) return true;
+                              }
+                              return false;
+                            };
+
+                            return Object.entries(peppol_sections).filter(([sectionName, sectionData]) => {
+                              const fields = sectionData.fields || sectionData;
+                              const hasRequired = Object.values(fields).some(f => f.Obligation === "required");
+                              const hasData = Object.keys(fields).some(mapid => {
+                                return invoiceData[mapid];
+                              });
+                              if (hasRequired) return true;
+                              if (showNonMandatory) return true;
+                              if (hasData) return true;
+                              if (sectionData.nested && hasVisibleNested(sectionData.nested)) return true;
+                              return false;
+                            }).length;
+                          })()
                         })
                       </p>
-                      <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", cursor: "pointer" }}>
-                        <input
-                          type="checkbox"
-                          checked={showNonMandatory}
-                          onChange={(e) => {
-                            console.log("Checkbox clicked! New value:", e.target.checked);
-                            setShowNonMandatory(e.target.checked);
-                          }}
-                          style={{ cursor: "pointer" }}
-                        />
-                        <span style={{ color: "#666" }}>Show Non-Mandatory</span>
-                      </label>
+                      <div style={{ display: "flex", gap: "1.5rem", justifyContent: "flex-end", alignItems: "center" }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={showNonMandatory}
+                            onChange={(e) => setShowNonMandatory(e.target.checked)}
+                            style={{ cursor: "pointer" }}
+                          />
+                          <span style={{ color: "#666" }}>Show Optional</span>
+                        </label>
+                        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={showAdvanced}
+                            onChange={(e) => {
+                              console.log('[TOGGLE] showAdvanced:', e.target.checked);
+                              setShowAdvanced(e.target.checked);
+                            }}
+                            style={{ cursor: "pointer" }}
+                          />
+                          <span style={{ color: "#666" }}>Show Advanced</span>
+                        </label>
+                      </div>
                     </div>
                   </div>
 
@@ -553,170 +1005,589 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
                     flex: 1,
                     minHeight: 0
                   }}>
-                    {sectionsOrder.map((sectionName) => {
-                      const fieldsInSection = peppolSections[sectionName] || {};
+                    {/* Render all DisplayContext sections in contextOrder */}
+                    {(() => {
+                      const contextOrder = ['Invoice.Meta', 'Supplier', 'Customer', 'Payee', 'Tax Representative', 'Delivery', 'Payment', 'Charges.Discounts', 'Tax', 'Totals', 'LineItem'];
                       
-                      // Filter fields: mandatory + filled + (all if showNonMandatory)
-                      const filteredFields = Object.entries(fieldsInSection)
-                        .filter(([fieldName, fieldInfo]) => {
-                          if (fieldInfo.Obligation === "required") return true;
-                          if (showNonMandatory) return true;
-                          return invoiceData[fieldName]; // Show if has value
-                        })
-                        .reduce((acc, [fieldName, fieldInfo]) => {
-                          acc[fieldName] = fieldInfo;
-                          return acc;
-                        }, {});
+                      // Filter sections that exist and have fields
+                      const orderedSections = contextOrder.filter(context => peppol_sections[context]);
                       
-                      // Hide section if no fields after filtering
-                      if (Object.keys(filteredFields).length === 0) return null;
-                      
-                      const hasFields = Object.keys(filteredFields).length > 0;
-                      return (
-                      <div key={sectionName}>
-                        <button
-                          onClick={() => toggleSection(sectionName)}
-                          style={{
-                            width: "100%",
-                            padding: "0.75rem 1rem",
-                            background: expandedSections[sectionName] ? "#f3f4f6" : "#ffffff",
-                            border: "1px solid #e5e7eb",
-                            borderRadius: "4px",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "0.75rem",
-                            fontSize: "0.9rem",
-                            fontWeight: "500",
-                            color: "#1f2937",
-                            marginBottom: "0.5rem",
-                            transition: "all 0.2s ease",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.target.style.background = expandedSections[sectionName] ? "#f3f4f6" : "#f9fafb";
-                            e.target.style.borderColor = "#9ca3af";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.target.style.background = expandedSections[sectionName] ? "#f3f4f6" : "#ffffff";
-                            e.target.style.borderColor = "#e5e7eb";
-                          }}
-                        >
-                          <span style={{ display: "inline-block", transform: expandedSections[sectionName] ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s", width: "14px" }}>
-                            ▶
-                          </span>
-                          <span>{sectionName}</span>
-                          <span style={{ marginLeft: "auto", fontSize: "0.8rem", color: "#9ca3af" }}>
-                            ({Object.keys(filteredFields).length})
-                          </span>
-                        </button>
+                      return orderedSections.map(sectionName => {
+                        const sectionData = peppol_sections[sectionName];
                         
-                        {expandedSections[sectionName] && (
-                          <div style={{ 
-                            padding: "1rem", 
-                            background: "#f9fafb",
-                            borderRadius: "0 0 6px 6px",
-                            border: "1px solid #e5e7eb",
-                            borderTop: "none",
-                            marginBottom: "0.5rem"
-                          }}>
-                            {hasFields ? (
-                              <div style={{ 
-                                display: "grid", 
-                                gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", 
-                                gap: "1rem"
-                              }}>
-                              {Object.entries(filteredFields)
-                                .map(([fieldName, fieldInfo]) => (
-                                <div key={fieldName}>
-                                  <label 
-                                    style={{ 
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "0.5rem",
-                                      fontWeight: "500", 
-                                      marginBottom: "0.5rem",
-                                      color: "#374151",
-                                      cursor: "help",
-                              }}
-                            >
-                              <div
-                                className="info-icon"
+                        // Special rendering for LineItem section
+                        if (sectionName === 'LineItem') {
+                          const lineItemFields = sectionData.fields || sectionData;
+                          
+                          return (
+                            <div key={sectionName}>
+                              <button
+                                onClick={() => toggleSection(sectionName)}
                                 style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  width: "18px",
-                                  height: "18px",
-                                  borderRadius: "50%",
-                                  border: "1px solid #9ca3af",
-                                  fontSize: "0.75rem",
-                                  color: "#9ca3af",
-                                  fontWeight: "600",
+                                  width: "100%",
+                                  padding: "0.75rem 1rem",
+                                  background: expandedSections[sectionName] ? "#f3f4f6" : "#ffffff",
+                                  border: "1px solid #e5e7eb",
+                                  borderRadius: "4px",
                                   cursor: "pointer",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "0.75rem",
+                                  fontSize: "1rem",
+                                  fontWeight: "600",
+                                  color: "#1f2937",
+                                  transition: "all 0.2s ease",
                                 }}
-                                onMouseEnter={(e) => {
-                                  const rect = e.currentTarget.getBoundingClientRect();
-                                  const tooltip = e.currentTarget.querySelector('.tooltip-content');
-                                  if (tooltip) {
-                                    tooltip.style.top = (rect.top - tooltip.offsetHeight - 10) + "px";
-                                    tooltip.style.left = (rect.left + rect.width / 2 - 110) + "px";
-                                  }
-                                }}
+                                onMouseEnter={(e) => { e.target.style.background = "#f9fafb"; e.target.style.borderColor = "#9ca3af"; }}
+                                onMouseLeave={(e) => { e.target.style.background = expandedSections[sectionName] ? "#f3f4f6" : "#ffffff"; e.target.style.borderColor = "#e5e7eb"; }}
                               >
-                                i
-                                <div className="tooltip-content">
-                                  <a 
-                                    href={`https://docs.peppol.eu/poacc/billing/3.0/#${fieldInfo["BT-ID"]}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{
-                                      color: "#60a5fa",
-                                      textDecoration: "none",
-                                      fontWeight: "600",
-                                      cursor: "pointer",
-                                    }}
-                                    onMouseEnter={(e) => e.target.style.textDecoration = "underline"}
-                                    onMouseLeave={(e) => e.target.style.textDecoration = "none"}
-                                  >
-                                    {fieldInfo["BT-ID"]} ↗
-                                  </a>
-                                  <div style={{ marginTop: "0.5rem", fontSize: "0.8rem", color: "#e5e7eb" }}>
-                                    {fieldInfo["Description"]}
+                                <span>{expandedSections[sectionName] ? "▼" : "▶"}</span>
+                                <span>Document Lines ({lineItems.length})</span>
+                                
+                                {/* Summary metrics for all lines */}
+                                <span style={{ marginLeft: "auto", fontSize: "0.8rem", color: "#9ca3af", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                                  {(() => {
+                                    // Calculate total metrics across all lines
+                                    const allFields = Object.values(lineItemFields);
+                                    const mandatoryFields = allFields.filter(f => f.Obligation === "required");
+                                    const nonMandatoryFields = allFields.filter(f => f.Obligation !== "required");
+                                    
+                                    let totalFilledMandatory = 0;
+                                    let totalMandatory = mandatoryFields.length * lineItems.length;
+                                    
+                                    lineItems.forEach(lineItem => {
+                                      mandatoryFields.forEach(f => {
+                                        const fieldMapid = `line_item_${lineItem.id}.${f.mapid.split('.').pop()}`;
+                                        if (invoiceData[fieldMapid]) {
+                                          totalFilledMandatory++;
+                                        }
+                                      });
+                                    });
+                                    
+                                    const completionPercent = totalMandatory > 0 ? Math.round((totalFilledMandatory / totalMandatory) * 100) : 100;
+                                    const barWidth = 60;
+                                    
+                                    return (
+                                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                        {/* Progress bar */}
+                                        <div style={{
+                                          width: `${barWidth}px`,
+                                          height: "6px",
+                                          background: "#e5e7eb",
+                                          borderRadius: "3px",
+                                          overflow: "hidden",
+                                          display: "flex"
+                                        }}>
+                                          {completionPercent === 100 && totalMandatory > 0 ? (
+                                            <div style={{
+                                              width: "100%",
+                                              height: "100%",
+                                              background: "#10b981",
+                                              transition: "width 0.3s ease"
+                                            }} />
+                                          ) : totalFilledMandatory === 0 ? (
+                                            <div style={{
+                                              width: "100%",
+                                              height: "100%",
+                                              background: "#ef4444",
+                                              transition: "width 0.3s ease"
+                                            }} />
+                                          ) : (
+                                            <>
+                                              <div style={{
+                                                width: `${completionPercent}%`,
+                                                height: "100%",
+                                                background: "#9ca3af",
+                                                transition: "width 0.3s ease"
+                                              }} />
+                                              <div style={{
+                                                width: `${100 - completionPercent}%`,
+                                                height: "100%",
+                                                background: "#ef4444",
+                                                transition: "width 0.3s ease"
+                                              }} />
+                                            </>
+                                          )}
+                                        </div>
+                                        {/* Stats */}
+                                        <span style={{ fontSize: "0.75rem", whiteSpace: "nowrap" }}>
+                                          {totalFilledMandatory}/{totalMandatory}
+                                        </span>
+                                      </div>
+                                    );
+                                  })()}
+                                </span>
+                              </button>
+                              
+                              {expandedSections[sectionName] && (
+                                <div style={{ 
+                                  padding: "1rem", 
+                                  background: "#f9fafb",
+                                  borderRadius: "0 0 6px 6px",
+                                  border: "1px solid #e5e7eb",
+                                  borderTop: "none",
+                                  marginBottom: "0.5rem"
+                                }}>
+                                  {/* Line Items Container */}
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginBottom: "1rem" }}>
+                                    {lineItems.map((lineItem, index) => (
+                                      <div key={lineItem.id} style={{
+                                        border: "1px solid #d1d5db",
+                                        borderRadius: "6px",
+                                        background: "#ffffff",
+                                        overflow: "hidden"
+                                      }}>
+                                        {/* Card Header */}
+                                        <div
+                                          onClick={() => toggleLineItem(lineItem.id)}
+                                          style={{
+                                            width: "100%",
+                                            padding: "0.75rem 1rem",
+                                            background: expandedLineItems[lineItem.id] ? "#f0f9ff" : "#ffffff",
+                                            borderBottom: expandedLineItems[lineItem.id] ? "1px solid #bfdbfe" : "none",
+                                            cursor: "pointer",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "0.75rem",
+                                            justifyContent: "space-between",
+                                            transition: "all 0.2s ease"
+                                          }}
+                                          onMouseEnter={(e) => { e.currentTarget.style.background = "#f0f9ff"; }}
+                                          onMouseLeave={(e) => { e.currentTarget.style.background = expandedLineItems[lineItem.id] ? "#f0f9ff" : "#ffffff"; }}
+                                        >
+                                          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                                            <span style={{ fontSize: "0.9rem" }}>{expandedLineItems[lineItem.id] ? "▼" : "▶"}</span>
+                                            <span style={{ fontWeight: "600", color: "#1f2937" }}>
+                                              Line {index + 1}
+                                            </span>
+                                          </div>
+                                          
+                                          {/* Metrics for this line */}
+                                          <div style={{ marginLeft: "auto", marginRight: "0.75rem", fontSize: "0.8rem", color: "#9ca3af", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                                            {(() => {
+                                              const allFields = Object.values(lineItemFields);
+                                              const mandatoryFields = allFields.filter(f => f.Obligation === "required");
+                                              const filledMandatory = mandatoryFields.filter(f => {
+                                                const fieldMapid = `line_item_${lineItem.id}.${f.mapid.split('.').pop()}`;
+                                                return !!invoiceData[fieldMapid];
+                                              }).length;
+                                              const totalMandatory = mandatoryFields.length;
+                                              const nonMandatoryFields = allFields.filter(f => f.Obligation !== "required");
+                                              
+                                              const completionPercent = totalMandatory > 0 ? Math.round((filledMandatory / totalMandatory) * 100) : 100;
+                                              const barWidth = 50;
+                                              
+                                              return (
+                                                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                                  {/* Progress bar */}
+                                                  <div style={{
+                                                    width: `${barWidth}px`,
+                                                    height: "6px",
+                                                    background: "#e5e7eb",
+                                                    borderRadius: "3px",
+                                                    overflow: "hidden",
+                                                    display: "flex"
+                                                  }}>
+                                                    {completionPercent === 100 && totalMandatory > 0 ? (
+                                                      <div style={{
+                                                        width: "100%",
+                                                        height: "100%",
+                                                        background: "#10b981",
+                                                        transition: "width 0.3s ease"
+                                                      }} />
+                                                    ) : filledMandatory === 0 ? (
+                                                      <div style={{
+                                                        width: "100%",
+                                                        height: "100%",
+                                                        background: "#ef4444",
+                                                        transition: "width 0.3s ease"
+                                                      }} />
+                                                    ) : (
+                                                      <>
+                                                        <div style={{
+                                                          width: `${completionPercent}%`,
+                                                          height: "100%",
+                                                          background: "#9ca3af",
+                                                          transition: "width 0.3s ease"
+                                                        }} />
+                                                        <div style={{
+                                                          width: `${100 - completionPercent}%`,
+                                                          height: "100%",
+                                                          background: "#ef4444",
+                                                          transition: "width 0.3s ease"
+                                                        }} />
+                                                      </>
+                                                    )}
+                                                  </div>
+                                                  {/* Stats */}
+                                                  <span style={{ fontSize: "0.75rem", whiteSpace: "nowrap" }}>
+                                                    {filledMandatory}/{totalMandatory}
+                                                  </span>
+                                                </div>
+                                              );
+                                            })()}
+                                          </div>
+                                          
+                                          <div style={{ display: "flex", gap: "0.5rem" }}>
+                                            {lineItems.length > 1 && (
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  removeLineItem(lineItem.id);
+                                                }}
+                                                style={{
+                                                  padding: "0.4rem 0.6rem",
+                                                  background: "#fee2e2",
+                                                  border: "1px solid #fca5a5",
+                                                  color: "#991b1b",
+                                                  borderRadius: "3px",
+                                                  cursor: "pointer",
+                                                  fontSize: "0.85rem",
+                                                  fontWeight: "500",
+                                                  transition: "all 0.2s ease"
+                                                }}
+                                                onMouseEnter={(e) => { e.target.style.background = "#fecaca"; }}
+                                                onMouseLeave={(e) => { e.target.style.background = "#fee2e2"; }}
+                                              >
+                                                Remove
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                        
+                                        {/* Card Content */}
+                                        {expandedLineItems[lineItem.id] && (
+                                          <div style={{ 
+                                            padding: "1rem",
+                                            display: "grid",
+                                            gridTemplateColumns: "1fr 1fr",
+                                            gap: "1rem"
+                                          }}>
+                                            {Object.entries(lineItemFields).map(([mapid, fieldInfo]) => {
+                                              const lineItemMapid = `line_item_${lineItem.id}.${mapid.split('.').pop()}`;
+                                              const isRequired = fieldInfo.Obligation === "required";
+                                              const hasValue = !!invoiceData[lineItemMapid];
+                                              const isEmpty = !hasValue;
+                                              // Check if this is line_number field (could be 'line_number' or end with '.line_number')
+                                              const isLineNumberField = mapid === 'line_number' || mapid.endsWith('.line_number');
+                                              
+                                              return (
+                                                <div key={lineItemMapid} style={{ display: "flex", flexDirection: "column" }}>
+                                                  <label style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "0.5rem",
+                                                    fontWeight: "500",
+                                                    marginBottom: "0.5rem",
+                                                    color: "#374151",
+                                                    fontSize: "0.9rem"
+                                                  }}>
+                                                    <span style={{
+                                                      fontWeight: "600",
+                                                      color: isRequired ? "#1f2937" : "#9ca3af"
+                                                    }}>
+                                                      {fieldInfo["DisplayName"] || mapid}
+                                                    </span>
+                                                    {isRequired && !hasValue && <span style={{ color: "#dc2626" }}>*</span>}
+                                                  </label>
+                                                  <input
+                                                    type={fieldInfo.Type === "number" ? "number" : "text"}
+                                                    value={invoiceData[lineItemMapid] || ""}
+                                                    onChange={(e) => {
+                                                      setInvoiceData(prev => ({
+                                                        ...prev,
+                                                        [lineItemMapid]: e.target.value
+                                                      }));
+                                                    }}
+                                                    readOnly={isLineNumberField}
+                                                    placeholder={fieldInfo.Example || ""}
+                                                    style={{
+                                                      padding: "0.5rem 0.75rem",
+                                                      border: isRequired && isEmpty ? "2px solid #dc2626" : "1px solid #d0d0d0",
+                                                      borderRadius: "4px",
+                                                      fontSize: "0.9rem",
+                                                      fontFamily: "inherit",
+                                                      outline: "none",
+                                                      transition: "border-color 0.2s ease",
+                                                      background: isLineNumberField ? "#f3f4f6" : "white",
+                                                      cursor: isLineNumberField ? "not-allowed" : "text"
+                                                    }}
+                                                    onFocus={(e) => { if (!isLineNumberField) e.target.style.borderColor = "#3b82f6"; }}
+                                                    onBlur={(e) => { e.target.style.borderColor = isRequired && isEmpty ? "#dc2626" : "#d0d0d0"; }}
+                                                  />
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
                                   </div>
+                                  
+                                  {/* Add Button */}
+                                  <button
+                                    onClick={addLineItem}
+                                    style={{
+                                      width: "100%",
+                                      padding: "0.75rem 1rem",
+                                      background: "#dbeafe",
+                                      border: "1px dashed #3b82f6",
+                                      color: "#1e40af",
+                                      borderRadius: "4px",
+                                      cursor: "pointer",
+                                      fontSize: "0.9rem",
+                                      fontWeight: "500",
+                                      transition: "all 0.2s ease"
+                                    }}
+                                    onMouseEnter={(e) => { e.target.style.background = "#bfdbfe"; }}
+                                    onMouseLeave={(e) => { e.target.style.background = "#dbeafe"; }}
+                                  >
+                                    + Add Document Line
+                                  </button>
                                 </div>
-                              </div>
-                              <span style={{ borderBottom: "1px dotted #9ca3af" }}>
-                                {fieldName}
-                              </span>
-                            </label>
-                            <input
-                              type="text"
-                              value={invoiceData[fieldName] || ""}
-                              onChange={(e) => handleFieldChange(fieldName, e.target.value)}
-                              placeholder={fieldInfo["Example"] || `Enter ${fieldName}`}
-                              title={fieldInfo["Description"]}
+                              )}
+                            </div>
+                          );
+                        }
+                        
+                        // Regular section rendering for non-LineItem sections
+                        const fieldsInSection = sectionData.fields || sectionData;
+                        
+                        // Filter fields with specific rules for required+advanced+empty fields
+                        const filteredFields = Object.entries(fieldsInSection)
+                          .filter(([mapid, fieldInfo]) => {
+                            // RULE 3 (EXCEPTION): Required + Advanced + Empty → Show anyway
+                            if (fieldInfo.Obligation === "required" && fieldInfo.Advanced === true && !invoiceData[mapid]) {
+                              return true;
+                            }
+                            
+                            // RULE 1: Always show required fields
+                            if (fieldInfo.Obligation === "required") return true;
+                            
+                            // RULE 2: Hide all advanced fields when toggle OFF
+                            if (fieldInfo.Advanced === true && !showAdvanced) {
+                              return false;
+                            }
+                            
+                            // Show Advanced fields if toggle is ON
+                            if (fieldInfo.Advanced === true && showAdvanced) return true;
+                            
+                            // For non-Advanced, optional fields: show if toggle ON or has value
+                            if (showNonMandatory) return true;
+                            if (invoiceData[mapid]) return true;
+                            
+                            return false;
+                          })
+                          .reduce((acc, [mapid, fieldInfo]) => {
+                            acc[mapid] = fieldInfo;
+                            return acc;
+                          }, {});
+                        
+                        // Hide section if no fields after filtering
+                        if (Object.keys(filteredFields).length === 0) return null;
+                        
+                        return (
+                          <div key={sectionName}>
+                            <button
+                              onClick={() => toggleSection(sectionName)}
                               style={{
                                 width: "100%",
-                                padding: "0.75rem",
-                                border: fieldInfo.Obligation === "required" ? "2px solid #6b7280" : "1px solid #d0d0d0",
-                                borderRadius: "6px",
-                                fontSize: "0.95rem",
-                                boxSizing: "border-box",
+                                padding: "0.75rem 1rem",
+                                background: expandedSections[sectionName] ? "#f3f4f6" : "#ffffff",
+                                border: "1px solid #e5e7eb",
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.75rem",
+                                fontSize: "0.9rem",
+                                fontWeight: "500",
+                                color: "#1f2937",
+                                marginBottom: "0.5rem",
+                                transition: "all 0.2s ease",
                               }}
-                            />
-                          </div>
-                        ))}
+                              onMouseEnter={(e) => {
+                                e.target.style.background = expandedSections[sectionName] ? "#f3f4f6" : "#f9fafb";
+                                e.target.style.borderColor = "#9ca3af";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.background = expandedSections[sectionName] ? "#f3f4f6" : "#ffffff";
+                                e.target.style.borderColor = "#e5e7eb";
+                              }}
+                            >
+                              <span style={{ display: "inline-block", transform: expandedSections[sectionName] ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s", width: "14px" }}>
+                                ▶
+                              </span>
+                              <span>{sectionName}</span>
+                              <span style={{ marginLeft: "auto", fontSize: "0.8rem", color: "#9ca3af", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                                {(() => {
+                                  // Calculate metrics for this section
+                                  const allFields = Object.values(fieldsInSection);
+                                  const mandatoryFields = allFields.filter(f => f.Obligation === "required");
+                                  const filledMandatory = mandatoryFields.filter(f => invoiceData[f.mapid]).length;
+                                  const totalMandatory = mandatoryFields.length;
+                                  const nonMandatoryFields = allFields.filter(f => f.Obligation !== "required");
+                                  
+                                  const completionPercent = totalMandatory > 0 ? Math.round((filledMandatory / totalMandatory) * 100) : 100;
+                                  const barWidth = 60;
+                                  
+                                  return (
+                                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                      {/* Progress bar */}
+                                      <div style={{
+                                        width: `${barWidth}px`,
+                                        height: "6px",
+                                        background: "#e5e7eb",
+                                        borderRadius: "3px",
+                                        overflow: "hidden",
+                                        display: "flex"
+                                      }}>
+                                        {completionPercent === 100 && totalMandatory > 0 ? (
+                                          <div style={{
+                                            width: "100%",
+                                            height: "100%",
+                                            background: "#10b981",
+                                            transition: "width 0.3s ease"
+                                          }} />
+                                        ) : filledMandatory === 0 ? (
+                                          <div style={{
+                                            width: "100%",
+                                            height: "100%",
+                                            background: "#ef4444",
+                                            transition: "width 0.3s ease"
+                                          }} />
+                                        ) : (
+                                          <>
+                                            <div style={{
+                                              width: `${completionPercent}%`,
+                                              height: "100%",
+                                              background: "#9ca3af",
+                                              transition: "width 0.3s ease"
+                                            }} />
+                                            <div style={{
+                                              width: `${100 - completionPercent}%`,
+                                              height: "100%",
+                                              background: "#ef4444",
+                                              transition: "width 0.3s ease"
+                                            }} />
+                                          </>
+                                        )}
+                                      </div>
+                                      {/* Stats */}
+                                      <span style={{ fontSize: "0.75rem", whiteSpace: "nowrap" }}>
+                                        {filledMandatory}/{totalMandatory} | {nonMandatoryFields.length}
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
+                              </span>
+                            </button>
+                            
+                            {expandedSections[sectionName] && (
+                              <div style={{ 
+                                padding: "1rem", 
+                                background: "#f9fafb",
+                                borderRadius: "0 0 6px 6px",
+                                border: "1px solid #e5e7eb",
+                                borderTop: "none",
+                                marginBottom: "0.5rem"
+                              }}>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1rem" }}>
+                                  {Object.entries(filteredFields).map(([mapid, fieldInfo]) => (
+                                    <div key={mapid} style={{ display: "flex", flexDirection: "column" }}>
+                                      <label 
+                                        style={{ 
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "0.5rem",
+                                          fontWeight: "500", 
+                                          marginBottom: "0.5rem",
+                                          color: "#374151",
+                                          cursor: "help",
+                                        }}
+                                      >
+                                        <span style={{ fontWeight: "600", color: fieldInfo.Obligation === "required" ? "#1f2937" : "#9ca3af", fontSize: "0.95rem" }}>
+                                          {fieldInfo["DisplayName"] || fieldInfo["TagName"]}
+                                        </span>
+                                        <div
+                                          className="info-icon"
+                                          style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            width: "18px",
+                                            height: "18px",
+                                            borderRadius: "50%",
+                                            border: "1px solid #9ca3af",
+                                            fontSize: "0.75rem",
+                                            color: "#9ca3af",
+                                            fontWeight: "600",
+                                            cursor: "pointer",
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            const rect = e.currentTarget.getBoundingClientRect();
+                                            const tooltip = e.currentTarget.querySelector('.tooltip-content');
+                                            if (tooltip) {
+                                              tooltip.style.top = (rect.top - tooltip.offsetHeight - 10) + "px";
+                                              tooltip.style.left = (rect.left + rect.width / 2 - 110) + "px";
+                                            }
+                                          }}
+                                        >
+                                          i
+                                          <div className="tooltip-content">
+                                            <div style={{
+                                              color: "#60a5fa",
+                                              fontWeight: "600",
+                                              marginBottom: "0.5rem",
+                                            }}>
+                                              <a href={`https://docs.peppol.eu/poacc/billing/3.0/bt/${fieldInfo["BT-ID"]}`} target="_blank" rel="noopener noreferrer" style={{ color: "#60a5fa", textDecoration: "underline" }}>{fieldInfo["BT-ID"]}</a>
+                                            </div>
+                                            {fieldInfo["Advanced"] && (
+                                              <div style={{ fontSize: "0.75rem", color: "#f59e0b", marginBottom: "0.4rem", fontWeight: "600" }}>
+                                                ⚠️ Advanced Field
+                                              </div>
+                                            )}
+                                            <div style={{ fontSize: "0.75rem", color: "#d1d5db", marginBottom: "0.4rem" }}>
+                                              {fieldInfo["Obligation"] === "required" ? "🔴 Required" : fieldInfo["Obligation"] === "conditional" ? "🟡 Conditional" : "🟢 Optional"}
+                                            </div>
+                                            {fieldInfo["ConditionalDescription"] && (
+                                              <div style={{ fontSize: "0.75rem", color: "#e5e7eb", marginBottom: "0.4rem", fontStyle: "italic" }}>
+                                                <strong>Condition:</strong> {fieldInfo["ConditionalDescription"]}
+                                              </div>
+                                            )}
+                                            <div style={{ fontSize: "0.8rem", color: "#e5e7eb", marginTop: "0.5rem" }}>
+                                              {fieldInfo["Description"]}
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <span style={{ borderBottom: "1px dotted #9ca3af", fontSize: "0.75rem", color: "#6b7280", display: "none" }}>
+                                          {fieldInfo["TagName"]}
+                                        </span>
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={invoiceData[mapid] || ""}
+                                        onChange={(e) => handleFieldChange(mapid, e.target.value)}
+                                        placeholder={fieldInfo["Example"] ? `Ex: ${fieldInfo["Example"]}` : `Enter ${mapid}`}
+                                        title={fieldInfo["Description"]}
+                                        style={{
+                                          width: "100%",
+                                          padding: "0.75rem",
+                                          border: (fieldInfo.Obligation === "required" && !invoiceData[mapid]) ? "2px solid #dc2626" : fieldInfo.Advanced ? "2px dotted #9ca3af" : "1px solid #d0d0d0",
+                                          borderRadius: "6px",
+                                          fontSize: "0.95rem",
+                                          boxSizing: "border-box",
+                                        }}
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            ) : (
-                              <p style={{ margin: 0, color: "#9ca3af", fontSize: "0.9rem" }}>
-                                No mandatory fields in this section.
-                              </p>
                             )}
                           </div>
-                        )}
-                      </div>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
                     </div>
                 </div>
               )}
@@ -867,45 +1738,387 @@ function DocumentDetail({ document, peppolSections = {}, onClose, onSave }) {
           borderTop: "1px solid #e8ecf1",
           display: "flex",
           gap: "1rem",
-          justifyContent: "flex-end",
+          justifyContent: "space-between",
           background: "#f9fafb",
           flexShrink: 0,
         }}>
-          <button
-            onClick={onClose}
-            disabled={isLoading}
-            style={{
-              padding: "0.75rem 1.5rem",
-              background: "white",
-              color: "#1a1a1a",
-              border: "1px solid #d0d0d0",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontWeight: "600",
-              opacity: isLoading ? 0.6 : 1,
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isLoading}
-            style={{
-              padding: "0.75rem 1.5rem",
-              background: "#7265cf",
-              color: "white",
-              border: "none",
-              borderRadius: "6px",
-              cursor: isLoading ? "not-allowed" : "pointer",
-              fontWeight: "600",
-              opacity: isLoading ? 0.7 : 1,
-            }}
-          >
-            {isLoading ? "Saving..." : "Save Changes"}
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setShowAdvancedAnalysis(true)}
+              style={{
+                padding: "0.75rem 1.5rem",
+                background: "#e5e7eb",
+                color: "#1a1a1a",
+                border: "1px solid #d0d0d0",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: "600",
+              }}
+            >
+              Advanced Analysis
+            </button>
+          )}
+          <div style={{ display: "flex", gap: "1rem" }}>
+            <button
+              onClick={onClose}
+              disabled={isLoading}
+              style={{
+                padding: "0.75rem 1.5rem",
+                background: "white",
+                color: "#1a1a1a",
+                border: "1px solid #d0d0d0",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: "600",
+                opacity: isLoading ? 0.6 : 1,
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isLoading}
+              style={{
+                padding: "0.75rem 1.5rem",
+                background: "#7265cf",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: isLoading ? "not-allowed" : "pointer",
+                fontWeight: "600",
+                opacity: isLoading ? 0.7 : 1,
+              }}
+            >
+              {isLoading ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
+    
+    {/* Advanced Analysis Modal */}
+    {showAdvancedAnalysis && (
+      <div style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: "rgba(0, 0, 0, 0.7)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 2000,
+      }}>
+        <div style={{
+          background: "white",
+          borderRadius: "12px",
+          width: "95%",
+          maxWidth: "1400px",
+          maxHeight: "95vh",
+          display: "flex",
+          flexDirection: "column",
+          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+          position: "relative",
+          overflow: "hidden",
+        }}>
+          {/* Modal Header */}
+          <div style={{
+            padding: "1.5rem 2rem",
+            borderBottom: "1px solid #e5e7eb",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            background: "#f9fafb",
+          }}>
+            <h2 style={{ margin: 0, fontSize: "1.5rem", color: "#1a1a1a" }}>
+              Advanced Invoice Analysis
+            </h2>
+            <button
+              onClick={() => setShowAdvancedAnalysis(false)}
+              style={{
+                background: "none",
+                border: "none",
+                fontSize: "2rem",
+                cursor: "pointer",
+                color: "#666",
+                width: "40px",
+                height: "40px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Modal Content */}
+          <div style={{
+            flex: 1,
+            overflow: "auto",
+            padding: "2rem",
+            background: "#fafbfc",
+          }}>
+            {/* Statistics Dashboard - Above Tabs */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: "1rem",
+              marginBottom: "2rem",
+            }}>
+              <div style={{
+                background: "white",
+                borderRadius: "8px",
+                padding: "1.5rem",
+                border: "1px solid #e5e7eb",
+                textAlign: "center",
+              }}>
+                <div style={{ fontSize: "0.875rem", color: "#6b7280", marginBottom: "0.75rem", fontWeight: "500" }}>
+                  Processing Status
+                </div>
+                <div style={{ fontSize: "1.25rem", fontWeight: "600", color: "#1a1a1a" }}>
+                  {fullDocument.status || "N/A"}
+                </div>
+              </div>
+              <div style={{
+                background: "white",
+                borderRadius: "8px",
+                padding: "1.5rem",
+                border: "1px solid #e5e7eb",
+                textAlign: "center",
+              }}>
+                <div style={{ fontSize: "0.875rem", color: "#6b7280", marginBottom: "0.75rem", fontWeight: "500" }}>
+                  Predicted Accuracy
+                </div>
+                <div style={{ fontSize: "1.875rem", fontWeight: "bold", color: "#7265cf" }}>
+                  {(parseFloat(fullDocument.predicted_accuracy) || 0).toFixed(1)}%
+                </div>
+              </div>
+              <div style={{
+                background: "white",
+                borderRadius: "8px",
+                padding: "1.5rem",
+                border: "1px solid #e5e7eb",
+                textAlign: "center",
+              }}>
+                <div style={{ fontSize: "0.875rem", color: "#6b7280", marginBottom: "0.75rem", fontWeight: "500" }}>
+                  Training Data
+                </div>
+                <div style={{ fontSize: "1.25rem", fontWeight: "600", color: fullDocument.is_training ? "#10b981" : "#6b7280" }}>
+                  {fullDocument.is_training ? "Yes" : "No"}
+                </div>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div style={{
+              display: "flex",
+              gap: "1rem",
+              marginBottom: "2rem",
+              borderBottom: "1px solid #e5e7eb",
+            }}>
+              <button
+                onClick={() => setActiveAnalysisTab("extraction")}
+                style={{
+                  padding: "0.75rem 1.5rem",
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  fontSize: "1rem",
+                  fontWeight: "600",
+                  color: activeAnalysisTab === "extraction" ? "#1f2937" : "#6b7280",
+                  borderBottom: activeAnalysisTab === "extraction" ? "3px solid #7265cf" : "3px solid transparent",
+                  paddingBottom: "calc(0.75rem - 3px)",
+                }}
+              >
+                Data Extraction
+              </button>
+
+            </div>
+
+            {/* Tab Content: Data Extraction */}
+            {activeAnalysisTab === "extraction" && (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr",
+              gap: "2rem",
+            }}>
+              {/* Content Type */}
+              <div style={{
+                background: "white",
+                borderRadius: "8px",
+                padding: "1.5rem",
+                border: "1px solid #e5e7eb",
+                maxWidth: "100%",
+                overflow: "hidden",
+              }}>
+                <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.125rem", color: "#1a1a1a" }}>
+                  Content Type
+                </h3>
+                <pre style={{
+                  background: "#1a1a1a",
+                  color: "#00ff00",
+                  padding: "1rem",
+                  borderRadius: "6px",
+                  fontSize: "0.85rem",
+                  overflow: "auto",
+                  maxHeight: "300px",
+                  fontFamily: "monospace",
+                  lineHeight: "1.6",
+                }}>
+                  {(() => {
+                    try {
+                      const data = typeof fullDocument.content_type === 'string' 
+                        ? JSON.parse(fullDocument.content_type) 
+                        : fullDocument.content_type || {};
+                      return formatJsonCompact(data);
+                    } catch (e) {
+                      return formatJsonCompact(fullDocument.content_type || {});
+                    }
+                  })()}
+                </pre>
+              </div>
+
+              {/* LLM Predicted Invoice Data */}
+              <div style={{
+                background: "white",
+                borderRadius: "8px",
+                padding: "1.5rem",
+                border: "1px solid #e5e7eb",
+                maxWidth: "100%",
+                overflow: "hidden",
+              }}>
+                <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.125rem", color: "#1a1a1a" }}>
+                  LLM Predicted Invoice Data
+                </h3>
+                <pre style={{
+                  background: "#1a1a1a",
+                  color: "#00ff00",
+                  padding: "1rem",
+                  borderRadius: "6px",
+                  fontSize: "0.85rem",
+                  overflow: "auto",
+                  maxHeight: "300px",
+                  fontFamily: "monospace",
+                  lineHeight: "1.6",
+                }}>
+                  {(() => {
+                    try {
+                      const data = typeof fullDocument.invoice_data_raw === 'string' 
+                        ? JSON.parse(fullDocument.invoice_data_raw) 
+                        : fullDocument.invoice_data_raw || {};
+                      return formatJsonCompact(data);
+                    } catch (e) {
+                      return fullDocument.invoice_data_raw || "N/A";
+                    }
+                  })()}
+                </pre>
+              </div>
+
+              {/* PEPPOL Predicted Data */}
+              <div style={{
+                background: "white",
+                borderRadius: "8px",
+                padding: "1.5rem",
+                border: "1px solid #e5e7eb",
+                maxWidth: "100%",
+                overflow: "hidden",
+              }}>
+                <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.125rem", color: "#1a1a1a" }}>
+                  PEPPOL Predicted
+                </h3>
+                <pre style={{
+                  background: "#1a1a1a",
+                  color: "#00ff00",
+                  padding: "1rem",
+                  borderRadius: "6px",
+                  fontSize: "0.85rem",
+                  overflow: "auto",
+                  maxHeight: "300px",
+                  fontFamily: "monospace",
+                  lineHeight: "1.6",
+                }}>
+                  {(() => {
+                    try {
+                      const data = typeof fullDocument.invoice_data_peppol === 'string' 
+                        ? JSON.parse(fullDocument.invoice_data_peppol) 
+                        : fullDocument.invoice_data_peppol || {};
+                      return formatJsonCompact(data);
+                    } catch (e) {
+                      return fullDocument.invoice_data_peppol || "N/A";
+                    }
+                  })()}
+                </pre>
+              </div>
+
+              {/* Final PEPPOL Data */}
+              <div style={{
+                background: "white",
+                borderRadius: "8px",
+                padding: "1.5rem",
+                border: "1px solid #e5e7eb",
+                maxWidth: "100%",
+                overflow: "hidden",
+              }}>
+                <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.125rem", color: "#1a1a1a" }}>
+                  Final PEPPOL Data
+                </h3>
+                <pre style={{
+                  background: "#1a1a1a",
+                  color: "#00ff00",
+                  padding: "1rem",
+                  borderRadius: "6px",
+                  fontSize: "0.85rem",
+                  overflow: "auto",
+                  maxHeight: "300px",
+                  fontFamily: "monospace",
+                  lineHeight: "1.6",
+                }}>
+                  {(() => {
+                    try {
+                      const data = typeof fullDocument.invoice_data_peppol_final === 'string' 
+                        ? JSON.parse(fullDocument.invoice_data_peppol_final) 
+                        : fullDocument.invoice_data_peppol_final || {};
+                      return formatJsonCompact(data);
+                    } catch (e) {
+                      return fullDocument.invoice_data_peppol_final || "N/A";
+                    }
+                  })()}
+                </pre>
+              </div>
+            </div>
+            )}
+            </div>
+
+          {/* Modal Footer */}
+          <div style={{
+            padding: "1.5rem 2rem",
+            borderTop: "1px solid #e5e7eb",
+            display: "flex",
+            gap: "1rem",
+            justifyContent: "flex-end",
+            background: "#f9fafb",
+          }}>
+            <button
+              onClick={() => setShowAdvancedAnalysis(false)}
+              style={{
+                padding: "0.75rem 2rem",
+                background: "#7265cf",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: "600",
+                fontSize: "1rem",
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 }

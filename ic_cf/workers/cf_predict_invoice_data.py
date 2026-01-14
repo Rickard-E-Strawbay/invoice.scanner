@@ -19,8 +19,8 @@ class cf_predict_invoice_data(cf_base):
         """Execute the LLM prediction worker logic."""
         ENTER_STATUS = LLM_STATUS[ENTER]
         EXIT_STATUS = LLM_STATUS[EXIT]
+
         
-        self._update_document_status(ENTER_STATUS)
 
         try:
             # Fetch document from storage with metadata
@@ -36,14 +36,26 @@ class cf_predict_invoice_data(cf_base):
             # Save result to database
             if result.get("success"):
                 invoice_data = result.get("invoice_data")
-                self._save_invoice_data(invoice_data, result.get("raw_response"))
+
+                dict_additional_fields = {}
+               
+                invoice_data_raw = json.dumps(invoice_data)
+
+                dict_additional_fields["invoice_data_raw"] =invoice_data_raw
+
+                self._update_document_status(EXIT_STATUS,None, dict_additional_fields  )
+                
+                data = self._load_document_data()
+
+                
+                # self._save_invoice_data(invoice_data, result.get("raw_response"))
             else:
                 error_msg = result.get("error", "Unknown error")
                 self.logger.error(f"Prediction failed: {error_msg}")
-                self._save_invoice_data(None, result.get("raw_response", error_msg))
+                # self._save_invoice_data(None, result.get("raw_response", error_msg))
             
             # Update status and publish to next stage
-            self._update_document_status(EXIT_STATUS)
+            
             self._publish_to_topic()
             
         except Exception as e:
@@ -96,26 +108,3 @@ class cf_predict_invoice_data(cf_base):
         
         self.logger.info(f"✅ Final content_type: {normalized_type}")
         return normalized_type
-    
-    def _save_invoice_data(self, invoice_data: dict, raw_response: str):
-        """Save extracted invoice data to database."""
-        try:
-            # Prepare invoice_data JSON
-            if invoice_data:
-                invoice_json = json.dumps(invoice_data)
-            else:
-                # Save raw response for review if JSON parsing failed
-                invoice_json = json.dumps({"raw_response": raw_response, "parse_error": True})
-            
-            # Update document with invoice_data
-            sql = "UPDATE documents SET invoice_data_raw = %s WHERE id = %s"
-            results, success = execute_sql(sql, (invoice_json, str(self.document_id)))
-            
-            if not success:
-                self.logger.error(f"Failed to save invoice data")
-                
-        except Exception as e:
-            self.logger.error(f"Error saving invoice data: {str(e)}")   
-
-
-            

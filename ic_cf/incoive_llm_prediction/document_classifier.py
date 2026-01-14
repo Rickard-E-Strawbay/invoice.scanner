@@ -36,7 +36,8 @@ Return ONLY a JSON object with these fields (no other text):
     "original_company": "Company Name or 'Unknown'",
     "country": "Country code (SE, US, DE, etc) or 'Unknown'",
     "currency": "Currency code (SEK, USD, EUR, etc) or 'Unknown'",
-    "date_format": "Date format (YYYY-MM-DD, DD/MM/YYYY, etc) or 'Unknown'"
+    "date_format": "Date format (YYYY-MM-DD, DD/MM/YYYY, etc) or 'Unknown'",
+    "invoice_type_code": "380 (Commercial Invoice), 381 (Credit Note), 383 (Debit Note), 384 (Corrected Invoice), 386 (Prepayment Invoice), 389 (Self-Billed)) or 'Unknown'"
 }"""
     
     DEFAULT_CLASSIFICATION = {
@@ -45,7 +46,8 @@ Return ONLY a JSON object with these fields (no other text):
         "original_company": "Unknown",
         "country": "Unknown",
         "currency": "Unknown",
-        "date_format": "Unknown"
+        "date_format": "Unknown",
+        "invoice_type_code": "380"
     }
     
     def classify(self, document: dict) -> dict:

@@ -1,3 +1,4 @@
+from pickle import FALSE
 from workers.cf_base import cf_base
 import json
 
@@ -18,7 +19,15 @@ class cf_preprocess(cf_base):
         ENTER_STATUS = PREPROCESS_STATUS[ENTER]
         EXIT_STATUS = PREPROCESS_STATUS[EXIT]
 
-        self._update_document_status(ENTER_STATUS)
+        # Reset relevant fields on re-processing
+        dict_additional_fields = {}
+        dict_additional_fields["invoice_data_raw"] = "{}"
+        dict_additional_fields["invoice_data_peppol"] = "{}"
+        dict_additional_fields["invoice_data_peppol_final"] = "{}"
+        dict_additional_fields["error_message"] = ""
+        dict_additional_fields["predicted_accuracy"] = 0.0
+        dict_additional_fields["is_training"] = False
+        self._update_document_status(ENTER_STATUS,None, dict_additional_fields  )
 
         try:
             document = self._fetch_document()
@@ -29,14 +38,16 @@ class cf_preprocess(cf_base):
             classifier = DocumentClassifier()
             classification = classifier.classify(document)
 
-            print("*****************************************")
-            print("Classification result:", classification) 
-            print("*****************************************")
+            processed_image_filename = classification.pop('processed_image_filename', None)
+            if processed_image_filename and processed_image_filename.startswith('processed/'):
+                processed_image_filename = processed_image_filename.replace('processed/', '')
             
-            # Update document metadata in DB
-            self._update_document_classification(classification)
             
-            self._update_document_status(EXIT_STATUS)
+            dict_update = {}
+            dict_update["content_type"] = json.dumps(classification)
+            dict_update["processed_image_filename"] = processed_image_filename
+
+            self._update_document_status(EXIT_STATUS,None, dict_update  )
             
         except Exception as e:
             self.logger.error(f"Preprocessing failed: {str(e)}")
@@ -44,26 +55,4 @@ class cf_preprocess(cf_base):
         
         self._publish_to_topic()
     
-    def _update_document_classification(self, classification: dict):
-        """Update document with classification metadata"""
-        # Extract processed_image_filename if present (from scanned PDFs)
-        processed_image_filename = classification.pop('processed_image_filename', None)
-        # Remove 'processed/' prefix if present (keep just the filename)
-        if processed_image_filename and processed_image_filename.startswith('processed/'):
-            processed_image_filename = processed_image_filename.replace('processed/', '')
-        
-        sql = """
-            UPDATE documents 
-            SET content_type = %s, processed_image_filename = %s, updated_at = CURRENT_TIMESTAMP
-            WHERE id = %s
-        """
-        classification_json = json.dumps(classification)
-        results, success = execute_sql(sql, (classification_json, processed_image_filename, str(self.document_id)))
-        
-        if success:
-            self.logger.success(f"Classification stored: {classification['document_classification']}")
-            if processed_image_filename:
-                self.logger.info(f"Processed image saved: {processed_image_filename}")
-        else:
-            self.logger.error("Failed to update document classification")
 

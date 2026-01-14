@@ -52,27 +52,27 @@ function Dashboard() {
   useEffect(() => {
     const loadPeppolStructure = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/documents/peppol`, {
+        const response = await fetch(`${API_BASE_URL}/documents/peppolv2`, {
           method: "GET",
           credentials: "include",
         });
         
         if (response.ok) {
-          const data = await response.json();
-          setPeppolSections(data.peppol_sections || {});
-          // Cache both sections and order in sessionStorage
-          sessionStorage.setItem("peppol_sections", JSON.stringify(data.peppol_sections || {}));
-          sessionStorage.setItem("peppol_sections_order", JSON.stringify(data.sections_order || []));
+          const xmlText = await response.text();
+          
+          // Cache XML string directly in sessionStorage
+          sessionStorage.setItem("peppol_xml_schema", xmlText);
+          setPeppolSections(xmlText);
         }
       } catch (err) {
-        console.error("Error loading PEPPOL structure:", err);
+        console.error("Error loading PEPPOL structure V2:", err);
       }
     };
     
     // Try to load from cache first
-    const cached = sessionStorage.getItem("peppol_sections");
-    if (cached) {
-      setPeppolSections(JSON.parse(cached));
+    const cachedXml = sessionStorage.getItem("peppol_xml_schema");
+    if (cachedXml) {
+      setPeppolSections(cachedXml);
     }
     
     // Always fetch to ensure fresh data

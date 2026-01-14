@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS documents(
     content_type TEXT,
     invoice_data_raw TEXT,
     invoice_data_peppol TEXT,
+    invoice_data_user_corrected TEXT,
     invoice_data_peppol_final TEXT,
     status VARCHAR(50) DEFAULT 'uploaded',
     error_message TEXT,

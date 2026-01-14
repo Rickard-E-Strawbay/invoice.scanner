@@ -1,0 +1,1010 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+    <!-- Basic Components -->
+    <cbc:UBLVersionID 
+        Type="string" 
+        Example="2.1"
+        Description="UBL version identifier." 
+        Obligation="required" 
+        ConditionalDescription="" 
+        BT-ID="BT-2"
+        DisplayContext="Invoice.Meta"
+        DisplayName="UBL Version"
+        UBL-XPath="/Invoice/UBLVersionID"
+        Advanced="true"
+        mapid="meta.ubl_version_id">
+    </cbc:UBLVersionID>
+    <cbc:CustomizationID 
+        Type="string" 
+        Example="urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0"
+        Description="Customization identifier." 
+        Obligation="required" 
+        ConditionalDescription="" 
+        BT-ID="BT-3"
+        DisplayContext="Invoice.Meta"
+        DisplayName="Customization ID"
+        UBL-XPath="/Invoice/CustomizationID"
+        Advanced="true"
+        mapid="meta.customization_id">
+    </cbc:CustomizationID>
+    <cbc:ProfileID 
+        Type="string" 
+        Example="urn:fdc:peppol.eu:2017:poacc:billing:01:1.0"
+        Description="Business process profile." 
+        Obligation="required" 
+        ConditionalDescription="" 
+        BT-ID="BT-4"
+        DisplayContext="Invoice.Meta"
+        DisplayName="Profile ID"
+        UBL-XPath="/Invoice/ProfileID"
+        Advanced="true"
+        mapid="meta.profile_id">
+    </cbc:ProfileID>
+    <cbc:ID 
+        Type="string" 
+        Example="INV-1001"
+        Description="Unique invoice identifier." 
+        Obligation="required" 
+        ConditionalDescription="" 
+        BT-ID="BT-5"
+        DisplayContext="Invoice.Meta"
+        DisplayName="Invoice Number"
+        UBL-XPath="/Invoice/ID"
+        mapid="meta.invoice_number">
+    </cbc:ID>
+    <cbc:IssueDate 
+        Type="string" 
+        Format="date"
+        Example="2025-12-17"
+        Description="Invoice issue date." 
+        Obligation="required" 
+        ConditionalDescription="" 
+        BT-ID="BT-6"
+        DisplayContext="Invoice.Meta"
+        DisplayName="Invoice Date"
+        UBL-XPath="/Invoice/IssueDate"
+        mapid="meta.invoice_date">
+    </cbc:IssueDate>
+    <cbc:DueDate 
+        Type="string" 
+        Format="date"
+        Example="2026-01-17"
+        Description="Invoice due date." 
+        Obligation="required" 
+        ConditionalDescription="" 
+        BT-ID="BT-9"
+        DisplayContext="Invoice.Meta"
+        DisplayName="Due Date"
+        UBL-XPath="/Invoice/DueDate"
+        mapid="meta.due_date">
+    </cbc:DueDate>
+    <cbc:InvoiceTypeCode 
+        Type="string" 
+        Example="380"
+        Description="Invoice type code (380=Invoice, 381=Credit Note, 383=Debit Note)." 
+        Obligation="required" 
+        ConditionalDescription="" 
+        BT-ID="BT-7"
+        DisplayContext="Invoice.Meta"
+        DisplayName="Invoice Type"
+        UBL-XPath="/Invoice/InvoiceTypeCode"
+        Advanced="true"
+        mapid="meta.invoice_type_code">
+    </cbc:InvoiceTypeCode>
+    <cbc:Note
+        Type="string" 
+        Example="Thank you for your business!"
+        Description="Free text note." 
+        Obligation="optional" 
+        ConditionalDescription="" 
+        BT-ID="BT-11"
+        DisplayContext="Invoice.Meta"
+        UBL-XPath="/Invoice/Note"
+        Advanced="true"
+        mapid="meta.invoice_note">
+    </cbc:Note>  
+    <cbc:DocumentCurrencyCode 
+        Type="string" 
+        Example="EUR"
+        Description="Invoice currency code." 
+        Obligation="required" 
+        ConditionalDescription="" 
+        BT-ID="BT-8"
+        DisplayContext="Invoice.Meta"
+        DisplayName="Currency"
+        UBL-XPath="/Invoice/DocumentCurrencyCode"
+        mapid="meta.currency_code">
+    </cbc:DocumentCurrencyCode>
+    <cbc:BuyerReference 
+        Type="string" 
+        Example="AB-123"
+        Description="Buyer internal reference." 
+        Obligation="conditional" 
+        ConditionalDescription="Mandatory if OrderReference is absent." 
+        BT-ID="BT-10"
+        DisplayContext="Invoice.Meta"
+        DisplayName="Buyer Reference"
+        UBL-XPath="/Invoice/BuyerReference"
+        Advanced="true"
+        mapid="meta.buyer_reference">
+    </cbc:BuyerReference>
+    <!-- REFERENCES TO EARLIER DOCUMENTS-->
+    <cac:OrderReference>
+        <cbc:ID 
+            Type="string" 
+            Example="PO-456"
+            Description="Purchase order identifier." 
+            Obligation="conditional" 
+            ConditionalDescription="Mandatory if BuyerReference is absent." 
+            BT-ID="BT-21"
+            DisplayContext="Invoice.Meta"
+            DisplayName="Purchase Order Number"
+            UBL-XPath="/Invoice/OrderReference/ID"
+            Advanced="true"
+            mapid="order.reference_number">
+    </cbc:ID>
+        <cbc:DocumentID 
+            Type="string" 
+            Example="PO-456"
+            Description="Referenced document ID." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-120"
+            DisplayContext="Invoice.Meta"
+            DisplayName="Document ID"
+            UBL-XPath="/Invoice/OrderReference/ID"
+            mapid="order.document_id">
+    </cbc:DocumentID>
+        <cbc:IssueDate 
+            Type="string" 
+            Format="date"
+            Example="2025-12-01"
+            Description="Purchase order issue date." 
+            Obligation="conditional" 
+            ConditionalDescription="Mandatory if Purchase order is referenced." 
+            BT-ID="BT-22"
+            DisplayContext="Invoice.Meta"
+            DisplayName="Order Date"
+            UBL-XPath="/Invoice/OrderReference/IssueDate"
+            Advanced="true"
+            mapid="order.issue_date">
+    </cbc:IssueDate>
+    </cac:OrderReference>
+    <cac:DispatchDocumentReference>
+        <cbc:ID 
+            Type="string" 
+            Example="DD-789"
+            Description="Dispatch document identifier." 
+            Obligation="optional" 
+            ConditionalDescription="" 
+            BT-ID="BT-23"
+            DisplayContext="Invoice.Meta"
+            DisplayName="Dispatch Document Number"
+            UBL-XPath="/Invoice/DispatchDocumentReference/ID"
+            mapid="dispatch.document_number">
+    </cbc:ID>
+        <cbc:IssueDate 
+            Type="string" 
+            Format="date"
+            Example="2025-12-15"
+            Description="Dispatch document issue date." 
+            Obligation="optional" 
+            ConditionalDescription="" 
+            BT-ID="BT-24"
+            DisplayContext="Invoice.Meta"
+            DisplayName="Dispatch Date"
+            UBL-XPath="/Invoice/DispatchDocumentReference/IssueDate"
+            mapid="dispatch.issue_date">
+    </cbc:IssueDate>
+    </cac:DispatchDocumentReference>
+    <!-- PROJECTS AND EXTERNAL1 REFERENCES -->
+    <cac:ProjectReference>
+        <cbc:ID 
+            Type="string" 
+            Example="PRJ-001"
+            Description="Project identifier." 
+            Obligation="optional" 
+            ConditionalDescription="" 
+            BT-ID="BT-25"
+            DisplayContext="Invoice.Meta"
+            DisplayName="Project ID"
+            UBL-XPath="/Invoice/ProjectReference/ID"
+            Advanced="true"
+            mapid="project.id">
+    </cbc:ID>
+    </cac:ProjectReference>
+    <cac:AdditionalDocumentReference>
+        <cbc:ID 
+            Type="string" 
+            Example="DOC-123"
+            Description="Additional document identifier." 
+            Obligation="optional" 
+            ConditionalDescription="" 
+            BT-ID="BT-26"
+            DisplayContext="Invoice.Meta"
+            DisplayName="Document Reference"
+            UBL-XPath="/Invoice/AdditionalDocumentReference/ID"
+            Advanced="true"
+            mapid="additional_document.id">
+    </cbc:ID>
+        <cbc:DocumentType 
+            Type="string" 
+            Example="Summary of invoiced items"
+            Description="Type of additional document. or the title of the document." 
+            Obligation="optional" 
+            ConditionalDescription="" 
+            BT-ID="BT-27"
+            DisplayContext="Invoice.Meta"
+            DisplayName="Document Type"
+            UBL-XPath="/Invoice/AdditionalDocumentReference/DocumentType"
+            Advanced="true"
+            mapid="additional_document.document_type">
+    </cbc:DocumentType>
+    </cac:AdditionalDocumentReference>
+    <!-- PARTIES -->
+    <cac:AccountingSupplierParty>
+        <cac:Party>
+            <cbc:EndpointID 
+                Type="string" 
+                Example="0088:1234567890123"
+                Description="Seller PEPPOL endpoint ID." 
+                Obligation="required" 
+                ConditionalDescription="" 
+                BT-ID="BT-12"
+                DisplayContext="Supplier"
+                DisplayName="PEPPOL ID"
+                UBL-XPath="/Invoice/AccountingSupplierParty/Party/EndpointID"
+                schemeID="0007"
+                mapid="supplier.peppol_id">
+            </cbc:EndpointID> 
+            <cbc:GLN
+                Type="string" 
+                Example="7300020000107"
+                Description="GLN, Seller Global Location Number." 
+                Obligation="optional" 
+                ConditionalDescription="" 
+                DisplayContext="Supplier"
+                DisplayName="GLN"
+                mapid="supplier.gln">
+            </cbc:GLN> 
+            <cac:PartyName>
+                <cbc:Name 
+                    Type="string" 
+                    Example="ABC Supplies Ltd"
+                    Description="Seller legal name." 
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-13"
+                    DisplayContext="Supplier"
+                    DisplayName="Supplier Name"
+                    UBL-XPath="/Invoice/AccountingSupplierParty/Party/PartyName/Name" 
+                    mapid="supplier.name">
+                </cbc:Name>
+            </cac:PartyName>
+            <cac:PostalAddress>
+                <cbc:StreetName 
+                    Type="string" 
+                    Example="Main Street 1"
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-163"
+                    Description="Street of seller address."
+                    DisplayContext="Supplier"
+                    DisplayName="Street Address" 
+                    mapid="supplier.address.street">
+                </cbc:StreetName>
+                <cbc:CityName 
+                    Type="string" 
+                    Example="Malmö"
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-164"
+                    Description="City of seller address."
+                    DisplayContext="Supplier"
+                    DisplayName="City"
+                    mapid="supplier.address.city">
+                </cbc:CityName>
+                <cbc:PostalZone 
+                    Type="string" 
+                    Example="21145"
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-162"
+                    Description="PostalCode of seller address."
+                    DisplayContext="Supplier"
+                    DisplayName="Postal Code"
+                    mapid="supplier.address.postal_code">
+                </cbc:PostalZone>
+                <cac:Country>
+                    <cbc:IdentificationCode 
+                        Type="string" 
+                        Example="SE"
+                        Obligation="required" 
+                        ConditionalDescription="" 
+                        BT-ID="BT-165"
+                        Description="CountryCode of seller address."
+                        DisplayContext="Supplier"
+                        DisplayName="Country" 
+                        mapid="supplier.address.country">
+                    </cbc:IdentificationCode>
+                </cac:Country>
+            </cac:PostalAddress>
+            <cac:PartyTaxScheme>
+                <cbc:CompanyID 
+                    Type="string" 
+                    Example="SE556677889901"
+                    Description="Seller VAT identifier." 
+                    Obligation="conditional" 
+                    ConditionalDescription="Required if Seller is registered for VAT in any EU or PEPPOL network country." 
+                    BT-ID="BT-15"
+                    DisplayContext="Supplier"
+                    DisplayName="VAT Number"
+                    UBL-XPath="/Invoice/AccountingSupplierParty/Party/PartyTaxScheme/CompanyID"
+                    mapid="supplier.vat_number">
+                </cbc:CompanyID>
+                <cac:TaxScheme>
+                    <cbc:ID 
+                        Type="string" 
+                        Example="VAT"
+                        Description="Tax scheme ID." 
+                        Obligation="required" 
+                        ConditionalDescription=""
+                        DisplayContext="Supplier"
+                        DisplayName="Tax Scheme" 
+                        Advanced="true"
+                        mapid="supplier.tax_scheme">
+    </cbc:ID>
+                </cac:TaxScheme>
+            </cac:PartyTaxScheme>
+            <cac:PartyLegalEntity>
+                <cbc:RegistrationName 
+                    Type="string" 
+                    Example="ABC Supplies Ltd"
+                    Description="Seller legal name." 
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-13"
+                    DisplayContext="Supplier"
+                    DisplayName="Legal Name"
+                    mapid="supplier.legal_name">
+    </cbc:RegistrationName>
+                <cbc:CompanyID 
+                    Type="string" 
+                    Example="SE5566778899"
+                    Description="Seller legal registration number." 
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-14"
+                    DisplayContext="Supplier"
+                    DisplayName="Company Registration Number"
+                    UBL-XPath="/Invoice/AccountingSupplierParty/Party/PartyLegalEntity/CompanyID" 
+                    mapid="supplier.legal_registration_number">
+    </cbc:CompanyID>
+            </cac:PartyLegalEntity>
+        </cac:Party>
+    </cac:AccountingSupplierParty>
+    <cac:AccountingCustomerParty>
+        <cac:Party>
+            <cbc:EndpointID 
+                Type="string" 
+                Example="0088:9876543210987"
+                Description="Buyer PEPPOL endpoint ID." 
+                Obligation="required" 
+                ConditionalDescription="" 
+                BT-ID="BT-16"
+                DisplayContext="Customer"
+                DisplayName="PEPPOL ID"
+                UBL-XPath="/Invoice/AccountingCustomerParty/Party/EndpointID"
+                schemeID="0007"
+                mapid="customer.peppol_id">
+    </cbc:EndpointID>
+            <cac:PartyName>
+                <cbc:Name 
+                    Type="string" 
+                    Example="XYZ Enterprises AB"
+                    Description="Buyer legal name." 
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-17"
+                    DisplayContext="Customer"
+                    DisplayName="Customer Name"
+                    UBL-XPath="/Invoice/AccountingCustomerParty/Party/PartyName/Name"
+                    mapid="customer.name">
+    </cbc:Name>
+            </cac:PartyName>
+            <cac:PostalAddress>
+                <cbc:StreetName 
+                    Type="string" 
+                    Example="Second Ave 55"
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-49"
+                    Description="Street of buyer address."
+                    DisplayContext="Customer"
+                    DisplayName="Street Address"
+                    mapid="customer.address.street">
+    </cbc:StreetName>
+                <cbc:CityName 
+                    Type="string" 
+                    Example="Stockholm"
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-50"
+                    Description="City of buyer address."
+                    DisplayContext="Customer"
+                    DisplayName="City"
+                    mapid="customer.address.city">
+    </cbc:CityName>
+                <cbc:PostalZone 
+                    Type="string" 
+                    Example="11460"
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-48"
+                    Description="PostalCode of buyer address."
+                    DisplayContext="Customer"
+                    DisplayName="Postal Code"
+                    mapid="customer.address.postal_code">
+    </cbc:PostalZone>
+                <cac:Country>
+                    <cbc:IdentificationCode 
+                        Type="string" 
+                        Example="SE"
+                        Obligation="required" 
+                        ConditionalDescription="" 
+                        BT-ID="BT-51"
+                        Description="CountryCode of buyer address."
+                        DisplayContext="Customer"
+                        DisplayName="Country"
+                        mapid="customer.address.country">
+    </cbc:IdentificationCode>
+                </cac:Country>
+            </cac:PostalAddress>
+            <cac:PartyLegalEntity>
+                <cbc:RegistrationName 
+                    Type="string" 
+                    Example="XYZ Enterprises AB"
+                    Description="Buyer legal name." 
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-17"
+                    DisplayContext="Customer"
+                    DisplayName="Legal Name"
+                    mapid="customer.legal_name">
+    </cbc:RegistrationName>
+                <cbc:CompanyID 
+                    Type="string" 
+                    Example="SE9988776655"
+                    Description="Buyer legal registration number." 
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-18"
+                    DisplayContext="Customer"
+                    DisplayName="Company Registration Number"
+                    UBL-XPath="/Invoice/AccountingCustomerParty/Party/PartyLegalEntity/CompanyID"
+                    mapid="customer.legal_registration_number">
+    </cbc:CompanyID>
+            </cac:PartyLegalEntity>
+        </cac:Party>
+    </cac:AccountingCustomerParty>
+    <cac:PayeeParty>
+        <cac:Party>
+            <cbc:EndpointID 
+                Type="string" 
+                Example="0088:1231231231231"
+                Description="Payee PEPPOL endpoint ID." 
+                Obligation="optional" 
+                ConditionalDescription="" 
+                BT-ID="BT-19"
+                DisplayContext="Payment"
+                DisplayName="PEPPOL ID"
+                UBL-XPath="/Invoice/PayeeParty/Party/EndpointID"
+                schemeID="0007"
+                mapid="payee.peppol_id">
+    </cbc:EndpointID>
+            <cac:PartyName>
+                <cbc:Name 
+                    Type="string" 
+                    Example="ABC Supplies Ltd"
+                    Description="Payee legal name." 
+                    Obligation="optional" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-138"
+                    DisplayContext="Payment"
+                    DisplayName="Payee Name"
+                    UBL-XPath="/Invoice/PayeeParty/Party/PartyName/Name"
+                    mapid="payee.name">
+    </cbc:Name>
+            </cac:PartyName>
+        </cac:Party>
+    </cac:PayeeParty>   
+    <cac:TaxRepresentativeParty>
+        <cac:Party>
+            <cac:PartyName>
+                <cbc:Name 
+                    Type="string" 
+                    Example="Tax Agent Ltd"
+                    Description="Tax representative legal name." 
+                    Obligation="optional" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-152"
+                    DisplayContext="Tax"
+                    DisplayName="Tax Representative Name"
+                    UBL-XPath="/Invoice/TaxRepresentativeParty/Party/PartyName/Name"
+                    mapid="tax_representative.name">
+            </cbc:Name>
+            </cac:PartyName>
+        </cac:Party>
+    </cac:TaxRepresentativeParty>
+    <!-- DELIVERY DETAILS -->
+    <cac:Delivery DisplayName="Delivery">
+        <cbc:ActualDeliveryDate 
+            DisplayContext="Delivery"
+            DisplayName="Delivery Date"
+            Obligation="optional" 
+            mapid="delivery.actual_delivery_date">
+    </cbc:ActualDeliveryDate>
+        <cac:DeliveryLocation>
+            <cbc:ID schemeID="0088">
+    </cbc:ID>
+            <cac:Address>
+                <cbc:StreetName 
+                    DisplayContext="Delivery"
+                    DisplayName="Street Address"
+                    Obligation="optional" 
+                    mapid="delivery.address.street">
+    </cbc:StreetName>
+                <cbc:AdditionalStreetName 
+                    DisplayContext="Delivery"
+                    DisplayName="Additional Address"
+                    Obligation="optional" 
+                    mapid="delivery.address.additional_street">
+    </cbc:AdditionalStreetName>
+                <cbc:CityName 
+                    DisplayContext="Delivery"
+                    DisplayName="City"
+                    Obligation="optional" 
+                    mapid="delivery.address.city">
+    </cbc:CityName>
+                <cbc:PostalZone 
+                    DisplayContext="Delivery"
+                    DisplayName="Postal Code"
+                    Obligation="optional" 
+                    mapid="delivery.address.postal_code">
+    </cbc:PostalZone>
+                <cac:Country>
+                    <cbc:IdentificationCode 
+                        DisplayContext="Delivery"
+                        DisplayName="Country"
+                        Obligation="optional" 
+                        mapid="delivery.address.country">
+    </cbc:IdentificationCode>
+                </cac:Country>
+            </cac:Address>
+        </cac:DeliveryLocation>
+        <cac:DeliveryParty>
+            <cac:PartyName>
+                <cbc:Name 
+                    DisplayContext="Delivery"
+                    DisplayName="Delivery Party Name"
+                    Obligation="optional"
+                    mapid="delivery.party_name">
+                </cbc:Name>
+            </cac:PartyName>
+        </cac:DeliveryParty>
+    </cac:Delivery>
+    <!-- PAYMENT DETAILS -->
+    <cac:PaymentMeans>
+        <cbc:PaymentMeansCode 
+            Type="string" 
+            Example="30"
+            Description="Payment means code (30=Bank transfer, 58=SEPA, etc)." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-81"
+            DisplayContext="Payment"
+            DisplayName="Payment Method"
+            UBL-XPath="/Invoice/PaymentMeans/PaymentMeansCode"
+            Advanced="true" 
+            mapid="payment.payment_means_code">
+    </cbc:PaymentMeansCode> 
+        <cac:PayeeFinancialAccount>
+            <cbc:ID 
+                Type="string" 
+                Example="SE3550000000054910000003"
+                Description="International Bank Account Number." 
+                Obligation="conditional" 
+                ConditionalDescription="Required if paymentMeansCode indicates bank transfer and bankCode is not provided." 
+                BT-ID="BT-84"
+                DisplayContext="Payment"
+                DisplayName="Bank Account Number"
+                Advanced="true" 
+                mapid="payment.bank_account_number">
+    </cbc:ID> 
+        </cac:PayeeFinancialAccount>
+    </cac:PaymentMeans>
+    <cac:PaymentTerms>
+        <cbc:Note 
+            BT-ID="BT-20"
+            DisplayContext="Payment"
+            DisplayName="Payment Terms"
+            Obligation="optional" 
+            Advanced="true" 
+            mapid="payment.terms">
+    </cbc:Note>
+    </cac:PaymentTerms>
+    <!-- DISCOUNTS AND CHARGES -->
+    <cac:AllowanceCharge>
+        <cbc:ChargeIndicator 
+            Type="boolean" 
+            Example="false"
+            Description="Indicates if this is a charge (true) or an allowance/discount (false)." 
+            Obligation="conditional" 
+            ConditionalDescription="only required if an allowance or charge is present." 
+            BT-ID="BT-139"
+            DisplayContext="Charges.Discounts"
+            DisplayName="Is Charge"
+            UBL-XPath="/Invoice/AllowanceCharge/ChargeIndicator"
+            Advanced="true" 
+            mapid="allowance_charge.is_charge">
+    </cbc:ChargeIndicator>
+        <cbc:AllowanceChargeReason 
+            Type="string" 
+            Example="Early payment discount"
+            Description="Reason code or text for the allowance or charge." 
+            Obligation="conditional" 
+            ConditionalDescription="only required if ChargeIndicator is present." 
+            BT-ID="BT-97"
+            DisplayContext="Charges.Discounts"
+            DisplayName="Reason"
+            UBL-XPath="/Invoice/AllowanceCharge/AllowanceChargeReason"
+            Advanced="true" 
+            mapid="allowance_charge.reason">
+    </cbc:AllowanceChargeReason>
+        <cbc:Amount 
+            Type="number" 
+            Example="50.0"
+            Description="Allowance/charge amount." 
+            Obligation="conditional" 
+            ConditionalDescription="only required if ChargeIndicator is present." 
+            BT-ID="BT-92"
+            DisplayContext="Charges.Discounts"
+            DisplayName="Amount"
+            UBL-XPath="/Invoice/AllowanceCharge/Amount"
+            Advanced="true" 
+            mapid="allowance_charge.amount">    
+    </cbc:Amount>
+    </cac:AllowanceCharge>
+    <cac:TaxExchangeRate DisplayName="Currency Exchange">
+        <cbc:SourceCurrencyCode 
+            Type="string" 
+            Example="EUR"
+            Description="Source currency code." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-180"
+            DisplayContext="Tax"
+            DisplayName="Source Currency"
+            UBL-XPath="/Invoice/TaxExchangeRate/SourceCurrencyCode"
+            Advanced="true" 
+            mapid="tax_exchange_rate.source_currency">
+    </cbc:SourceCurrencyCode>
+        <cbc:TargetCurrencyCode 
+            Type="string" 
+            Example="SEK"
+            Description="Target currency code." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-181"
+            DisplayContext="Tax"
+            DisplayName="Target Currency"
+            UBL-XPath="/Invoice/TaxExchangeRate/TargetCurrencyCode"
+            Advanced="true"
+            mapid="tax_exchange_rate.target_currency">
+    </cbc:TargetCurrencyCode>
+        <cbc:CalculationRate 
+            Type="number" 
+            Example="10.0"
+            Description="Exchange rate." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-182"
+            DisplayContext="Tax"
+            DisplayName="Exchange Rate"
+            UBL-XPath="/Invoice/TaxExchangeRate/CalculationRate"
+            Advanced="true" 
+            mapid="tax_exchange_rate.calculation_rate">
+    </cbc:CalculationRate>
+        <cbc:Date 
+            Type="string" 
+            Format="date"
+            Example="2026-01-10"
+            Description="Exchange rate date." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-183"
+            DisplayContext="Tax"
+            DisplayName="Exchange Rate Date"
+            UBL-XPath="/Invoice/TaxExchangeRate/Date"
+            Advanced="true" 
+            mapid="tax_exchange_rate.date">
+    </cbc:Date>
+    </cac:TaxExchangeRate>
+    <cac:TaxTotal>
+        <cbc:TaxAmount 
+            Type="number" 
+            Example="375.0"
+            Description="Total VAT amount." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-110"
+            DisplayContext="Tax"
+            DisplayName="Total Tax Amount"
+            UBL-XPath="/Invoice/TaxTotal/TaxAmount"
+            currencyID="SEK"
+            mapid="tax_total.total_tax_amount">
+    </cbc:TaxAmount>
+        <cac:TaxSubtotal>
+            <cbc:TaxableAmount 
+                Type="number" 
+                Example="1500.0"
+                Description="Taxable amount in category." 
+                Obligation="required" 
+                ConditionalDescription="" 
+                BT-ID="BT-116"
+                DisplayContext="Tax"
+                DisplayName="Taxable Amount"
+                currencyID="SEK"
+                mapid="tax_total.taxable_amount">
+    </cbc:TaxableAmount>
+    <cbc:TaxAmount 
+                Type="number" 
+                Example="375.0"
+                Description="Tax amount in category." 
+                Obligation="required" 
+                ConditionalDescription="" 
+                BT-ID="BT-117"
+                DisplayContext="Tax"
+                DisplayName="Tax Amount"
+                currencyID="SEK"
+                mapid="tax_total.tax_amount">
+    </cbc:TaxAmount>
+            <cac:TaxCategory>
+                <cbc:ID 
+                    Type="string" 
+                    Example="S"
+                    Description="VAT category code (S=Standard, Z=Zero, E=Exempt, AE=Reverse Charge, etc)." 
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-118"
+                    DisplayContext="Tax"
+                    DisplayName="Tax Category"
+                    Advanced="true" 
+                    mapid="tax_total.tax_category">
+                </cbc:ID>
+                <cbc:Percent 
+                    Type="number" 
+                    Example="25"
+                    Description="VAT rate." 
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-119"
+                    DisplayContext="Tax"
+                    DisplayName="Tax Rate"
+                    mapid="tax_total.tax_rate">
+                </cbc:Percent>
+                <cac:TaxScheme>
+                    <cbc:ID 
+                        Type="string" 
+                        Example="VAT"
+                        Description="Tax scheme ID." 
+                        Obligation="required" 
+                        ConditionalDescription=""
+                        DisplayContext="Tax"
+                        DisplayName="Tax Scheme"
+                        Advanced="true" 
+                        mapid="tax_total.tax_scheme">
+                    </cbc:ID>
+                </cac:TaxScheme>
+            </cac:TaxCategory>
+        </cac:TaxSubtotal>
+    </cac:TaxTotal>
+    <!-- MONETARY TOTALS -->
+    <cac:LegalMonetaryTotal>
+        <cbc:LineExtensionAmount 
+            Type="number" 
+            Example="1500.0"
+            Description="Sum of line extension amounts." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-106"
+            DisplayContext="Totals"
+            DisplayName="Subtotal (before discounts)"
+            UBL-XPath="/Invoice/LegalMonetaryTotal/LineExtensionAmount"
+            currencyID="SEK"
+            mapid="totals.line_extension_amount">
+        </cbc:LineExtensionAmount> 
+        <cbc:TaxExclusiveAmount 
+            Type="number" 
+            Example="1520.0"
+            Description="Total before tax." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-109"
+            DisplayContext="Totals"
+            DisplayName="Total (before tax)"
+            currencyID="SEK"
+            mapid="totals.tax_exclusive_amount">
+        </cbc:TaxExclusiveAmount>
+        <cbc:TaxInclusiveAmount 
+            Type="number" 
+            Example="1900.0"
+            Description="Total including tax." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-112"
+            DisplayContext="Totals"
+            DisplayName="Total (including tax)"
+            currencyID="SEK"
+            mapid="totals.tax_inclusive_amount">
+        </cbc:TaxInclusiveAmount> 
+        <cbc:PayableAmount 
+            Type="number" 
+            Example="1900.0"
+            Description="Amount due for payment." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-115"
+            DisplayContext="Totals"
+            DisplayName="Amount Due"
+            currencyID="SEK"
+            mapid="totals.payable_amount">
+    </cbc:PayableAmount>
+    </cac:LegalMonetaryTotal>
+    <!-- INVOICE LINES -->
+    <cac:InvoiceLine>
+        <cbc:ID 
+            Type="string" 
+            Example="1"
+            Description="Invoice line identifier." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-126"
+            DisplayContext="LineItem"
+            DisplayName="Line Number"
+            UBL-XPath="/Invoice/InvoiceLine/ID"
+            mapid="line_item.line_number">
+        </cbc:ID>
+        <cbc:InvoicedQuantity 
+            Type="number" 
+            Example="10"
+            Description="Invoiced quantity." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-129"
+            DisplayContext="LineItem"
+            DisplayName="Quantity"
+            UBL-XPath="/Invoice/InvoiceLine/InvoicedQuantity"
+            mapid="line_item.quantity">
+        </cbc:InvoicedQuantity>
+        <cbc:UnitCode 
+            Type="string" 
+            Example="HUR"
+            Description="Unit code (HUR=hour, DAY=day, etc)." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-130"
+            DisplayContext="LineItem"
+            DisplayName="Unit"
+            UBL-XPath="/Invoice/InvoiceLine/InvoicedQuantity/@unitCode"
+            mapid="line_item.unit">
+        </cbc:UnitCode> 
+        <cbc:LineExtensionAmount 
+            Type="number" 
+            Example="1500.0"
+            Description="Line extension amount (quantity × unit price + charges - allowances)." 
+            Obligation="required" 
+            ConditionalDescription="" 
+            BT-ID="BT-131"
+            DisplayContext="LineItem"
+            DisplayName="Line Total"
+            UBL-XPath="/Invoice/InvoiceLine/LineExtensionAmount"
+            currencyID="SEK"
+            mapid="line_item.line_total">
+        </cbc:LineExtensionAmount>
+        <cac:Item>
+            <cbc:Name 
+                Type="string" 
+                Example="Consulting services"
+                Description="Item name." 
+                Obligation="required" 
+                ConditionalDescription="" 
+                BT-ID="BT-153"
+                DisplayContext="LineItem"
+                DisplayName="Description"
+                UBL-XPath="/Invoice/InvoiceLine/Item/Name"
+                mapid="line_item.description">
+            </cbc:Name>
+            <cac:ClassifiedTaxCategory>
+                <cbc:ID 
+                    Type="string" 
+                    Example="S"
+                    Description="VAT category code (S=Standard, Z=Zero, E=Exempt, AE=Reverse Charge, etc)." 
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-151"
+                    DisplayContext="LineItem"
+                    DisplayName="Tax Category"
+                    UBL-XPath="/Invoice/InvoiceLine/TaxTotal/TaxSubtotal/TaxCategory/ID"
+                    mapid="line_item.tax_category">
+                </cbc:ID>
+                <cbc:Percent 
+                    Type="number" 
+                    Example="25"
+                    Description="VAT rate percentage." 
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-152"
+                    DisplayContext="LineItem"
+                    DisplayName="Tax Rate"
+                    UBL-XPath="/Invoice/InvoiceLine/TaxTotal/TaxSubtotal/Percent"
+                    mapid="line_item.tax_rate">
+                </cbc:Percent>
+                <cbc:TaxAmount 
+                    Type="number" 
+                    Example="250.0"
+                    Description="VAT amount on line." 
+                    Obligation="required" 
+                    ConditionalDescription="" 
+                    BT-ID="BT-150"
+                    DisplayContext="LineItem"
+                    DisplayName="Tax Amount"
+                    UBL-XPath="/Invoice/InvoiceLine/TaxTotal/TaxAmount"
+                    currencyID="SEK"
+                    mapid="line_item.tax_amount">
+                </cbc:TaxAmount>
+                <cac:TaxScheme>
+                    <cbc:ID 
+                        Type="string" 
+                        Example="VAT"
+                        Description="Tax scheme ID." 
+                        Obligation="required" 
+                        ConditionalDescription=""
+                        DisplayContext="LineItem"
+                        DisplayName="Tax Scheme"
+                        mapid="line_item.tax_scheme">
+                    </cbc:ID>
+                </cac:TaxScheme>
+            </cac:ClassifiedTaxCategory>
+        </cac:Item>
+        <cac:Price>
+            <cbc:PriceAmount 
+                Type="number" 
+                Example="150.0"
+                Description="Net unit price." 
+                Obligation="required" 
+                ConditionalDescription="" 
+                BT-ID="BT-131"
+                DisplayContext="LineItem"
+                DisplayName="Unit Price"
+                UBL-XPath="/Invoice/InvoiceLine/Price/PriceAmount"
+                currencyID="SEK"
+                mapid="line_item.unit_price">
+            </cbc:PriceAmount>
+            <cbc:BaseQuantity 
+                Type="number" 
+                Example="1"
+                Description="Base quantity for unit price." 
+                Obligation="required" 
+                ConditionalDescription="" 
+                BT-ID="BT-132"
+                DisplayContext="LineItem"
+                DisplayName="Base Quantity"
+                UBL-XPath="/Invoice/InvoiceLine/Price/BaseQuantity"
+                mapid="line_item.base_quantity">
+            </cbc:BaseQuantity>
+        </cac:Price>
+    </cac:InvoiceLine>
+</Invoice>

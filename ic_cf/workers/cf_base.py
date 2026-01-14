@@ -86,10 +86,18 @@ class cf_base:
             "content": file_content
         }
     
-    def _update_document_status(self, document_status: str, error_message: Optional[str] = None):
+    def _update_document_status(self, document_status: str, error_message: Optional[str] = None, dict_key_val:dict = None) -> bool:
         """Update document status in the database."""
         self.logger.info(f"NEW STATUS {document_status} for document {self.document_id}")
-        return update_document_status(self.document_id, document_status)
+        return update_document_status(self.document_id, document_status, dict_key_val)
+    
+    def _load_document_data(self) -> dict:
+        """Load full document data from database."""
+        from ic_shared.database.document_operations import get_document_data
+        document_data = get_document_data(self.document_id)
+        if not document_data:
+            raise ValueError(f"Document data not found for ID: {self.document_id}")
+        return document_data
     
     def __find_next_stage(self) -> Optional[str]:
         try:

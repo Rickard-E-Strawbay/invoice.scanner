@@ -45,6 +45,11 @@ class StorageService(ABC):
     def exists(self, file_path: str) -> bool:
         """Check if file exists"""
         pass
+    
+    @abstractmethod
+    def get_schema(self, schema_name: str) -> Optional[str]:
+        """Retrieve schema file as string (XML, JSON, etc)"""
+        pass
 
 
 class LocalStorageService(StorageService):
@@ -123,6 +128,33 @@ class LocalStorageService(StorageService):
         """Check if file exists locally"""
         full_path = self.base_path / file_path
         return full_path.exists()
+    
+    def get_schema(self, schema_name: str) -> Optional[str]:
+        """Retrieve schema file (peppol.xml, invoice_template.json, etc) from shared utils"""
+        # Schema files are stored in ic_shared/utils/[type]/ directories
+        schema_paths = [
+            # Local development paths
+            Path(__file__).parent / schema_name,
+            Path(__file__).parent / 'peppol' / schema_name,
+            Path(__file__).parent.parent.parent.parent / 'ic_shared' / 'utils' / schema_name,
+            Path(__file__).parent.parent.parent.parent / 'ic_shared' / 'utils' / 'peppol' / schema_name,
+        ]
+        
+        logger.info(f"[get_schema] Looking for schema: {schema_name}")
+        for path in schema_paths:
+            logger.debug(f"[get_schema] Checking path: {path} (exists: {path.exists()})")
+            try:
+                if path.exists():
+                    with open(path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        logger.info(f"✅ [get_schema] Loaded schema from: {path} ({len(content)} bytes)")
+                        return content
+            except Exception as e:
+                logger.warning(f"❌ [get_schema] Could not load schema from {path}: {e}")
+                continue
+        
+        logger.error(f"❌ [get_schema] Schema not found: {schema_name}")
+        return None
 
 
 class GCSStorageService(StorageService):
@@ -285,6 +317,28 @@ class GCSStorageService(StorageService):
                     client.close()
                 except Exception as e:
                     logger.warning(f"Warning closing GCS client: {e}")
+    
+    def get_schema(self, schema_name: str) -> Optional[str]:
+        """Retrieve schema file from GCS (peppol.xml, invoice_template.json, etc)"""
+        # Schema files stored in GCS under 'schemas/' prefix
+        schema_paths = [
+            f"schemas/{schema_name}",
+            f"schemas/peppol/{schema_name}",
+            schema_name,
+        ]
+        
+        for schema_path in schema_paths:
+            try:
+                content = self.get(schema_path)
+                if content:
+                    logger.info(f"Loaded schema from GCS: {schema_path}")
+                    return content.decode('utf-8')
+            except Exception as e:
+                logger.debug(f"Could not load schema from {schema_path}: {e}")
+                continue
+        
+        logger.warning(f"Schema not found in GCS: {schema_name}")
+        return None
 
 
 def get_storage_service() -> StorageService:

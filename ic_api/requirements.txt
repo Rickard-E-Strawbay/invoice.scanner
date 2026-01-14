@@ -12,6 +12,8 @@ flask-smorest==0.46.2
 apispec[marshmallow]==6.8.4
 marshmallow<4.0.0,>=3.0.0
 flask_cors
+pydantic>=2.0.0
+email-validator
 anthropic
 google-generativeai
 

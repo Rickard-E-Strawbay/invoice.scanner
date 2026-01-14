@@ -1,11 +1,14 @@
 import json
 import os
+import re
+import requests
 from workers.cf_base import cf_base
 from ic_shared.utils.peppol_manager import PeppolManager
 from ic_shared.database.connection import fetch_all, execute_sql
+from ic_shared.database.document_operations import apply_peppol_json_template
 
 from ic_shared.configuration.defines import ENTER, EXIT
-from ic_shared.configuration.defines import EXTRACTION_STATUS
+from ic_shared.configuration.defines import EXTRACTION_STATUS, PEPPOL_DEFAULTS
 from ic_shared.logging import ComponentLogger
 
 logger = ComponentLogger("cf_extract_structured_data")
@@ -26,33 +29,54 @@ class cf_extract_structured_data(cf_base):
 
         self._update_document_status(ENTER_STATUS)
 
+
+
         # Map raw invoice data to structured PEPPOL data
         try:
-            peppol_data = self._map_to_peppol()
-            self.logger.success(f"✅ Mapped {len(peppol_data)} PEPPOL sections")
+
+            dict_full_data = self._load_document_data()
+            peppol_str = dict_full_data.get("invoice_data_raw")
+            invoice_data_peppol = json.loads(peppol_str) if isinstance(peppol_str, str) else (peppol_str or {})
+           
+            # Merge PEPPOL defaults with nested structure - defaults fill missing values
+            invoice_data_peppol = apply_peppol_json_template(invoice_data_peppol, PEPPOL_DEFAULTS)
+
+            # Save extracted and post predict adjusted PEPPOL data to database
+            self._save_to_peppol(invoice_data_peppol)
+
+            # peppol_data = self._map_to_peppol()
+            # self.logger.success(f"✅ Mapped {len(peppol_data)} PEPPOL sections")
             
+
+
+
+
+
+
             # Save to database
-            self._save_to_peppol(peppol_data)
-            self.logger.success(f"✅ Saved PEPPOL data to invoice_data_peppol")
+            #self._save_to_peppol("{}")
+            #self._save_to_peppol_final("{}")
+
+            #self.logger.success(f"✅ Saved PEPPOL data to invoice_data_peppol")
             
             # Merge with final data (invoice_data_peppol_final takes precedence)
-            peppol_final = self._get_peppol_final_data()
-            print("****************************************")
-            print(peppol_data)
-            print("****************************************")
+            #peppol_final = self._get_peppol_final_data()
+            #print("****************************************")
+            #print(peppol_data)
+            #print("****************************************")
 
-            print("****************************************")
-            print(peppol_final)
-            print("****************************************")
-            if peppol_final:
-                peppol_data = self._merge_peppol_with_final(peppol_data, peppol_final)
-                print("****************************************")
-                print(peppol_final)
-                print("****************************************")
-                self.logger.success(f"✅ Merged with final PEPPOL data ({len(peppol_final)} sections)")
+            #print("****************************************")
+            #print(peppol_final)
+            #print("****************************************")
+            # if peppol_final:
+            #    peppol_data = self._merge_peppol_with_final(peppol_data, peppol_final)
+            #    print("****************************************")
+            #    print(peppol_final)
+            #    print("****************************************")
+            #    self.logger.success(f"✅ Merged with final PEPPOL data ({len(peppol_final)} sections)")
                 
             # Save merged data back to database
-            self._save_to_peppol_final(peppol_data)
+            # self._save_to_peppol_final(peppol_data)
             self.logger.success(f"✅ Saved merged PEPPOL data to invoice_data_peppol")
             
         except Exception as e:
@@ -188,6 +212,28 @@ class cf_extract_structured_data(cf_base):
         
         return current
     
+    def _merge_defaults_into_peppol(self, peppol_data: dict, defaults: dict):
+        """Merge nested PEPPOL defaults into peppol_data.
+        
+        Defaults fill in missing or empty values - they don't override existing LLM predictions.
+        Works recursively for nested structures matching invoice_template.json format.
+        """
+        for section_key, section_value in defaults.items():
+            # If section doesn't exist in peppol_data, create it
+            if section_key not in peppol_data:
+                peppol_data[section_key] = {}
+            
+            # If default value is a dict, merge nested structure
+            if isinstance(section_value, dict):
+                for field_key, default_field_value in section_value.items():
+                    # Set if field doesn't exist OR if field is empty/falsy
+                    if field_key not in peppol_data[section_key] or not peppol_data[section_key][field_key]:
+                        peppol_data[section_key][field_key] = default_field_value
+            else:
+                # For non-dict values, only set if section was empty
+                if not peppol_data[section_key]:
+                    peppol_data[section_key] = section_value
+
     def _save_to_peppol(self, peppol_data: dict):
         """Save auto-mapped PEPPOL data to invoice_data_peppol."""
         peppol_json = json.dumps(peppol_data)
