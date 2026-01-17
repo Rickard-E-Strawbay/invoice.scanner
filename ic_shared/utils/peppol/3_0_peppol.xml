@@ -157,7 +157,7 @@
             UBL-XPath="/Invoice/OrderReference/ID"
             mapid="order.document_id">
     </cbc:DocumentID>
-        <cbc:IssueDate 
+        <cbc:IssueDate  
             Type="string" 
             Format="date"
             Example="2025-12-01"
@@ -355,7 +355,7 @@
                         DisplayName="Tax Scheme" 
                         Advanced="true"
                         mapid="supplier.tax_scheme">
-    </cbc:ID>
+                    </cbc:ID>
                 </cac:TaxScheme>
             </cac:PartyTaxScheme>
             <cac:PartyLegalEntity>
@@ -369,7 +369,7 @@
                     DisplayContext="Supplier"
                     DisplayName="Legal Name"
                     mapid="supplier.legal_name">
-    </cbc:RegistrationName>
+                </cbc:RegistrationName>
                 <cbc:CompanyID 
                     Type="string" 
                     Example="SE5566778899"
@@ -381,7 +381,7 @@
                     DisplayName="Company Registration Number"
                     UBL-XPath="/Invoice/AccountingSupplierParty/Party/PartyLegalEntity/CompanyID" 
                     mapid="supplier.legal_registration_number">
-    </cbc:CompanyID>
+                </cbc:CompanyID>
             </cac:PartyLegalEntity>
         </cac:Party>
     </cac:AccountingSupplierParty>

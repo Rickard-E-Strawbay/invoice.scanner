@@ -53,7 +53,8 @@
         "taxable_amount": {"v":"", "p":null},
         "tax_amount": {"v":"", "p":null},
         "tax_category": {"v":"", "p":null},
-        "tax_scheme": {"v":"", "p":null}
+        "tax_scheme": {"v":"", "p":null},
+        "tax_rate": {"v": "", "p": null}
     },
     "totals": {
         "line_extension_amount": {"v":"", "p":null},

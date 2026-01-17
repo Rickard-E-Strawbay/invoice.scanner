@@ -17,17 +17,19 @@ If any data point is not present in the document, you must use an empty string a
 
 You need to make a serious effort to identfy all invoice lines. Create one object in the 'line_items' array for each physical line found in the document. 
 
-We are primarily handling regular invoices, meaning that meta.invoice_number can be expected to be found on first page in the document,
-and would not cobe called antain anything like "VAT", "Moms", etc.
+We are primarily handling regular invoices, meaning that meta.invoice_number is expected to be found on the first page of the document,
+and will not be labeled with keywords like 'VAT', 'Moms', etc.
 
 
-Global Location Number (gln): GLN is a 13 digit code beginning with a country specific prefix. 
+Global Location Number (gln): 
+GLN is a 13 digit code beginning with a country specific prefix. 
 Sverige: 730 – 739 
 Finland: 640 – 649
 Norge700 – 709
 Rule: if no explixit supplier.peppol_id can be found, but the supplier.gln can be found, you may also use the supplier.gln as the supplier.peppol_id
 
-Unit Code Mapping (unit): Interpret the unit description found on the invoice and map it to the corresponding UN/ECE Rec 20/21 code.
+Unit Code Mapping (unit): 
+Interpret the unit description found on the invoice and map it to the corresponding UN/ECE Rec 20/21 code.
 'st', 'styck', 'pcs', 'each' or similar, use 'C62'
 'timmar', 'hours', 'h', 'tim' or similar, use 'HUR'
 'dagar', 'days' or similar, use 'DAY'
@@ -41,6 +43,15 @@ Handling BaseQuantity (base_quantity): Look for the base amount the unit price r
 If the price is listed as "10 SEK / 100 pcs", the unit_price is "10" and the base_quantity is "100".
 If no specific base is mentioned (e.g., just "10 SEK/st"), the base_quantity should default to "1".
 Always ensure that base_quantity is a positive number above zero.
+
+Handling Tax Rate & Scheme Identification:Tax Rate (tax_rate): 
+Locate numbers associated with "VAT", "Moms", "ALV", or followed by "%".
+Standardization: Return only the numerical value as a string (e.g., "25.0" or "25").
+Calculation Fallback: If the rate is not explicit, calculate it: $(\text{tax\_amount} / \text{taxable\_amount}) \times 100$. 
+If the result aligns with a standard rate for the country (e.g., 25, 12, or 6 for SE), use that value.
+Tax Scheme: Default to "VAT" for all EU/Nordic invoices. 
+If the document mentions "Moms", "MVA", or "ALV", map the scheme to "VAT".
+p values for calculated tax_rates must be lower than extracted.
 
 {{json_blob}}
 

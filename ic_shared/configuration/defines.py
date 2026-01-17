@@ -75,7 +75,8 @@ PEPPOL_DEFAULTS = {
         "ubl_version_id":{"v":"2.1","p":1.0},
         "customization_id":{"v":"urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0","p":1.0},
         "profile_id":{"v":"urn:fdc:peppol.eu:2017:billing:01:1.0","p":1.0},
-        "document_type":{"v":"invoice","P":1.0}
+        "document_type":{"v":"invoice","p":1.0},
+        "document_id":{"v":"380","p":1.0}
     },
     "supplier":{
         "tax_scheme":{"v":"VAT","p":1.0}

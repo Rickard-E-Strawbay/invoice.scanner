@@ -20,6 +20,18 @@ class cf_extract_structured_data(cf_base):
         super().__init__(cloud_event, "cf_extract_structured_data")
         self._peppol_manager = PeppolManager()
     
+    def _make_value(self, value, probability=1.0):
+        """Create a value dict with value and probability."""
+        return {"v": value, "p": probability}
+    
+    def _is_empty_value(self, value_dict):
+        """Check if a value dict is empty or has an empty 'v'."""
+        return not value_dict or value_dict.get("v") in [None, "", []]
+    
+    def _get_value(self, value_dict):
+        """Extract the actual value from a value dict."""
+        return value_dict.get("v") if value_dict else None  
+    
     def execute(self):
         """Execute the structured data extraction worker logic."""
         ENTER_STATUS = EXTRACTION_STATUS[ENTER]
@@ -36,27 +48,52 @@ class cf_extract_structured_data(cf_base):
             peppol_str = dict_full_data.get("invoice_data_raw")
             invoice_data_peppol = json.loads(peppol_str) if isinstance(peppol_str, str) else (peppol_str or {})
 
-            print("**************************************")
-            print(invoice_data_peppol)
-            print("**************************************")
-
-            
-
-
             # Merge PEPPOL defaults with nested structure - defaults fill missing values
             invoice_data_peppol = apply_peppol_json_template(invoice_data_peppol, PEPPOL_DEFAULTS)
 
-            # Verify that values added from PEPPOL_DEFAULTS are present and correct
-            # self._validate_peppol_defaults_applied(invoice_data_peppol, PEPPOL_DEFAULTS)
-            
+            content_type = dict_full_data.get("content_type", "")  
+            content_type = json.loads(content_type) if isinstance(content_type, str) else (content_type or {})
 
+            # Adding invocieTypeCode if available
+            invoice_type_code = content_type.get("invoice_type_code", "")
+            invoice_data_peppol["meta"]["invoice_type_code"] = self._make_value(invoice_type_code, 0.9)  
+
+            # Ensure document_id is set, fallback to invoice_number if missing  
+            if self._is_empty_value(invoice_data_peppol["order"]["document_id"]):
+                if not self._is_empty_value(invoice_data_peppol["meta"]["invoice_number"]):
+                    invoice_number = self._get_value(invoice_data_peppol["meta"]["invoice_number"])
+                    invoice_data_peppol["order"]["document_id"] = self._make_value(invoice_number, 0.9)
+
+            # Ensure Due Date is set, fallback to PaymentTerms.PenaltySurchargeDueDate if missing
+            invoice_date = self._get_value(invoice_data_peppol["meta"].get("invoice_date", {}))
+
+            if self._is_empty_value(invoice_data_peppol["meta"]["due_date"]):
+                if invoice_date != "":
+                    invoice_data_peppol["meta"]["due_date"] = self._make_value(invoice_date, 0.5)   
+            
+            if self._get_value(invoice_data_peppol["tax_exchange_rate"]["calculation_rate"]) == "1":
+                invoice_data_peppol["tax_exchange_rate"]["date"] = self._make_value(invoice_date, 1.0)
+
+            if self._is_empty_value(invoice_data_peppol["supplier"]["legal_name"]):
+                supplier_name = self._get_value(invoice_data_peppol["supplier"].get("name", ""))
+
+                if supplier_name != "":
+                    invoice_data_peppol["supplier"]["legal_name"] = self._make_value(supplier_name, 0.5)         
+            
+            print("***********************************")
+            print(invoice_data_peppol["supplier"]["legal_registration_number"])
+            print("***********************************")
+            if self._is_empty_value(invoice_data_peppol["supplier"]["legal_registration_number"]):
+                vat_number = self._get_value(invoice_data_peppol["supplier"].get("vat_number", ""))
+                if vat_number != "":
+                    invoice_data_peppol["supplier"]["legal_registration_number"] = self._make_value(vat_number, 0.5)         
+            print("***********************************")
+            print(invoice_data_peppol["supplier"]["legal_registration_number"])
+            print("***********************************")
+
+            
             # Save extracted and post predict adjusted PEPPOL data to database
             invoice_data_peppol = json.dumps(invoice_data_peppol)
-            
-            print("**************************************")
-            print(invoice_data_peppol)
-            print("**************************************")
-
 
             dict_additional_fields = {}
             dict_additional_fields["invoice_data_peppol"] = invoice_data_peppol

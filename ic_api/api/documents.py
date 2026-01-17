@@ -385,7 +385,6 @@ def get_document_details(doc_id):
         except (json.JSONDecodeError, TypeError):
             logger.warning(f"Failed to parse invoice_data_peppol for document {doc_id}")
 
-       
 
         dict_invoice_data_user_corrected = {}
         try:
@@ -395,8 +394,9 @@ def get_document_details(doc_id):
         except (json.JSONDecodeError, TypeError):
             logger.warning(f"Failed to parse invoice_data_user_corrected for document {doc_id}")
 
-        dict_invoice_data_peppol_final = merge_peppol_json(dict_invoice_data_peppol, dict_invoice_data_user_corrected)
         dict_invoice_data_peppol_final = apply_peppol_json_template(dict_invoice_data_peppol_final, PEPPOL_DEFAULTS)
+        dict_invoice_data_peppol_final = merge_peppol_json(dict_invoice_data_peppol, dict_invoice_data_user_corrected)
+       
         
         # Convert merged data back to JSON string (same format as DB storage)
         document["invoice_data_peppol_final"] = json.dumps(dict_invoice_data_peppol_final) if dict_invoice_data_peppol_final else json.dumps({})
