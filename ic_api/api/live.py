@@ -1,6 +1,7 @@
 from flask_smorest import Api, Blueprint
 from flask import request, jsonify, session
 from lib.email_service import send_plan_change_email
+from lib.company_settings_manager import get_company_settings, update_company_settings
 from werkzeug.security import generate_password_hash, check_password_hash
 from ic_shared.database.connection import execute_sql, fetch_all
 from ic_shared.logging import ComponentLogger, logger
@@ -753,5 +754,67 @@ def change_plan():
     except Exception as e:
         logger.info(f"Error: {e}")
         return jsonify({"error": "Failed to change plan"}), 500
+
+
+@blp_live.route("/company-settings", methods=["GET"])
+def get_company_settings_endpoint():
+    """Fetch company settings. Returns defaults if none are configured."""
+    if "company_id" not in session:
+        logger.error("No company_id in session")
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    company_id = session.get("company_id")
+    logger.info(f"Fetching company settings for company_id: {company_id}")
+    
+    try:
+        settings = get_company_settings(company_id)
+        logger.success(f"✅ Returning settings: {settings}")
+        return jsonify({"company_settings": settings}), 200
+    except Exception as e:
+        logger.error(f"Error fetching company settings: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({"error": "Failed to fetch company settings", "details": str(e)}), 500
+
+
+@blp_live.route("/company-settings", methods=["PUT"])
+def update_company_settings_endpoint():
+    """Update company settings."""
+    if "company_id" not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    if "user_id" not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+    
+    company_id = session.get("company_id")
+    user_id = session.get("user_id")
+    data = request.get_json()
+
+    print("****************************************")
+    print(data)
+    print("****************************************")
+    
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+    
+    try:
+        success, message = update_company_settings(company_id, data)
+        
+        if not success:
+            return jsonify({"error": message}), 400
+        
+        # Fetch and return updated settings
+        updated_settings = get_company_settings(company_id)
+        
+        logger.info(f"Company settings updated by user {user_id} for company {company_id}")
+        
+        return jsonify({
+            "message": "Company settings updated successfully",
+            "company_settings": updated_settings
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error updating company settings: {str(e)}")
+        return jsonify({"error": "Failed to update company settings"}), 500
 
 

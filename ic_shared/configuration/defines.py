@@ -70,6 +70,16 @@ ERROR_DESCRIPTIONS = {
     "evaluation_error": "Error during automated evaluation"
 }
 
+COMPANY_SETTINGS_DEFAULTS = {
+    "scanner_settings": {
+        "name": "Scanner Settings",
+        "parameters": [
+            {"name": "Require Peppol ID", "key": "peppol_id_required", "type": "boolean", "value": True, "description": "Require Peppol ID for all processed invoices."},
+            {"name": "Confidence Threshold", "key": "confidence_threshold", "type": "float", "value": 0.9, "description": "Minimum confidence level for accepting extracted data."}
+        ]
+    }
+}
+
 PEPPOL_DEFAULTS = {
     "meta":{
         "ubl_version_id":{"v":"2.1","p":1.0},

@@ -86,6 +86,54 @@ function Settings() {
     message: ""
   });
 
+  const [companySettings, setCompanySettings] = React.useState(null);
+  const [companySettingsLoading, setCompanySettingsLoading] = React.useState(true);
+  const [companySettingsError, setCompanySettingsError] = React.useState(null);
+  const [editableSettings, setEditableSettings] = React.useState({});
+  const [settingsSaving, setSettingsSaving] = React.useState(false);
+  const [settingsSaved, setSettingsSaved] = React.useState(false);
+
+  // Fetch company settings
+  React.useEffect(() => {
+    const fetchCompanySettings = async () => {
+      try {
+        setCompanySettingsLoading(true);
+        setCompanySettingsError(null);
+        const response = await fetch(`${API_BASE_URL}/live/company-settings`, {
+          method: "GET",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch company settings");
+        }
+
+        const data = await response.json();
+        const settings = data.company_settings || {};
+        setCompanySettings(settings);
+        
+        // Populate editable settings with parameter values
+        if (settings.scanner_settings?.parameters) {
+          const paramValues = {};
+          settings.scanner_settings.parameters.forEach(param => {
+            paramValues[param.key] = param.value;
+          });
+          setEditableSettings(paramValues);
+        }
+      } catch (err) {
+        console.error("Error fetching company settings:", err);
+        setCompanySettingsError(err.message);
+      } finally {
+        setCompanySettingsLoading(false);
+      }
+    };
+
+    fetchCompanySettings();
+  }, []);
+
   // Fetch company information from backend
   React.useEffect(() => {
     const fetchCompanyInfo = async () => {
@@ -357,6 +405,70 @@ function Settings() {
     }
   };
 
+  const handleSettingChange = (paramKey, newValue) => {
+    setEditableSettings(prev => ({
+      ...prev,
+      [paramKey]: newValue
+    }));
+    setSettingsSaved(false);
+  };
+
+  const handleSaveSettings = async () => {
+    try {
+      setSettingsSaving(true);
+      setCompanySettingsError(null);
+
+      // Build the settings object to send
+      const settingsToSave = {
+        scanner_settings: {
+          name: companySettings.scanner_settings.name,
+          parameters: companySettings.scanner_settings.parameters.map(param => ({
+            ...param,
+            value: editableSettings[param.key] ?? param.value
+          }))
+        }
+      };
+
+      const response = await fetch(`${API_BASE_URL}/live/company-settings`, {
+        method: "PUT",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(settingsToSave)
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save company settings");
+      }
+
+      const data = await response.json();
+      setCompanySettings(data.company_settings || {});
+      setSettingsSaved(true);
+
+      setMessageModal({
+        show: true,
+        type: "success",
+        title: "Settings Saved",
+        message: "Scanner settings have been updated successfully."
+      });
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setSettingsSaved(false), 3000);
+    } catch (err) {
+      console.error("Error saving company settings:", err);
+      setCompanySettingsError(err.message);
+      setMessageModal({
+        show: true,
+        type: "error",
+        title: "Save Failed",
+        message: err.message || "Failed to save company settings"
+      });
+    } finally {
+      setSettingsSaving(false);
+    }
+  };
+
   const handleChangePassword = async () => {
     if (!currentPassword) {
       setMessageModal({
@@ -435,6 +547,59 @@ function Settings() {
 
   return (
     <>
+      <style>{`
+        .info-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          border: 1px solid #9ca3af;
+          font-size: 0.75rem;
+          color: #9ca3af;
+          font-weight: 600;
+          cursor: help;
+          margin-left: 0.5rem;
+          position: relative;
+        }
+        
+        .tooltip-content {
+          position: fixed;
+          background: #1f2937;
+          color: white;
+          padding: 0.75rem;
+          border-radius: 6px;
+          font-size: 0.85rem;
+          width: 220px;
+          text-align: left;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          white-space: normal;
+          z-index: 99999;
+          opacity: 0;
+          visibility: hidden;
+          transition: opacity 0.2s ease, visibility 0.2s ease;
+        }
+        
+        .tooltip-content::before {
+          content: '';
+          position: absolute;
+          bottom: -5px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 0;
+          height: 0;
+          border-left: 5px solid transparent;
+          border-right: 5px solid transparent;
+          border-top: 5px solid #1f2937;
+        }
+        
+        .info-icon:hover .tooltip-content {
+          opacity: 1;
+          visibility: visible;
+        }
+      `}</style>
+      
       <div className="content-header">
         <h1>Settings</h1>
       </div>
@@ -446,7 +611,7 @@ function Settings() {
         >
           Profile Settings
         </button>
-        {hasCompanyAccess() && (
+        {(isAdmin || hasCompanyAccess()) && (
           <button 
             className={`settings-tab ${activeTab === "company" ? "active" : ""}`}
             onClick={() => setActiveTab("company")}
@@ -648,7 +813,7 @@ function Settings() {
                     />
                   </div>
 
-                  {isCompanyAdmin() && (
+                  {(isAdmin || isCompanyAdmin()) && (
                     <button className="btn btn-primary" onClick={handleSaveCompany}>
                       Save Changes
                     </button>
@@ -657,8 +822,149 @@ function Settings() {
               )}
             </section>
 
+            {/* Company Settings Section */}
+            <section className="settings-section">
+              <h2>Scanner Settings</h2>
+              {companySettingsError ? (
+                <div style={{ color: '#d32f2f', marginBottom: '1rem' }}>Error: {companySettingsError}</div>
+              ) : companySettingsLoading ? (
+                <div style={{ color: '#666', padding: '1rem' }}>Loading scanner settings...</div>
+              ) : (
+                <div className="settings-form">
+                  {companySettings?.scanner_settings?.parameters && companySettings.scanner_settings.parameters.length > 0 ? (
+                    <div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        {companySettings.scanner_settings.parameters.map((param, index) => {
+                          const isReadOnly = !(isAdmin || isCompanyAdmin());
+                          const paramValue = editableSettings[param.key] ?? param.value;
+                          
+                          return (
+                            <div key={index} className="form-group">
+                              <label>
+                                {param.name}
+                                <div 
+                                  className="info-icon"
+                                  onMouseEnter={(e) => {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const tooltip = e.currentTarget.querySelector('.tooltip-content');
+                                    if (tooltip) {
+                                      tooltip.style.top = (rect.top - tooltip.offsetHeight - 10) + "px";
+                                      tooltip.style.left = (rect.left + rect.width / 2 - 110) + "px";
+                                    }
+                                  }}
+                                >
+                                  i
+                                  <div className="tooltip-content">
+                                    {param.description}
+                                  </div>
+                                </div>
+                              </label>
+                              
+                              {param.type === 'boolean' && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <input
+                                    type="checkbox"
+                                    id={`param_${param.key}`}
+                                    checked={Boolean(paramValue)}
+                                    onChange={(e) => handleSettingChange(param.key, e.target.checked)}
+                                    disabled={isReadOnly}
+                                  />
+                                  <label htmlFor={`param_${param.key}`} style={{ margin: 0, fontWeight: 'normal', fontSize: '0.95rem' }}>
+                                    {paramValue ? 'Enabled' : 'Disabled'}
+                                  </label>
+                                  {isReadOnly && (
+                                    <span style={{ fontSize: '0.8em', color: '#999', marginLeft: '0.5rem' }}>
+                                      (Read-only)
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              
+                              {(param.type === 'float' || param.type === 'number') && (
+                                <>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={paramValue}
+                                    onChange={(e) => handleSettingChange(param.key, parseFloat(e.target.value))}
+                                    disabled={isReadOnly}
+                                  />
+                                  {isReadOnly && (
+                                    <div style={{ fontSize: '0.8em', color: '#999', marginTop: '0.3rem' }}>
+                                      (Read-only)
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                              
+                              {param.type === 'integer' && (
+                                <>
+                                  <input
+                                    type="number"
+                                    step="1"
+                                    value={paramValue}
+                                    onChange={(e) => handleSettingChange(param.key, parseInt(e.target.value))}
+                                    disabled={isReadOnly}
+                                  />
+                                  {isReadOnly && (
+                                    <div style={{ fontSize: '0.8em', color: '#999', marginTop: '0.3rem' }}>
+                                      (Read-only)
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                              
+                              {param.type === 'text' && (
+                                <>
+                                  <input
+                                    type="text"
+                                    value={paramValue}
+                                    onChange={(e) => handleSettingChange(param.key, e.target.value)}
+                                    disabled={isReadOnly}
+                                  />
+                                  {isReadOnly && (
+                                    <div style={{ fontSize: '0.8em', color: '#999', marginTop: '0.3rem' }}>
+                                      (Read-only)
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      
+                      {(isAdmin || isCompanyAdmin()) && (
+                        <div style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid #eee' }}>
+                          {settingsSaved && (
+                            <div style={{ color: '#2e7d32', marginBottom: '1rem', fontSize: '0.9em' }}>
+                              ✅ Settings saved successfully
+                            </div>
+                          )}
+                          <button
+                            className="btn btn-primary"
+                            onClick={handleSaveSettings}
+                            disabled={settingsSaving}
+                            style={{ minWidth: '150px' }}
+                          >
+                            {settingsSaving ? 'Saving...' : 'Save Changes'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ backgroundColor: '#f5f5f5', padding: '1rem', borderRadius: '4px', fontFamily: 'monospace', fontSize: '0.9em' }}>
+                      <pre style={{ margin: 0, color: '#333' }}>
+                        {JSON.stringify(companySettings, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+
             {/* Billing Section - For Company Admins (editable) and Company Users (read-only) */}
-            {hasCompanyAccess() && (
+            {(isAdmin || hasCompanyAccess()) && (
               <section className="settings-section">
                 <h2>Billing Information {isCompanyUser() && <span style={{fontSize: '0.8em', color: '#999'}}>(Read-only)</span>}</h2>
                 {billingError && (

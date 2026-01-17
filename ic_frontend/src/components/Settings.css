@@ -53,8 +53,6 @@
 }
 
 .settings-content {
-  flex: 1;
-  overflow-y: auto;
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: auto auto;
@@ -65,7 +63,7 @@
 
 .settings-content > section:nth-child(1) {
   grid-column: 1;
-  grid-row: 1 / 3;
+  grid-row: 1;
 }
 
 .settings-content > section:nth-child(2) {
@@ -99,6 +97,7 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  align-items: flex-start;
 }
 
 .form-group {
