@@ -1540,7 +1540,9 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
                                               fontWeight: "600",
                                               marginBottom: "0.5rem",
                                             }}>
-                                              <a href={`https://docs.peppol.eu/poacc/billing/3.0/bt/${fieldInfo["BT-ID"]}`} target="_blank" rel="noopener noreferrer" style={{ color: "#60a5fa", textDecoration: "underline" }}>{fieldInfo["BT-ID"]}</a>
+                                              {fieldInfo["BT-ID"] && fieldInfo["BT-ID"] !== 'N/A' && (
+                                                <a href={`https://docs.peppol.eu/poacc/billing/3.0/#${fieldInfo["BT-ID"]}`} target="_blank" rel="noopener noreferrer" style={{ color: "#60a5fa", textDecoration: "underline" }}>{fieldInfo["BT-ID"]}</a>
+                                              )}
                                             </div>
                                             {fieldInfo["Advanced"] && (
                                               <div style={{ fontSize: "0.75rem", color: "#f59e0b", marginBottom: "0.4rem", fontWeight: "600" }}>
