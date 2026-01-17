@@ -5,6 +5,14 @@ These functions are shared across API, Cloud Functions, and other services.
 Uses fetch_all() for SELECT queries and execute_sql() for UPDATE/INSERT/DELETE.
 """
 
+import sys
+import os
+
+# Debug: Add project root to path when running directly from VS Code
+if __name__ == "__main__":
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    sys.path.insert(0, project_root)
+
 from ic_shared.logging import ComponentLogger
 from ic_shared.database.connection import execute_sql, fetch_all
 import copy
@@ -152,240 +160,213 @@ def update_document_status(document_id: str, status: str, dict_key_val:dict = No
         return False
     
 
-def merge_delta_into_existing(existing_data: dict, delta_data: dict) -> dict:
-    """
-    Deep merge delta into existing data structure.
-    Delta values override existing values, but new keys are added while preserving existing ones.
-    
-    This is designed specifically for merging user corrections (delta) into existing data.
-    - If delta has a key, it overrides existing (or adds if new)
-    - If delta doesn't have a key, existing value is preserved
-    - Works recursively for nested dicts
-    
-    Args:
-        existing_data (dict): The existing data (base to merge into)
-        delta_data (dict): The changes/corrections (merges into base)
-    
-    Returns:
-        dict: Merged result with delta overriding existing values
-    
-    Example:
-        existing = {"meta": {"ubl_version_id": "2.2"}}
-        delta = {"meta": {"invoice_number": "00001"}}
-        result = merge_delta_into_existing(existing, delta)
-        # result = {"meta": {"ubl_version_id": "2.2", "invoice_number": "00001"}}
-    """
-    try:
-        # Deep copy to avoid modifying originals
-        result = copy.deepcopy(existing_data) if existing_data else {}
-        
-        # If delta is empty, return existing as-is
-        if not delta_data:
-            return result
-        
-        def deep_merge(base: dict, updates: dict) -> dict:
-            """Recursively merge updates into base, with updates taking precedence."""
-            for key, update_value in updates.items():
-                if key in base and isinstance(base[key], dict) and isinstance(update_value, dict):
-                    # Both are dicts, merge recursively
-                    base[key] = deep_merge(base[key], update_value)
-                else:
-                    # Override or add new key
-                    base[key] = copy.deepcopy(update_value)
-            
-            return base
-        
-        result = deep_merge(result, delta_data)
-        return result
-        
-    except Exception as e:
-        logger.error(f"✗ Error merging delta: {type(e).__name__}: {e}")
-        return copy.deepcopy(existing_data) if existing_data else {}
-    
+
 
 def merge_peppol_json(peppol_slave: dict, peppol_master: dict) -> dict:
     """
-    Merge two Peppol JSON structures, preferring values from master over slave.
+    Merge two Peppol JSON structures.
     
-    This function creates a new merged document without modifying the originals.
-    - Missing nodes from peppol_master are added to the result
-    - Values in peppol_master override corresponding values in peppol_slave
-    - Works recursively for nested dict structures
+    Rules:
+    1. No elements in original structures are modified
+    2. Returns new merged structure
+    3. Merged structure contains ALL elements from peppol_slave
+    4. Merged structure contains ALL elements from peppol_master
+    5. Where "v" or "p" differs, use master value (override)
+    
+    Logic:
+    - Start with deep copy of slave (preserve all slave elements)
+    - Recursively merge master into result
+    - For shared keys: master overrides where both exist
+    - For Peppol values {"v": ..., "p": ...}: replace entirely
+    - For container dicts: merge recursively
     
     Args:
-        peppol_slave (dict): The primary document (typically user-corrected data)
-        peppol_master (dict): The secondary document (typically LLM-extracted data)
+        peppol_slave (dict): Base document (all elements preserved)
+        peppol_master (dict): Override document (overrides matching keys)
     
     Returns:
-        dict: A new merged document with values from both sources, 
-              preferring master values where conflicts exist.
-              Original documents are not modified.
-    
-    Example:
-        slave = {"meta": {"invoice_number": "INV-001"}}
-        master = {"meta": {"invoice_number": "INV-002", "currency": "SEK"}}
-        result = merge_peppol_json(slave, master)
-        # result = {"meta": {"invoice_number": "INV-002", "currency": "SEK"}}
+        dict: New merged document with all elements from both sources
     """
     try:
-        # Create a deep copy of slave to avoid modifying the original
-        merged = copy.deepcopy(peppol_slave) if peppol_slave else {}
+        result = copy.deepcopy(peppol_slave) if peppol_slave else {}
         
-        # If master is empty or None, return the copy of slave
         if not peppol_master:
-            return merged
+            return result
         
-        # Recursive merge function
-        def recursive_merge(target: dict, source: dict) -> dict:
+        def is_peppol_value(obj):
+            """Check if object is a Peppol value dict {"v": ..., "p": ...}"""
+            if isinstance(obj, dict):
+                # Peppol values have only "v" and/or "p" keys
+                return len(obj) <= 2 and all(k in ("v", "p") for k in obj.keys())
+            return False
+        
+        def merge_recursive(target: dict, source: dict) -> dict:
             """
-            Recursively merge source values into target.
-            Source values override target values.
-            Handles arrays specially: merges array defaults to all items.
+            Recursively merge source into target.
+            - All target keys are preserved
+            - Source keys are added or override target
+            - For nested dicts: recurse if both are container dicts
+            - For Peppol values: replace entirely (master wins)
             """
             for key, source_value in source.items():
-                if key not in target:
-                    # Key doesn't exist in target, add it from source
-                    target[key] = copy.deepcopy(source_value)
-                elif isinstance(source_value, list) and isinstance(target.get(key), list):
-                    # Both are arrays - special handling for line_items
-                    if key == "line_items" and source_value and len(source_value) > 0:
-                        # Check if source items have different structure (actual items vs template)
-                        # If source has multiple items or items with different content, treat as actual items
-                        source_is_template = len(source_value) == 1
-                        
-                        if source_is_template:
-                            # Single item: treat as template and merge into each target item
-                            source_template = source_value[0]
-                            if isinstance(source_template, dict):
-                                # Merge source template into each target item
-                                for i in range(len(target[key])):
-                                    if isinstance(target[key][i], dict):
-                                        # Recursively merge template values into each line item
-                                        target[key][i] = recursive_merge(target[key][i], source_template)
-                        else:
-                            # Multiple items: treat as actual line items and merge by index
-                            # Match source items to target items by index
-                            for i in range(len(source_value)):
-                                if i < len(target[key]):
-                                    # Merge source item into existing target item
-                                    if isinstance(target[key][i], dict) and isinstance(source_value[i], dict):
-                                        target[key][i] = recursive_merge(target[key][i], source_value[i])
-                                else:
-                                    # Source has more items than target, add them
-                                    target[key].append(copy.deepcopy(source_value[i]))
-                    else:
-                        # For other arrays, use source value
+                target_value = target.get(key)
+                
+                if isinstance(source_value, dict) and isinstance(target_value, dict):
+                    # Check if these are Peppol values ({"v": ..., "p": ...})
+                    if is_peppol_value(source_value) or is_peppol_value(target_value):
+                        # It's a Peppol value - replace entirely with source (master wins)
                         target[key] = copy.deepcopy(source_value)
-                elif isinstance(source_value, dict) and isinstance(target.get(key), dict):
-                    # Both are dicts, merge recursively
-                    target[key] = recursive_merge(target[key], source_value)
-                elif source_value is not None and source_value != "":
-                    # Source has a non-empty value, use it (override target)
+                    else:
+                        # It's a container dict - merge recursively (both preserved)
+                        merge_recursive(target[key], source_value)
+                else:
+                    # Simple value or source is dict but target isn't - use source
                     target[key] = copy.deepcopy(source_value)
             
             return target
         
-        # Perform the merge
-        merged = recursive_merge(merged, peppol_master)
-        
-        # Validate tax_scheme in line_items
-        if "line_items" in merged and isinstance(merged["line_items"], list):
-            # Get line_item template from source (master) for applying to missing items
-            line_item_template = None
-            if isinstance(peppol_master, dict) and "line_items" in peppol_master and isinstance(peppol_master["line_items"], list) and len(peppol_master["line_items"]) > 0:
-                if isinstance(peppol_master["line_items"][0], dict):
-                    line_item_template = peppol_master["line_items"][0]
-            
-            for i, item in enumerate(merged["line_items"]):
-                if isinstance(item, dict):
-                    if "tax_scheme" not in item or not item.get("tax_scheme"):
-                        # Apply template fields to this item
-                        if line_item_template:
-                            for template_key, template_val in line_item_template.items():
-                                if template_key not in item:
-                                    item[template_key] = copy.deepcopy(template_val)
-        
-        return merged
+        result = merge_recursive(result, peppol_master)
+        logger.info(f"✅ Successfully merged Peppol JSON (all elements from both preserved)")
+        return result
         
     except Exception as e:
         logger.error(f"✗ Error merging Peppol JSON: {type(e).__name__}: {e}")
-        # On error, return a deep copy of slave to avoid data loss
         return copy.deepcopy(peppol_slave) if peppol_slave else {}
+            
 
 
 def apply_peppol_json_template(document: dict, template: dict) -> dict:
     """
-    Apply a PEPPOL template to a document, filling in missing fields with template defaults.
+    Apply PEPPOL template to document.
     
-    Unlike merge_peppol_json which is for merging two complete documents,
-    this function applies a template structure to a document:
-    - Missing top-level fields are added from template
-    - For line_items: template is applied to ALL existing items (not just matched by index)
-    - Existing values in document are NEVER overwritten by template
-    - Template provides structure and defaults only
+    Logic:
+    1. Keep ALL fields from document
+    2. Add/override with template values where template has keys
+    3. Template values ALWAYS override document values
+    4. For nested dicts: merge recursively
+    5. For line_items: apply template to each item
     
     Args:
-        document (dict): The document to apply template to (e.g., invoice data from LLM)
-        template (dict): The template with default structure and values (e.g., PEPPOL_DEFAULTS)
+        document (dict): The base document (all fields preserved)
+        template (dict): The template (overrides/adds where present)
     
     Returns:
-        dict: A new document with template defaults applied. Original documents not modified.
-    
-    Example:
-        document = {"meta": {"invoice_number": "INV-001"}, "line_items": [{"quantity": "5"}]}
-        template = {"meta": {"currency": "SEK"}, "line_items": [{"tax_rate": "0.25"}]}
-        result = apply_peppol_json_template(document, template)
-        # result = {
-        #     "meta": {"invoice_number": "INV-001", "currency": "SEK"},
-        #     "line_items": [{"quantity": "5", "tax_rate": "0.25"}]
-        # }
+        dict: Merged document with template applied
     """
     try:
-        # Create a deep copy of document to avoid modifying the original
         result = copy.deepcopy(document) if document else {}
         
-        # If template is empty, return document as-is
         if not template:
             return result
         
-        # Recursive function to apply template
-        def apply_template(target: dict, source_template: dict) -> dict:
+        def merge_template(target: dict, template_dict: dict) -> dict:
             """
-            Recursively apply template values to target.
-            Only adds missing fields; never overwrites existing values.
-            For line_items, applies template to all items (not just one).
+            Apply template to target.
+            - All target keys are preserved
+            - Template keys override/add to target
             """
-            for key, template_value in source_template.items():
-                if key not in target:
-                    # Key doesn't exist in target, add it from template
+            for key, template_value in template_dict.items():
+                if key == "line_items" and isinstance(template_value, list):
+                    # Special handling for line_items
+                    # Apply template to each item in the list
+                    if isinstance(target.get(key), list) and template_value and len(template_value) > 0:
+                        line_template = template_value[0]
+                        if isinstance(line_template, dict):
+                            # Apply each template field to every line item (OVERRIDE)
+                            for item in target[key]:
+                                if isinstance(item, dict):
+                                    for tkey, tval in line_template.items():
+                                        item[tkey] = copy.deepcopy(tval)
+                
+                elif isinstance(template_value, dict):
+                    # Nested dict handling
+                    if key not in target:
+                        # Key doesn't exist - add from template
+                        target[key] = copy.deepcopy(template_value)
+                    elif isinstance(target[key], dict):
+                        # Both are dicts - merge recursively
+                        merge_template(target[key], template_value)
+                    else:
+                        # Target value is not a dict, replace with template
+                        target[key] = copy.deepcopy(template_value)
+                
+                else:
+                    # Simple value - always use template value (override)
                     target[key] = copy.deepcopy(template_value)
-                
-                elif key == "line_items" and isinstance(template_value, list) and isinstance(target.get(key), list):
-                    # Special case: apply template to all line items
-                    if template_value and len(template_value) > 0:
-                        # Get the template for line items (first item)
-                        line_item_template = template_value[0]
-                        if isinstance(line_item_template, dict):
-                            # Apply this template to ALL items in target's line_items
-                            for i in range(len(target[key])):
-                                if isinstance(target[key][i], dict):
-                                    # For each line item, explicitly apply all template fields
-                                    for template_key, template_val in line_item_template.items():
-                                        if template_key not in target[key][i]:
-                                            target[key][i][template_key] = copy.deepcopy(template_val)
-                
-                elif isinstance(template_value, dict) and isinstance(target.get(key), dict):
-                    # Both are dicts, recursively apply template
-                    target[key] = apply_template(target[key], template_value)
-                # else: target has a value and it's not a dict/list, don't overwrite
             
             return target
         
-        # Apply the template
-        result = apply_template(result, template)
+        result = merge_template(result, template)
         return result
         
     except Exception as e:
         logger.error(f"✗ Error applying template: {type(e).__name__}: {e}")
-        # On error, return a deep copy of document to avoid data loss
         return copy.deepcopy(document) if document else {}
+    
+
+
+
+# if __name__ == "__main__":
+#     # Debug/test code here
+#     logger.info("✅ Document operations module loaded successfully")
+#     logger.info(f"Python path: {sys.path[0]}")
+
+#     import json
+#     test_file = os.path.join(os.path.dirname(__file__), '..', 'test_data', 'invoice_data_raw.json')
+#     with open(test_file, 'r') as f:
+#         test_data = json.load(f)
+
+#     from ic_shared.configuration.defines import PEPPOL_DEFAULTS
+
+#     print("********** TEST DATA **********")    
+#     print(json.dumps(test_data, indent=2))  
+
+#     print("********** PEPPOL DEFAULTS **********")  
+#     print(json.dumps(PEPPOL_DEFAULTS, indent=2))  
+
+#     template_applied_json = apply_peppol_json_template(test_data, PEPPOL_DEFAULTS)
+#     print("********** MERGED WITH TEMPLATE **********")
+#     print(json.dumps(template_applied_json, indent=2))   
+
+#     # Validate: Check that all fields from test_data exist in merged
+#     def check_all_keys_exist(original: dict, result: dict, path: str = "") -> bool:
+#         """Recursively check that all keys from original exist in result"""
+#         all_exist = True
+#         for key, value in original.items():
+#             current_path = f"{path}.{key}" if path else key
+            
+#             if key not in result:
+#                 logger.error(f"❌ Missing key in merged: {current_path}")
+#                 all_exist = False
+#             elif isinstance(value, dict) and isinstance(result.get(key), dict):
+#                 # Recurse for nested dicts
+#                 if not check_all_keys_exist(value, result[key], current_path):
+#                     all_exist = False
+#             elif isinstance(value, list) and isinstance(result.get(key), list):
+#                 # For lists, check structure but don't compare values
+#                 if len(value) > 0 and isinstance(value[0], dict) and len(result[key]) > 0:
+#                     if isinstance(result[key][0], dict):
+#                         # Check first item structure
+#                         if not check_all_keys_exist(value[0], result[key][0], f"{current_path}[0]"):
+#                             all_exist = False
+        
+#         return all_exist
+    
+#     print("\n********** VALIDATION **********")
+#     if check_all_keys_exist(test_data, template_applied_json):
+#         logger.success("✅ All fields from test_data exist in merged")
+#     else:
+#         logger.error("❌ Some fields from test_data are missing in merged")
+
+#     custom_file = os.path.join(os.path.dirname(__file__), '..', 'test_data', 'custom_corrected.json')
+#     with open(custom_file, 'r') as f:
+#         custom_data  = json.load(f)
+
+#     print("********** CUSTOM DATA **********")
+#     print(json.dumps(custom_data, indent=2)) 
+
+#     merged_custom_json = merge_peppol_json(template_applied_json, custom_data)
+#     print("********** MERGED CUSTOM **********")
+#     print(json.dumps(merged_custom_json, indent=2)) 
+
+

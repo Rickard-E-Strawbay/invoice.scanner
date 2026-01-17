@@ -743,7 +743,6 @@
             DisplayContext="Tax"
             DisplayName="Total Tax Amount"
             UBL-XPath="/Invoice/TaxTotal/TaxAmount"
-            currencyID="SEK"
             mapid="tax_total.total_tax_amount">
     </cbc:TaxAmount>
         <cac:TaxSubtotal>
@@ -756,7 +755,6 @@
                 BT-ID="BT-116"
                 DisplayContext="Tax"
                 DisplayName="Taxable Amount"
-                currencyID="SEK"
                 mapid="tax_total.taxable_amount">
     </cbc:TaxableAmount>
     <cbc:TaxAmount 
@@ -768,7 +766,6 @@
                 BT-ID="BT-117"
                 DisplayContext="Tax"
                 DisplayName="Tax Amount"
-                currencyID="SEK"
                 mapid="tax_total.tax_amount">
     </cbc:TaxAmount>
             <cac:TaxCategory>
@@ -823,7 +820,6 @@
             DisplayContext="Totals"
             DisplayName="Subtotal (before discounts)"
             UBL-XPath="/Invoice/LegalMonetaryTotal/LineExtensionAmount"
-            currencyID="SEK"
             mapid="totals.line_extension_amount">
         </cbc:LineExtensionAmount> 
         <cbc:TaxExclusiveAmount 
@@ -835,7 +831,6 @@
             BT-ID="BT-109"
             DisplayContext="Totals"
             DisplayName="Total (before tax)"
-            currencyID="SEK"
             mapid="totals.tax_exclusive_amount">
         </cbc:TaxExclusiveAmount>
         <cbc:TaxInclusiveAmount 
@@ -847,7 +842,6 @@
             BT-ID="BT-112"
             DisplayContext="Totals"
             DisplayName="Total (including tax)"
-            currencyID="SEK"
             mapid="totals.tax_inclusive_amount">
         </cbc:TaxInclusiveAmount> 
         <cbc:PayableAmount 
@@ -859,7 +853,6 @@
             BT-ID="BT-115"
             DisplayContext="Totals"
             DisplayName="Amount Due"
-            currencyID="SEK"
             mapid="totals.payable_amount">
     </cbc:PayableAmount>
     </cac:LegalMonetaryTotal>
@@ -911,7 +904,6 @@
             DisplayContext="LineItem"
             DisplayName="Line Total"
             UBL-XPath="/Invoice/InvoiceLine/LineExtensionAmount"
-            currencyID="SEK"
             mapid="line_item.line_total">
         </cbc:LineExtensionAmount>
         <cac:Item>
@@ -962,7 +954,6 @@
                     DisplayContext="LineItem"
                     DisplayName="Tax Amount"
                     UBL-XPath="/Invoice/InvoiceLine/TaxTotal/TaxAmount"
-                    currencyID="SEK"
                     mapid="line_item.tax_amount">
                 </cbc:TaxAmount>
                 <cac:TaxScheme>
@@ -990,7 +981,6 @@
                 DisplayContext="LineItem"
                 DisplayName="Unit Price"
                 UBL-XPath="/Invoice/InvoiceLine/Price/PriceAmount"
-                currencyID="SEK"
                 mapid="line_item.unit_price">
             </cbc:PriceAmount>
             <cbc:BaseQuantity 

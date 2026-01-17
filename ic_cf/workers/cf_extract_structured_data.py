@@ -7,7 +7,7 @@ from ic_shared.utils.peppol_manager import PeppolManager
 from ic_shared.database.connection import fetch_all, execute_sql
 from ic_shared.database.document_operations import apply_peppol_json_template
 
-from ic_shared.configuration.defines import ENTER, EXIT
+from ic_shared.configuration.defines import ENTER, EXIT, ERROR
 from ic_shared.configuration.defines import EXTRACTION_STATUS, PEPPOL_DEFAULTS
 from ic_shared.logging import ComponentLogger
 
@@ -24,12 +24,10 @@ class cf_extract_structured_data(cf_base):
         """Execute the structured data extraction worker logic."""
         ENTER_STATUS = EXTRACTION_STATUS[ENTER]
         EXIT_STATUS = EXTRACTION_STATUS[EXIT]
-        # ERROR_STATUS = EXTRACTION_STATUS[ERROR]
+        ERROR_STATUS = EXTRACTION_STATUS[ERROR]
         # FAIL_STATUS = EXTRACTION_STATUS[FAIL]
 
         self._update_document_status(ENTER_STATUS)
-
-
 
         # Map raw invoice data to structured PEPPOL data
         try:
@@ -37,55 +35,46 @@ class cf_extract_structured_data(cf_base):
             dict_full_data = self._load_document_data()
             peppol_str = dict_full_data.get("invoice_data_raw")
             invoice_data_peppol = json.loads(peppol_str) if isinstance(peppol_str, str) else (peppol_str or {})
-           
+
+            print("**************************************")
+            print(invoice_data_peppol)
+            print("**************************************")
+
+            
+
+
             # Merge PEPPOL defaults with nested structure - defaults fill missing values
             invoice_data_peppol = apply_peppol_json_template(invoice_data_peppol, PEPPOL_DEFAULTS)
 
+            # Verify that values added from PEPPOL_DEFAULTS are present and correct
+            # self._validate_peppol_defaults_applied(invoice_data_peppol, PEPPOL_DEFAULTS)
+            
+
             # Save extracted and post predict adjusted PEPPOL data to database
-            self._save_to_peppol(invoice_data_peppol)
-
-            # peppol_data = self._map_to_peppol()
-            # self.logger.success(f"✅ Mapped {len(peppol_data)} PEPPOL sections")
+            invoice_data_peppol = json.dumps(invoice_data_peppol)
             
+            print("**************************************")
+            print(invoice_data_peppol)
+            print("**************************************")
 
 
+            dict_additional_fields = {}
+            dict_additional_fields["invoice_data_peppol"] = invoice_data_peppol
+            dict_additional_fields["invoice_data_user_corrected"] = "{}"
+            dict_additional_fields["invoice_data_peppol_final"] = invoice_data_peppol
+
+            self._update_document_status(EXIT_STATUS, None, dict_additional_fields)
 
 
-
-
-            # Save to database
-            #self._save_to_peppol("{}")
-            #self._save_to_peppol_final("{}")
-
-            #self.logger.success(f"✅ Saved PEPPOL data to invoice_data_peppol")
             
-            # Merge with final data (invoice_data_peppol_final takes precedence)
-            #peppol_final = self._get_peppol_final_data()
-            #print("****************************************")
-            #print(peppol_data)
-            #print("****************************************")
-
-            #print("****************************************")
-            #print(peppol_final)
-            #print("****************************************")
-            # if peppol_final:
-            #    peppol_data = self._merge_peppol_with_final(peppol_data, peppol_final)
-            #    print("****************************************")
-            #    print(peppol_final)
-            #    print("****************************************")
-            #    self.logger.success(f"✅ Merged with final PEPPOL data ({len(peppol_final)} sections)")
-                
-            # Save merged data back to database
-            # self._save_to_peppol_final(peppol_data)
-            self.logger.success(f"✅ Saved merged PEPPOL data to invoice_data_peppol")
+            self._publish_to_topic()
             
         except Exception as e:
             self.logger.error(f"❌ Failed to map/save PEPPOL data: {str(e)}")
+            self._update_document_status(ERROR_STATUS)
             raise
-    
 
         self._update_document_status(EXIT_STATUS)
-        self._publish_to_topic()
 
     def _map_to_peppol(self) -> dict:
         """Map raw invoice data to PEPPOL structure using the map attribute."""
@@ -141,6 +130,41 @@ class cf_extract_structured_data(cf_base):
                     self.logger.debug(f"✗ No value found for {section_name}.{field_name} at path: {map_path}")
         
         return peppol_data
+    
+    def _validate_peppol_defaults_applied(self, peppol_data: dict, defaults: dict):
+        """Validate that PEPPOL defaults have been correctly applied to peppol_data.
+        
+        Checks that all fields from defaults are present in peppol_data with correct values.
+        Logs any missing or mismatched values for debugging.
+        """
+        missing_defaults = []
+        mismatched_defaults = []
+        
+        for section_key, section_defaults in defaults.items():
+            if section_key not in peppol_data:
+                missing_defaults.append(f"{section_key} (entire section missing)")
+                continue
+            
+            if isinstance(section_defaults, dict):
+                for field_key, default_value in section_defaults.items():
+                    if field_key not in peppol_data[section_key]:
+                        missing_defaults.append(f"{section_key}.{field_key}")
+                    elif peppol_data[section_key][field_key] != default_value:
+                        # Only report if was empty and now has a value (expected behavior)
+                        if peppol_data[section_key][field_key]:
+                            mismatched_defaults.append(
+                                f"{section_key}.{field_key}: expected {default_value}, "
+                                f"got {peppol_data[section_key][field_key]}"
+                            )
+        
+        if missing_defaults:
+            self.logger.warning(f"⚠️  Missing default fields: {', '.join(missing_defaults)}")
+        
+        if mismatched_defaults:
+            self.logger.warning(f"⚠️  Mismatched default values: {', '.join(mismatched_defaults)}")
+        
+        if not missing_defaults and not mismatched_defaults:
+            self.logger.success("✅ All PEPPOL defaults correctly applied")
     
     def _extract_value_from_raw_data(self, data: dict, path: str):
         """Extract value from nested dict using dot notation and array syntax.

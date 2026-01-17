@@ -18,6 +18,7 @@ class cf_preprocess(cf_base):
         """Execute the preprocessing worker logic."""
         ENTER_STATUS = PREPROCESS_STATUS[ENTER]
         EXIT_STATUS = PREPROCESS_STATUS[EXIT]
+        ERROR_STATUS = PREPROCESS_STATUS[ERROR]
 
         # Reset relevant fields on re-processing
         dict_additional_fields = {}
@@ -48,11 +49,11 @@ class cf_preprocess(cf_base):
             dict_update["processed_image_filename"] = processed_image_filename
 
             self._update_document_status(EXIT_STATUS,None, dict_update  )
+            self._publish_to_topic()
             
         except Exception as e:
             self.logger.error(f"Preprocessing failed: {str(e)}")
+            self._update_document_status(ERROR_STATUS)
             raise
-        
-        self._publish_to_topic()
     
 

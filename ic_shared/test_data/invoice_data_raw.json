@@ -1,0 +1,68 @@
+{
+  "meta": null,
+  "order": {
+    "reference_number": {"v": "", "p": null},
+    "document_id": {"v": "SE-TI2500285694", "p": 0.8},
+    "issue_date": {"v": "22/06/2025", "p": 0.8}
+  },
+  "supplier": {
+    "peppol_id": {"v": "7305562334804", "p": 0.7},
+    "gln": {"v": "", "p": null},
+    "name": {"v": "Microsoft AB", "p": 0.9},
+    "address": {
+      "street": {"v": "Regeringsgatan 25", "p": 0.9},
+      "city": {"v": "Stockholm", "p": 0.9},
+      "postal_code": {"v": "111 53", "p": 0.9},
+      "country": {"v": "SE", "p": 0.9}
+    },
+    "vat_number": {"v": "SE556233480401", "p": 0.9},
+    "tax_scheme": {"v": "VAT", "p": 0.8},
+    "legal_name": {"v": "Microsoft AB", "p": 0.9},
+    "legal_registration_number": {"v": "", "p": null}
+  },
+  "customer": {
+    "peppol_id": {"v": "", "p": null},
+    "name": {"v": "Strawbay AB", "p": 0.9},
+    "address": {
+      "street": {"v": "Södergatan 13", "p": 0.9},
+      "city": {"v": "Malmö", "p": 0.9},
+      "postal_code": {"v": "211 34", "p": 0.9},
+      "country": {"v": "SE", "p": 0.9}
+    },
+    "legal_name": {"v": "Strawbay AB", "p": 0.9},
+    "legal_registration_number": {"v": "", "p": null}
+  },
+  "payment": {
+    "payment_means_code": {"v": "", "p": null}
+  },
+  "tax_exchange_rate": null,
+  "tax_total": {
+    "total_tax_amount": {"v": "36.25", "p": 0.9},
+    "taxable_amount": {"v": "145.01", "p": 0.9},
+    "tax_amount": {"v": "36.25", "p": 0.9},
+    "tax_category": {"v": "A", "p": 0.8},
+    "tax_scheme": {"v": "VAT", "p": 0.8}
+  },
+  "totals": {
+    "line_extension_amount": {"v": "145.01", "p": 0.9},
+    "tax_exclusive_amount": {"v": "145.01", "p": 0.9},
+    "tax_inclusive_amount": {"v": "181.26", "p": 0.9},
+    "payable_amount": {"v": "181.26", "p": 0.9}
+  },
+  "line_items": [
+    {
+      "quantity": {"v": "1", "p": 0.9},
+      "unit": {"v": "C62", "p": 0.8},
+      "line_total": {"v": "145.01", "p": 0.9},
+      "description": {"v": "Microsoft 365 Business Standard - One-Year commitment for monthly/yearly billing", "p": 0.8},
+      "tax_category": {"v": "A", "p": 0.8},
+      "tax_rate": {"v": "25.00", "p": 0.9},
+      "tax_amount": {"v": "36.25", "p": 0.9},
+      "unit_price": {"v": "145.01", "p": 0.9},
+      "base_quantity": {"v": "1", "p": 0.9}
+    },
+    {
+      "description": {"v": "AAAP", "p": 0.8}
+    }
+  ]
+}

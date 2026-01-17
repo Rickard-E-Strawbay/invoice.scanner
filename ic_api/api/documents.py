@@ -421,11 +421,6 @@ def get_documents():
         if not company_id:
             return jsonify({"error": "Company info not found in session"}), 400
         
-        # Get mandatory PEPPOL fields structure
-        from ic_shared.utils.peppol_manager import PeppolManager
-        peppol_manager = PeppolManager()
-        mandatory_fields = peppol_manager.get_mandatory_fields()
-        
         sql = """
             SELECT d.id, d.company_id, d.uploaded_by, d.raw_format, d.raw_filename, 
                    d.document_name, d.processed_image_filename, d.content_type, d.status, d.predicted_accuracy, 
@@ -444,8 +439,7 @@ def get_documents():
         
         documents = results if results else []
         return jsonify({
-            "documents": [dict(doc) for doc in documents],
-            "peppol_mandatory_fields": mandatory_fields
+            "documents": [dict(doc) for doc in documents]
         }), 200
     
     except Exception as e:

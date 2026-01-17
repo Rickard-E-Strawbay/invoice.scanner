@@ -1,5 +1,6 @@
 import os
 import json
+from ic_shared.database.document_operations import merge_peppol_json
 from workers.cf_base import cf_base
 
 from ic_shared.configuration.defines import ENTER, EXIT, ERROR
@@ -19,9 +20,9 @@ class cf_predict_invoice_data(cf_base):
         """Execute the LLM prediction worker logic."""
         ENTER_STATUS = LLM_STATUS[ENTER]
         EXIT_STATUS = LLM_STATUS[EXIT]
+        ERROR_STATUS = LLM_STATUS[ERROR]
 
-        
-
+        self._update_document_status(ENTER_STATUS)
         try:
             # Fetch document from storage with metadata
             document = self._fetch_document()
@@ -31,41 +32,98 @@ class cf_predict_invoice_data(cf_base):
 
             # Run LLM prediction with appropriate method based on content_type
             prediction_manager = PredictionManager()
-            result = prediction_manager.predict_invoice(document, content_type)
+            invoice_prediction_result = prediction_manager.predict_invoice(document, content_type)
+            currency_prediction_result = prediction_manager.predict_currency(document, content_type)
             
             # Save result to database
-            if result.get("success"):
-                invoice_data = result.get("invoice_data")
+            if invoice_prediction_result.get("success"):
+                invoice_data = invoice_prediction_result.get("invoice_data")
+
+                if currency_prediction_result.get("success"):
+                    currency_data = currency_prediction_result.get("currency_data")
+                    print("***************************************")
+                    print(currency_data)
+                    print("***************************************")
+                    invoice_data = merge_peppol_json(invoice_data, currency_data)
+
+                    # Verify the merge worked (TEMPORARY - development validation)
+                    if self._verify_currency_merge(invoice_data, currency_data):
+                        self.logger.info("✅ Currency data merged successfully and verified")
+                    else:
+                        self.logger.warning("⚠️  Currency merge verification failed - check data")
 
                 dict_additional_fields = {}
                
                 invoice_data_raw = json.dumps(invoice_data)
 
-                dict_additional_fields["invoice_data_raw"] =invoice_data_raw
+                dict_additional_fields["invoice_data_raw"] = invoice_data_raw
 
-                self._update_document_status(EXIT_STATUS,None, dict_additional_fields  )
+                self._update_document_status(EXIT_STATUS, None, dict_additional_fields)
+                self._publish_to_topic()
                 
-                data = self._load_document_data()
-
-                
-                # self._save_invoice_data(invoice_data, result.get("raw_response"))
             else:
-                error_msg = result.get("error", "Unknown error")
+                error_msg = invocie_prediction_result.get("error", "Unknown error")
                 self.logger.error(f"Prediction failed: {error_msg}")
-                # self._save_invoice_data(None, result.get("raw_response", error_msg))
-            
-            # Update status and publish to next stage
-            
-            self._publish_to_topic()
+                self._update_document_status(ERROR_STATUS)    
             
         except Exception as e:
             self.logger.error(f"LLM prediction failed: {str(e)}")
-            import traceback
-            traceback.print_exc()
             
             ERROR_STATUS = LLM_STATUS[ERROR]
             self._update_document_status(ERROR_STATUS)
+
+    def _verify_currency_merge(self, invoice_data: dict, currency_data: dict) -> bool:
+        """
+        Verify that currency_data has been successfully merged into invoice_data.
+        
+        Checks that critical currency fields from currency_data exist in invoice_data
+        with matching values.
+        
+        **TEMPORARY**: Used during development to validate merge operation.
+        Remove this method once merge is validated in production.
+        
+        Args:
+            invoice_data (dict): The merged invoice data
+            currency_data (dict): The original currency prediction data
+        
+        Returns:
+            bool: True if merge verification passed, False otherwise
+        """
+        try:
+            if not currency_data:
+                self.logger.warning("⚠️  Currency data is empty, skipping verification")
+                return False
+            
+            if not invoice_data:
+                self.logger.error("❌ Invoice data is empty after merge")
+                return False
+            
+            # Extract critical field from currency_data
+            currency_code = currency_data.get("meta", {}).get("currency_code", {}).get("v")
+            
+            if not currency_code:
+                self.logger.warning("⚠️  No currency code found in currency_data")
+                return False
+            
+            # Check if it exists in merged invoice_data
+            merged_currency_code = invoice_data.get("meta", {}).get("currency_code", {}).get("v")
+            
+            # Verify they match
+            if merged_currency_code == currency_code:
+                self.logger.info(f"✅ Currency merge verified: {currency_code}")
+                return True
+            else:
+                self.logger.error(
+                    f"❌ Currency merge verification failed: "
+                    f"expected '{currency_code}', got '{merged_currency_code}'"
+                )
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Currency verification error: {str(e)}")
+            return False
     
+
     def _get_content_type(self) -> str:
         """Fetch content_type from document database."""
         sql = "SELECT content_type FROM documents WHERE id = %s"

@@ -20,20 +20,27 @@ class PredictionManager:
     
     def _load_prompt_templates(self):
         # Load prompt templates from a file or database
+
         templates = {}
-        # Use absolute path relative to this file
+        predict_invoice = "predict_invoice"
+        templates[predict_invoice] = self.__do_load_template(predict_invoice + ".txt")
+
+        predict_currency = "predict_currency"
+        templates[predict_currency] = self.__do_load_template(predict_currency + ".txt")
+
+        return templates
+    
+    def __do_load_template(self, filename: str) -> str:
+        """Load template file content."""
         current_dir = Path(__file__).parent
-        file_path = current_dir / "predict_invoice.txt"
+        file_path = current_dir / filename
         
         try:
             with open(file_path, 'r', encoding='utf-8') as file:    
-                prompt = file.read()
-                name = file_path.stem  # Get filename without extension
-                templates[name] = prompt
+                content = file.read()
+                return content
         except FileNotFoundError:
-            raise FileNotFoundError(f"Prompt template not found: {file_path}")
-
-        return templates
+            raise FileNotFoundError(f"Template file not found: {file_path}")
     
     def _load_xml_schema(self) -> str:
         """Load PEPPOL XML schema with all field metadata via storage service."""
@@ -67,70 +74,6 @@ class PredictionManager:
             logger.error(f"Failed to load JSON template: {e}")
             return {}
     
-    # def _generate_json_schema(self) -> dict:
-    #     """Generate JSON schema from XML with mapid references."""
-    #     try:
-    #         root = ET.fromstring(self.xml_schema)
-    #         schema = {}
-            
-    #         # Extract all elements with mapid attribute
-    #         for elem in root.iter():
-    #             mapid = elem.get('mapid')
-    #             if mapid:
-    #                 display_name = elem.get('DisplayName', mapid)
-    #                 description = elem.get('Description', '')
-    #                 schema[mapid] = {
-    #                     "type": "string",
-    #                     "description": description or display_name
-    #                 }
-            
-    #         return schema
-    #     except Exception as e:
-    #         logger.warning(f"Could not parse XML schema: {str(e)}")
-    #         return {}
-    
-    # def _get_xml_schema_snippet(self) -> str:
-    #     """Extract human-readable XML schema for LLM prompt."""
-    #     try:
-    #         root = ET.fromstring(self.xml_schema)
-    #         lines = []
-            
-    #         # Build readable schema with mapid and DisplayName
-    #         for elem in root.iter():
-    #             if elem.tag.endswith('}') or elem.tag.startswith('cbc:') or elem.tag.startswith('cac:'):
-    #                 mapid = elem.get('mapid')
-    #                 display_name = elem.get('DisplayName')
-                    
-    #                 if mapid:
-    #                     tag_name = elem.tag.split('}')[-1] if '}' in elem.tag else elem.tag
-    #                     lines.append(f"  - mapid=\"{mapid}\": {display_name} ({tag_name})")
-            
-    #         return "\n".join(lines[:100])  # Limit to 100 items for prompt size
-    #     except Exception as e:
-    #         logger.warning(f"Could not generate schema snippet: {str(e)}")
-    #         return "<!-- Schema not available -->"
-    
-    # def _get_json_schema_snippet(self) -> str:
-    #     """Generate JSON output schema for LLM prompt."""
-    #     # Create a sample JSON structure with mapid keys
-    #     sample_json = {}
-        
-    #     # Group by context for readability
-    #     contexts = {}
-    #     for mapid in self.json_schema:
-    #         context = mapid.split('.')[0]
-    #         if context not in contexts:
-    #             contexts[context] = []
-    #         contexts[context].append(mapid)
-        
-    #     # Build sample JSON
-    #     for context in sorted(contexts.keys()):
-    #         for mapid in sorted(contexts[context])[:10]:  # Limit items
-    #             sample_json[mapid] = ""
-        
-    #     # Return formatted JSON with comments
-    #     return json.dumps(sample_json, indent=2)
-    
     def get_prompt(self, template_name: str) -> str:
         """Get prompt template by name."""
         prompt = self.prompt_templates.get(template_name)
@@ -138,6 +81,41 @@ class PredictionManager:
             raise ValueError(f"Prompt template '{template_name}' not found.")
         
         return prompt
+    
+    def predict_currency(self, document: dict, content_type: str) -> str:
+        try:
+            filename = document.get('filename', 'unknown')
+            file_content = document.get('content', b'')
+            prompt = self.get_prompt("predict_currency")
+
+            # Route based on content type
+            if content_type == "image":
+                llm_response = self._predict_from_image(file_content, filename, prompt)
+            elif content_type == "pdf_text":
+                llm_response = self._predict_from_text_pdf(file_content, prompt)
+            elif content_type == "pdf_scanned":
+                llm_response = self._predict_from_scanned_pdf(document, prompt)
+            else:
+                raise ValueError(f"Unknown content_type: {content_type}")
+            
+            # Parse JSON from response
+            invoice_data = self._parse_to_json(llm_response)
+            
+            return {
+                "success": True,
+                "currency_data": invoice_data,
+                "raw_response": llm_response
+            }
+            
+        except Exception as e:
+            logger.error(f"Currency prediction failed: {str(e)}")
+            return {
+                "success": False,
+                "currency_data": None,
+                "raw_response": str(e),
+                "error": str(e)
+            }
+
     
     def predict_invoice(self, document: dict, content_type: str) -> dict:
         """
@@ -162,10 +140,6 @@ class PredictionManager:
             prompt = prompt.replace("{{xml_structure}}", str_xml_blob)
             prompt = prompt.replace("{{json_blob}}", str_json_blob)
             logger.info(f"Predicting invoice for {filename} (content_type={content_type})")
-
-            print("************************************")
-            print(prompt)
-            print("************************************")
             
             # Route based on content type
             if content_type == "image":
@@ -178,7 +152,7 @@ class PredictionManager:
                 raise ValueError(f"Unknown content_type: {content_type}")
             
             # Parse JSON from response
-            invoice_data = self._parse_invoice_json(llm_response)
+            invoice_data = self._parse_to_json(llm_response)
             
             logger.success(f"Invoice prediction completed: {invoice_data is not None}")
             
@@ -313,7 +287,7 @@ class PredictionManager:
         
         return response.choices[0].message.content
     
-    def _parse_invoice_json(self, response_text: str) -> dict:
+    def _parse_to_json(self, response_text: str) -> dict:
         """Parse JSON from LLM response with best-effort approach."""
         try:
             # Try direct JSON parse

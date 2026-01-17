@@ -1,0 +1,25 @@
+
+  {
+    "supplier": {
+        "peppol_id": {"v": "SUPPLIER_PEPPOÖ", "p": 1.0}
+    },
+    "payment": {
+        "payment_means_code": {"v": "XXY", "p": 1.0}
+    },
+    "tax_total": {
+        "tax_scheme": {"v": "MY OWN SCHEME", "p": 1.0}
+    },
+    "totals": {
+        "payable_amount": {"v": "10000.26", "p": 1.0}
+    },
+    "line_items": [
+        {
+            "description": {"v": "LINE 1", "p": 0.8},
+            "base_quantity": {"v": "1", "p": 0.9}
+        },
+        {
+            "description": {"v": "AAAP", "p": 1.0},
+            "description": {"v": "LINE 2", "p": 1.0}
+        }
+    ]
+}
