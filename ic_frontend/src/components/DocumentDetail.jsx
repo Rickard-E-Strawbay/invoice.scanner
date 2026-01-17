@@ -233,6 +233,8 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
   const [deletedLineNumbers, setDeletedLineNumbers] = useState([]); // Track deleted line_numbers for backend
   const [fullDocument, setFullDocument] = useState(document);
   const [loadingFullData, setLoadingFullData] = useState(false);
+  const [companySettings, setCompanySettings] = useState(null);
+  const [fieldProbabilities, setFieldProbabilities] = useState({});
 
   // Fetch full document details from backend when component mounts
   useEffect(() => {
@@ -266,6 +268,39 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
 
     loadFullDocumentDetails();
   }, [document?.id]);
+
+  // Fetch company settings when document is loaded
+  useEffect(() => {
+    const loadCompanySettings = async () => {
+      if (fullDocument?.company_id) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/live/company-settings`, {
+            method: "GET",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            // API returns company_settings object
+            const settings = data.company_settings || {};
+            setCompanySettings(settings);
+            console.log('[Form Init] Loaded company settings:', settings);
+          } else {
+            console.warn("Failed to fetch company settings, using defaults");
+            setCompanySettings({});
+          }
+        } catch (err) {
+          console.error("Error loading company settings:", err);
+          setCompanySettings({});
+        }
+      }
+    };
+
+    loadCompanySettings();
+  }, [fullDocument?.company_id]);
 
   const toggleSection = (sectionName) => {
     setExpandedSections(prev => ({
@@ -400,6 +435,8 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
         };
         
         // Flatten all nested paths - create mapid-keyed structure
+        const probabilitiesMap = {};
+        
         const flattenNested = (obj, prefix = '') => {
           const result = {};
           
@@ -415,6 +452,8 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
               const extracted = extractValue(value);
               if (extracted) {
                 result[mapid] = extracted;
+                // Store probability for this field
+                probabilitiesMap[mapid] = value.p;
               }
             }
             // If it's a nested object (but NOT {"v": ..., "p": ...}), recurse
@@ -429,6 +468,10 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
         const flattenedData = flattenNested(peppol_final);
         console.log('[Form Init] Flattened data structure:', flattenedData);
         console.log('[Form Init] Total fields extracted:', Object.keys(flattenedData).length);
+        console.log('[Form Init] Field probabilities:', probabilitiesMap);
+        
+        // Store probabilities for later use in filtering
+        setFieldProbabilities(probabilitiesMap);
         
         // Populate newInvoiceData with flattened structure
         Object.assign(newInvoiceData, flattenedData);
@@ -601,6 +644,77 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Determine if a field should be visible based on filters
+  const showField = (
+    isAdvanced,
+    isRequired,
+    fieldValue,
+    showNonMandatoryChecked,
+    showAdvancedChecked,
+    fieldProbability = null,
+    mapid = null
+  ) => {
+
+    // Extract confidence thresholds from company settings
+    const confidence_error_threshold = companySettings?.confidence_error_threshold || 0.8;
+    const confidence_warning_threshold = companySettings?.confidence_warning_threshold || 0.85;
+    const peppolIdRequired = companySettings?.peppol_id_required || false;
+    const supplierRegistrationRequired = companySettings?.supplier_registration_required || false;
+
+    let required = isRequired;
+
+    if (mapid == "supplier.peppol_id" || mapid == "customer.peppol_id") {
+      console.log(mapid); 
+      if (!peppolIdRequired) {
+        required = false;
+      }
+    }
+    if (mapid == "customer.legal_registration_number" ) {
+      console.log(mapid); 
+      if (!supplierRegistrationRequired) {  
+        required = false;
+      }
+    }
+
+    let probability = fieldProbability;
+    if (probability === null || probability === undefined) {
+      probability = 0.5; // Default to full confidence if not provided
+    }
+
+    let value = fieldValue;
+    if (value === null || value === undefined) {
+      value = '';
+      probability = 1.0;
+    }
+
+    if(mapid==="payment.payment_means_code"){
+      /*
+      console.log(value);
+      console.log(probability);
+      console.log(required);
+      console.log(showNonMandatoryChecked);
+      console.log(showAdvancedChecked);  
+      */ 
+    }
+
+    // Always show required fields
+    if(required && value ==='') {
+      return true;
+    }
+
+    // Hide non-required fields if "Show Optional" is unchecked
+    if (!required && !showNonMandatoryChecked) {
+      return false;
+    }
+
+    // Hide Advanced fields if "Show Advanced" is unchecked
+    if (isAdvanced && !showAdvancedChecked) {
+      return false;
+    }
+    return true;
+
   };
 
   return (
@@ -942,14 +1056,25 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
                       <p style={{ margin: 0, fontSize: "0.85rem", color: "#666", fontWeight: "500", display: "none" }}>
                         PEPPOL Sections ({
                           (() => {
+                            const hasVisibleField = (fieldInfo, mapid = null) => {
+                              return showField(
+                                fieldInfo.Advanced === true,
+                                fieldInfo.Obligation === "required",
+                                undefined, // fieldValue not needed for section visibility check
+                                showNonMandatory,
+                                showAdvanced,
+                                fieldProbabilities[mapid] || null,
+                                mapid
+                              );
+                            };
+
                             const hasVisibleNested = (nested) => {
                               if (!nested) return false;
                               for (let nestedName of Object.keys(nested)) {
                                 const nestedData = nested[nestedName];
                                 const nestedFields = nestedData.fields || nestedData;
                                 for (let [btId, fieldInfo] of Object.entries(nestedFields)) {
-                                  const mapid = fieldInfo.map || btId;
-                                  if (fieldInfo.Obligation === "required" || showNonMandatory || invoiceData[mapid]) {
+                                  if (hasVisibleField(fieldInfo, btId)) {
                                     return true;
                                   }
                                 }
@@ -960,14 +1085,9 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
 
                             return Object.entries(peppol_sections).filter(([sectionName, sectionData]) => {
                               const fields = sectionData.fields || sectionData;
-                              const hasRequired = Object.values(fields).some(f => f.Obligation === "required");
-                              const hasData = Object.keys(fields).some(mapid => {
-                                return invoiceData[mapid];
-                              });
-                              if (hasRequired) return true;
-                              if (showNonMandatory) return true;
-                              if (hasData) return true;
-                              if (sectionData.nested && hasVisibleNested(sectionData.nested)) return true;
+                              const hasVisibleFields = Object.entries(fields).some(([mapid, f]) => hasVisibleField(f, mapid));
+                              if (hasVisibleFields) return true;
+                              if (hasVisibleNested(sectionData.nested)) return true;
                               return false;
                             }).length;
                           })()
@@ -1048,8 +1168,19 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
                                 <span style={{ marginLeft: "auto", fontSize: "0.8rem", color: "#9ca3af", display: "flex", alignItems: "center", gap: "0.75rem" }}>
                                   {(() => {
                                     // Calculate total metrics across all lines
+                                    const peppolIdRequired = companySettings?.peppol_id_required || false;
+                                    const supplierRegistrationRequired = companySettings?.supplier_registration_required || false;
                                     const allFields = Object.values(lineItemFields);
-                                    const mandatoryFields = allFields.filter(f => f.Obligation === "required");
+                                    // Exclude peppol_id and registration fields from mandatory count if not required
+                                    const mandatoryFields = allFields.filter(f => {
+                                      if (!peppolIdRequired && (f.mapid === "supplier.peppol_id" || f.mapid === "customer.peppol_id")) {
+                                        return false; // Exclude peppol_id fields
+                                      }
+                                      if (!supplierRegistrationRequired && f.mapid === "customer.legal_registration_number") {
+                                        return false; // Exclude registration field
+                                      }
+                                      return f.Obligation === "required";
+                                    });
                                     const nonMandatoryFields = allFields.filter(f => f.Obligation !== "required");
                                     
                                     let totalFilledMandatory = 0;
@@ -1165,8 +1296,19 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
                                           {/* Metrics for this line */}
                                           <div style={{ marginLeft: "auto", marginRight: "0.75rem", fontSize: "0.8rem", color: "#9ca3af", display: "flex", alignItems: "center", gap: "0.75rem" }}>
                                             {(() => {
+                                              const peppolIdRequired = companySettings?.peppol_id_required || false;
+                                              const supplierRegistrationRequired = companySettings?.supplier_registration_required || false;
                                               const allFields = Object.values(lineItemFields);
-                                              const mandatoryFields = allFields.filter(f => f.Obligation === "required");
+                                              // Exclude peppol_id and registration fields from mandatory count if not required
+                                              const mandatoryFields = allFields.filter(f => {
+                                                if (!peppolIdRequired && (f.mapid === "supplier.peppol_id" || f.mapid === "customer.peppol_id")) {
+                                                  return false; // Exclude peppol_id fields
+                                                }
+                                                if (!supplierRegistrationRequired && f.mapid === "customer.legal_registration_number") {
+                                                  return false; // Exclude registration field
+                                                }
+                                                return f.Obligation === "required";
+                                              });
                                               const filledMandatory = mandatoryFields.filter(f => {
                                                 const fieldMapid = `line_item_${lineItem.id}.${f.mapid.split('.').pop()}`;
                                                 return !!invoiceData[fieldMapid];
@@ -1353,30 +1495,18 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
                         // Regular section rendering for non-LineItem sections
                         const fieldsInSection = sectionData.fields || sectionData;
                         
-                        // Filter fields with specific rules for required+advanced+empty fields
+                        // Filter fields based on checkboxes
                         const filteredFields = Object.entries(fieldsInSection)
                           .filter(([mapid, fieldInfo]) => {
-                            // RULE 3 (EXCEPTION): Required + Advanced + Empty → Show anyway
-                            if (fieldInfo.Obligation === "required" && fieldInfo.Advanced === true && !invoiceData[mapid]) {
-                              return true;
-                            }
-                            
-                            // RULE 1: Always show required fields
-                            if (fieldInfo.Obligation === "required") return true;
-                            
-                            // RULE 2: Hide all advanced fields when toggle OFF
-                            if (fieldInfo.Advanced === true && !showAdvanced) {
-                              return false;
-                            }
-                            
-                            // Show Advanced fields if toggle is ON
-                            if (fieldInfo.Advanced === true && showAdvanced) return true;
-                            
-                            // For non-Advanced, optional fields: show if toggle ON or has value
-                            if (showNonMandatory) return true;
-                            if (invoiceData[mapid]) return true;
-                            
-                            return false;
+                            return showField(
+                              fieldInfo.Advanced === true,
+                              fieldInfo.Obligation === "required",
+                              invoiceData[mapid],
+                              showNonMandatory,
+                              showAdvanced,
+                              fieldProbabilities[mapid] || null,
+                              mapid
+                            );
                           })
                           .reduce((acc, [mapid, fieldInfo]) => {
                             acc[mapid] = fieldInfo;
@@ -1422,8 +1552,19 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
                               <span style={{ marginLeft: "auto", fontSize: "0.8rem", color: "#9ca3af", display: "flex", alignItems: "center", gap: "0.75rem" }}>
                                 {(() => {
                                   // Calculate metrics for this section
+                                  const peppolIdRequired = companySettings?.peppol_id_required || false;
+                                  const supplierRegistrationRequired = companySettings?.supplier_registration_required || false;
                                   const allFields = Object.values(fieldsInSection);
-                                  const mandatoryFields = allFields.filter(f => f.Obligation === "required");
+                                  // Exclude peppol_id and registration fields from mandatory count if not required
+                                  const mandatoryFields = allFields.filter(f => {
+                                    if (!peppolIdRequired && (f.mapid === "supplier.peppol_id" || f.mapid === "customer.peppol_id")) {
+                                      return false; // Exclude peppol_id fields
+                                    }
+                                    if (!supplierRegistrationRequired && f.mapid === "customer.legal_registration_number") {
+                                      return false; // Exclude registration field
+                                    }
+                                    return f.Obligation === "required";
+                                  });
                                   const filledMandatory = mandatoryFields.filter(f => invoiceData[f.mapid]).length;
                                   const totalMandatory = mandatoryFields.length;
                                   const nonMandatoryFields = allFields.filter(f => f.Obligation !== "required");

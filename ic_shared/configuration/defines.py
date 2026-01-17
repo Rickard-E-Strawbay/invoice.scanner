@@ -75,7 +75,9 @@ COMPANY_SETTINGS_DEFAULTS = {
         "name": "Scanner Settings",
         "parameters": [
             {"name": "Require Peppol ID", "key": "peppol_id_required", "type": "boolean", "value": True, "description": "Require Peppol ID for all processed invoices."},
-            {"name": "Confidence Threshold", "key": "confidence_threshold", "type": "float", "value": 0.9, "description": "Minimum confidence level for accepting extracted data."}
+            {"name": "Require Supplier Registration Number", "key": "supplier_registration_required", "type": "boolean", "value": True, "description": "Require Supplier Registration Number for all processed invoices."},
+            {"name": "Confidence Error", "key": "confidence_error_threshold", "type": "float", "value": 0.8, "description": "Minimum confidence level for accepting extracted data."},
+            {"name": "Confidence Warning", "key": "confidence_warning_threshold", "type": "float", "value": 0.85, "description": "Minimum confidence level for accepting extracted data."}
         ]
     }
 }
