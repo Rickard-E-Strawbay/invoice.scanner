@@ -95,9 +95,9 @@ echo "  • No rebuild needed - Vite watches files automatically"
 echo "  • View browser console for errors/warnings"
 echo ""
 echo "API Development:"
-echo "  • Sessions persist through auto-reload"
-echo "  • No need to re-login when Python files change"
-echo "  • Session storage: filesystem-based (/app/sessions volume)"
+echo "  • Sessions persist through container restarts (filesystem-based)"
+echo "  • After code changes: run 'docker-compose restart api' to reload"
+echo "  • Debug mode enabled: see detailed error messages in browser"
 echo ""
 
 # Start Cloud Functions Framework in a new terminal

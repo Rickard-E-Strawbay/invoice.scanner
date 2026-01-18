@@ -135,5 +135,9 @@ if __name__ == "__main__" or __name__ == "main":
     logger.info(f"PORT env var: {os.environ.get('PORT', 'not set')}")
     logger.info(f"FLASK_ENV: {os.environ.get('FLASK_ENV', 'not set')}")
     logger.info(f"Debug mode: {debug_mode}")
-    app.run(host=args.host, port=args.port, debug=debug_mode)
+    
+    # Note: use_reloader=False in Docker (process forking issues)
+    # For development: restart container manually after code changes
+    # docker-compose restart api
+    app.run(host=args.host, port=args.port, debug=debug_mode, use_reloader=False)
 

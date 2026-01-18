@@ -76,8 +76,9 @@ services:
         condition: service_healthy
     volumes:
       # Mount source directories for hot-reload during development
-      - ./ic_api:/app/ic_api
-      - ./ic_shared:/app/ic_shared
+      # Note: On macOS Docker Desktop, add :cached flag for faster syncing
+      - ./ic_api:/app/ic_api:cached
+      - ./ic_shared:/app/ic_shared:cached
       - ./documents:/app/documents
       # Session storage volume (persists across auto-reload)
       - ic_sessions:/app/sessions

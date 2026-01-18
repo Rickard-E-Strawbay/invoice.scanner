@@ -449,6 +449,9 @@ def get_documents():
 @blp_documents.route("/<doc_id>", methods=["PUT"])
 def update_document(doc_id):
     """Update a document's extracted invoice data."""
+
+    print("================= UPDATE DOCUMENT CALLED =================")
+
     try:
         # Check authentication
         if "user_id" not in session:
@@ -468,6 +471,24 @@ def update_document(doc_id):
             doc_uuid = uuid.UUID(doc_id)
         except ValueError:
             return jsonify({"error": "Invalid document ID format"}), 400
+        
+        delta_data = data.get("invoice_data_user_corrected", {})
+
+        print("************************************************************************")
+        print("Delta data received:", delta_data)
+
+        return jsonify({"message": "Debugging"}), 200
+
+
+
+
+
+
+
+
+
+
+
         
         # First, verify document belongs to company and fetch full data
         sql = """
