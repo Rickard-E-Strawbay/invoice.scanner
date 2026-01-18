@@ -576,10 +576,6 @@ def update_document(doc_id):
                     original_line_numbers_to_delete.append(oln)
         original_line_numbers_to_delete = original_line_numbers_to_delete.copy()
 
-        print("********************************")
-        print(original_line_numbers_to_delete)
-        print("********************************")
-
         if not lines_to_delete_set:
             if len(original_line_numbers_to_delete) > 0:
                 for line_item in updated_invoice_data_peppol_final["line_items"]:
@@ -591,45 +587,20 @@ def update_document(doc_id):
                                 updated_invoice_data_peppol_final["line_items"].remove(line_item)
         else:
             logger.info(f"Processing {len(lines_to_delete_set)} line(s) for deletion: {sorted(lines_to_delete_set)}")
-
-            # LÅT STÅ!! 
-            # Logik: lines_to_delete_set innehåller linjenummer som ska tas bort,
-            # dessa kommer från frontend och refererar till linjenummer invoice_data_user_corrected
-            # varje line item har ett "line_number"-fält som vi kan jämföra mot. 
-
-            # desssutom KAN varje line ha ett original_line_number-fält, i updated_invoice_data_peppol_final som,
-            # refererar till origin_line_number som KAN finnas i updated_invoice_data_peppol_final
-            # om origin_line_number återfinns ska updated_invoice_data_peppol_final också raderas på dessa linjer
-            
-            # vi genererar updated_invoice_data_peppol_final från invoice_data_peppol.
-            # eftesom origin_line_number kan ha raderats i tidigare sessioner måste vi spara en array
-            # med raderade linjenummer i invoice_data_user_corrected för att kunna radera korrekt i framtiden,
-            # när updated_invoice_data_peppol_final genereras på nytt från invoice_data_peppol + invoice_data_user_corrected
-            
-            print(json.dumps(updated_invoice_data_peppol_final["line_items"], indent=2))
-
-            
             
             for line_number in lines_to_delete_set:
                 for line_item in updated_invoice_data_peppol_final["line_items"]:
                     v =  line_item["line_number"]["v"]
-                    print(v)
-                    print(line_number)
                     if int(line_number) == int(v):
-                        print("match!")
                         if "original_line_number" in line_item:
                             orig = line_item["original_line_number"]["v"]
                             original_line_numbers_to_delete.append(orig)
-
-            print(f"original_line_numbers_to_delete: {original_line_numbers_to_delete}")
-            print(f"lines_to_delete_set: {lines_to_delete_set}")
 
             for line_item in updated_invoice_data_peppol_final["line_items"]:
                 if "original_line_number" in line_item:
                     orig = line_item["original_line_number"]["v"]
                     for orig_to_del in original_line_numbers_to_delete:
                         if int(orig_to_del) == int(orig):
-                            print(f"Deleting line with original_line_number {orig}")
                             if line_item in updated_invoice_data_peppol_final["line_items"]:
                                 updated_invoice_data_peppol_final["line_items"].remove(line_item)
             
@@ -638,7 +609,6 @@ def update_document(doc_id):
                     linte_item = line_item["line_number"]["v"]
                     for item_to_del in lines_to_delete_set:
                         if int(item_to_del) == int(linte_item):
-                            print(f"Deleting line with number {item_to_del}")
                             updated_invoice_data_peppol_final["line_items"].remove(line_item)
 
             for line_item in invoice_data_user_corrected["line_items"]:
@@ -646,23 +616,12 @@ def update_document(doc_id):
                     linte_item = line_item["line_number"]["v"]
                     for item_to_del in lines_to_delete_set:
                         if int(item_to_del) == int(linte_item):
-                            print(f"Deleting line with number {item_to_del} from user_corrected")
                             invoice_data_user_corrected["line_items"].remove(line_item)
 
             invoice_data_user_corrected["deleteted_original_line_numbers"] = original_line_numbers_to_delete
 
-            
-                            
-        print(json.dumps(invoice_data_user_corrected, indent=2))
-        print(json.dumps(updated_invoice_data_peppol_final, indent=2))
-
         final_user_data_corrected_json = json.dumps(invoice_data_user_corrected)
         updated_invoice_data_peppol_final_json = json.dumps(updated_invoice_data_peppol_final)
-        print("***************************************************************")
-        print(updated_invoice_data_peppol_final_json)
-        print("***************************************************************")
-
-        # return jsonify({"debug": "no update"}), 200
         
 
         # Update both fields in single UPDATE statement
