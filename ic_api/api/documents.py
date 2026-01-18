@@ -522,6 +522,9 @@ def update_document(doc_id):
         # Merge delta into existing user_corrected
         # Using merge_peppol_json: delta (slave) merged into existing (master)
         merged_user_corrected = merge_peppol_json(existing_user_corrected, delta_data_reshaped)
+        if deleted_line_numbers:
+            merged_user_corrected["deleted_line_numbers"] = deleted_line_numbers
+        
         
         logger.info(f"✓ Merged delta into user_corrected data") 
         

@@ -5,6 +5,7 @@
 from flask import Flask
 from flask_cors import CORS
 from flask_smorest import Api
+from flask_session import Session
 
 import secrets
 import os
@@ -28,6 +29,21 @@ warm_up()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', os.getenv('SECRET_KEY', secrets.token_hex(32)))
 app.config['SESSION_COOKIE_HTTPONLY'] = True
+
+# Session Configuration
+# Local dev: Use filesystem-based sessions to persist through auto-reload
+# Cloud: Uses default in-memory sessions (stateless, distributed)
+if not IS_CLOUD_RUN:
+    app.config['SESSION_TYPE'] = 'filesystem'
+    app.config['SESSION_PERMANENT'] = False
+    # Create sessions directory if it doesn't exist
+    sessions_dir = os.getenv('SESSION_DIR', '/tmp/invoice_scanner_sessions')
+    os.makedirs(sessions_dir, exist_ok=True)
+    app.config['SESSION_FILE_DIR'] = sessions_dir
+    Session(app)
+    logger.info(f"Session storage: filesystem (local dev) - {sessions_dir}")
+else:
+    logger.info("Session storage: in-memory (Cloud Run)")
 
 if IS_CLOUD_RUN:
     # Cloud Run: HTTPS environment

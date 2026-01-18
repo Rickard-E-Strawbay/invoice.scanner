@@ -94,6 +94,11 @@ echo "  • Changes to JSX/CSS files reflect instantly"
 echo "  • No rebuild needed - Vite watches files automatically"
 echo "  • View browser console for errors/warnings"
 echo ""
+echo "API Development:"
+echo "  • Sessions persist through auto-reload"
+echo "  • No need to re-login when Python files change"
+echo "  • Session storage: filesystem-based (/app/sessions volume)"
+echo ""
 
 # Start Cloud Functions Framework in a new terminal
 echo "2️⃣  Starting Cloud Functions Framework in a new terminal..."

@@ -69,6 +69,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Session Configuration (local dev: filesystem-based to survive auto-reload)
+      - SESSION_DIR=/app/sessions
     depends_on:
       db:
         condition: service_healthy
@@ -77,6 +79,8 @@ services:
       - ./ic_api:/app/ic_api
       - ./ic_shared:/app/ic_shared
       - ./documents:/app/documents
+      # Session storage volume (persists across auto-reload)
+      - ic_sessions:/app/sessions
     networks:
       - ic_network
     restart: unless-stopped
@@ -113,6 +117,7 @@ networks:
 
 volumes:
   invoice_scanner_data:
+  ic_sessions:
 
 # ============================================================
 # USAGE
