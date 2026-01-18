@@ -51,6 +51,8 @@
   },
   "line_items": [
     {
+      "line_number": {"v": "1", "p": 1.0},
+      "original_line_number": {"v": "1", "p": 1.0},
       "quantity": {"v": "1", "p": 0.9},
       "unit": {"v": "C62", "p": 0.8},
       "line_total": {"v": "145.01", "p": 0.9},

@@ -313,9 +313,18 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
   const addLineItem = () => {
     const newLineItem = { id: nextLineItemId };
     setLineItems([...lineItems, newLineItem]);
-    // Auto-set line_number to last line_number + 1
-    const lastLineNumber = lineItems.length; // Since 1-indexed, length = max+1
-    const newLineItemNumber = lastLineNumber + 1;
+    
+    // Auto-set line_number to max line_number from existing items + 1
+    let maxLineNumber = 0;
+    lineItems.forEach(lineItem => {
+      const lineNumberKey = `line_item_${lineItem.id}.line_number`;
+      const lineNumber = parseInt(invoiceData[lineNumberKey], 10);
+      if (!isNaN(lineNumber) && lineNumber > maxLineNumber) {
+        maxLineNumber = lineNumber;
+      }
+    });
+    const newLineItemNumber = maxLineNumber + 1;
+    
     setInvoiceData(prev => ({
       ...prev,
       [`line_item_${nextLineItemId}.line_number`]: String(newLineItemNumber)
@@ -635,9 +644,11 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
         onSave();
       }
       
-      setTimeout(() => {
-        onClose();
-      }, 1000);
+      // DEV: Dialog close disabled for development
+      // Uncomment to re-enable closing after save
+      // setTimeout(() => {
+      //   onClose();
+      // }, 1000);
     } catch (err) {
       console.error("Error saving document:", err);
       setError(err.message);

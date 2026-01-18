@@ -237,7 +237,9 @@ def get_document_processing_status(doc_id):
         }), 200
 
     except Exception as e:
-        logger.info(f"Error: {e}")
+        import traceback
+        logger.error(f"Error in get_document_processing_status: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({"error": "Failed to fetch status"}), 500
 
 
@@ -394,19 +396,14 @@ def get_document_details(doc_id):
         except (json.JSONDecodeError, TypeError):
             logger.warning(f"Failed to parse invoice_data_user_corrected for document {doc_id}")
 
-        dict_invoice_data_peppol_final = apply_peppol_json_template(dict_invoice_data_peppol_final, PEPPOL_DEFAULTS)
-        dict_invoice_data_peppol_final = merge_peppol_json(dict_invoice_data_peppol, dict_invoice_data_user_corrected)
-       
-        
-        # Convert merged data back to JSON string (same format as DB storage)
-        document["invoice_data_peppol_final"] = json.dumps(dict_invoice_data_peppol_final) if dict_invoice_data_peppol_final else json.dumps({})
-        
         return jsonify({
             "document": dict(document)
         }), 200
     
     except Exception as e:
-        logger.info(f"Error: {e}")
+        import traceback
+        logger.error(f"Error in get_document_details: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({"error": "Failed to fetch document details"}), 500
 
 @blp_documents.route("/", methods=["GET"])
@@ -443,14 +440,54 @@ def get_documents():
         }), 200
     
     except Exception as e:
-        logger.info(f"Error: {e}")
+        import traceback
+        logger.error(f"Error in get_documents: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({"error": "Failed to fetch documents"}), 500
+
+def _extract_safe_line_number(line_item, field_name="line_number"):
+    """Extrahera och validera linjenummer säkert från line item.
+    
+    Hanterar flera format: dict med 'v', redan int, string, etc.
+    Returnerar int eller None.
+    """
+    if not line_item or not isinstance(line_item, dict):
+        return None
+    
+    obj = line_item.get(field_name)
+    if obj is None:
+        return None
+    
+    # Om redan int
+    if isinstance(obj, int):
+        return obj
+    
+    # Om dict med 'v'-nyckel
+    if isinstance(obj, dict):
+        v = obj.get("v")
+        if v is None:
+            return None
+        try:
+            return int(v)
+        except (ValueError, TypeError):
+            logger.warning(f"Could not convert {field_name} value '{v}' to int for line {line_item.get('id', 'unknown')}")
+            return None
+    
+    # Om string
+    if isinstance(obj, str):
+        if obj.isdigit():
+            return int(obj)
+        else:
+            logger.warning(f"Invalid {field_name} string value '{obj}' (not numeric)")
+            return None
+    
+    logger.warning(f"Unknown type for {field_name}: {type(obj).__name__}")
+    return None
+
 
 @blp_documents.route("/<doc_id>", methods=["PUT"])
 def update_document(doc_id):
     """Update a document's extracted invoice data."""
-
-    print("================= UPDATE DOCUMENT CALLED =================")
 
     try:
         # Check authentication
@@ -465,6 +502,7 @@ def update_document(doc_id):
         data = request.get_json()
         if not data:
             return jsonify({"error": "No data provided"}), 400
+           
         
         # Validate UUID format
         try:
@@ -472,28 +510,19 @@ def update_document(doc_id):
         except ValueError:
             return jsonify({"error": "Invalid document ID format"}), 400
         
-        delta_data = data.get("invoice_data_user_corrected", {})
-
-        print("************************************************************************")
-        print("Delta data received:", delta_data)
-
-        return jsonify({"message": "Debugging"}), 200
-
-
-
-
-
-
-
-
-
-
-
-        
-        # First, verify document belongs to company and fetch full data
         sql = """
-            SELECT id, document_name, invoice_data_peppol, invoice_data_user_corrected FROM documents
-            WHERE id = %s AND company_id = %s
+            SELECT 
+                id, 
+                document_name, 
+                invoice_data_peppol, 
+                invoice_data_user_corrected, 
+                invoice_data_peppol_final 
+            FROM 
+                documents
+            WHERE 
+                id = %s 
+            AND 
+                company_id = %s
         """
         results, success = fetch_all(sql, (str(doc_uuid), str(company_id)))
         
@@ -502,19 +531,21 @@ def update_document(doc_id):
         
         existing_doc = results[0]
         
-        # Extract delta (changes) from request
-        delta_data = data.get("invoice_data_user_corrected", {})
-        
-        # Extract deleted_line_numbers if provided
-        deleted_line_numbers = data.get("deleted_line_numbers", [])
+        # Fetch existing document data
+        current_document_name = existing_doc["document_name"]
+        invoice_data_peppol = json.loads(existing_doc.get("invoice_data_peppol", "{}"))
+        invoice_data_user_corrected = json.loads(existing_doc.get("invoice_data_user_corrected", "{}"))
+        invoice_data_peppol_final = json.loads(existing_doc.get("invoice_data_peppol_final", "{}"))
 
-        # Apply reshaping to delta
-        delta_data_reshaped = reshape_to_peppol_format(delta_data)
-
+        # Fetch delta from request
         new_document_name = data.get("document_name")
-                
+        delta_data = data.get("invoice_data_user_corrected", {})
+        delta_data_reshaped = reshape_to_peppol_format(delta_data)
+        deleteted_line_numbers = data.get("deleted_line_numbers", [])
+
+        
         # Check if document_name is being changed and if it's unique
-        if new_document_name and new_document_name != existing_doc["document_name"]:
+        if new_document_name and new_document_name != current_document_name:
             dup_sql = """
                 SELECT id FROM documents
                 WHERE company_id = %s AND document_name = %s AND id != %s
@@ -524,86 +555,123 @@ def update_document(doc_id):
                 return jsonify({
                     "error": "A document with this name already exists in your company"
                 }), 409
-        
-        # Parse existing data from database
-        existing_user_corrected = {}
-        try:
-            if existing_doc.get("invoice_data_user_corrected"):
-                existing_user_corrected = json.loads(existing_doc["invoice_data_user_corrected"])
-        except (json.JSONDecodeError, TypeError):
-            logger.warning(f"Could not parse existing invoice_data_user_corrected, starting fresh")
-        
-        existing_peppol = {}
-        try:
-            if existing_doc.get("invoice_data_peppol"):
-                existing_peppol = json.loads(existing_doc["invoice_data_peppol"])
-        except (json.JSONDecodeError, TypeError):
-            logger.warning(f"Could not parse existing invoice_data_peppol")
-        
-        # Merge delta into existing user_corrected
-        # Using merge_peppol_json: delta (slave) merged into existing (master)
-        merged_user_corrected = merge_peppol_json(existing_user_corrected, delta_data_reshaped)
-        if deleted_line_numbers:
-            merged_user_corrected["deleted_line_numbers"] = deleted_line_numbers
-        
-        
-        logger.info(f"✓ Merged delta into user_corrected data") 
-        
-        # Merge user_corrected into peppol to create final (peppol is base, user_corrected overrides)
-        
-        merged_peppol_final = merge_peppol_json(existing_peppol, merged_user_corrected)
-        
-        print(merged_user_corrected["line_items"])
-        print(merged_peppol_final["line_items"])
-        
-        # Handle deleted line numbers if provided
-        if deleted_line_numbers:
-            logger.info(f"Processing {len(deleted_line_numbers)} deleted line(s): {deleted_line_numbers}")
             
-            # Remove deleted lines from merged_user_corrected
-            if "line_items" in merged_user_corrected and isinstance(merged_user_corrected["line_items"], list):
-                # Filter out items where line_number is in deleted_line_numbers
-                original_count = len(merged_user_corrected["line_items"])
-                logger.info(f"line_items before deletion: {[item.get('line_number') for item in merged_user_corrected['line_items']]}")
-                merged_user_corrected["line_items"] = [
-                    item for item in merged_user_corrected["line_items"]
-                    if not ("line_number" in item and 
-                            int(item["line_number"].get("v", 0) if isinstance(item["line_number"], dict) else item["line_number"]) in deleted_line_numbers)
-                ]
-                deleted_count = original_count - len(merged_user_corrected["line_items"])
-                logger.info(f"✓ Removed {deleted_count} line(s) from merged_user_corrected")
+        
+
+        # ========== MERGE DATA FIRST ==========
+        invoice_data_user_corrected = merge_peppol_json(invoice_data_user_corrected, delta_data_reshaped)
+        logger.info(f"✓ Merged delta into user_corrected data")
+        
+        updated_invoice_data_peppol_final = merge_peppol_json(invoice_data_peppol, invoice_data_user_corrected)
+        logger.info(f"✓ Created merged dataset with {len(updated_invoice_data_peppol_final.get('line_items', []))} line items")
+        
+        # ========== THEN HANDLE LINE ITEM DELETION ==========
+        # Radera EFTER merge, inte innan!
+        lines_to_delete_set = set(deleteted_line_numbers)
+
+        original_line_numbers_to_delete = []
+        if "deleteted_original_line_numbers" in invoice_data_user_corrected:
+            for oln in invoice_data_user_corrected["deleteted_original_line_numbers"]:
+                if oln not in original_line_numbers_to_delete:
+                    original_line_numbers_to_delete.append(oln)
+        original_line_numbers_to_delete = original_line_numbers_to_delete.copy()
+
+        print("********************************")
+        print(original_line_numbers_to_delete)
+        print("********************************")
+
+        if not lines_to_delete_set:
+            if len(original_line_numbers_to_delete) > 0:
+                for line_item in updated_invoice_data_peppol_final["line_items"]:
+                    if "original_line_number" in line_item:
+                        orig = line_item["original_line_number"]["v"]
+                        for orig_to_del in original_line_numbers_to_delete:
+                            if int(orig_to_del) == int(orig):
+                                print(f"Deleting line with original_line_number {orig}")
+                                updated_invoice_data_peppol_final["line_items"].remove(line_item)
+        else:
+            logger.info(f"Processing {len(lines_to_delete_set)} line(s) for deletion: {sorted(lines_to_delete_set)}")
+
+            # LÅT STÅ!! 
+            # Logik: lines_to_delete_set innehåller linjenummer som ska tas bort,
+            # dessa kommer från frontend och refererar till linjenummer invoice_data_user_corrected
+            # varje line item har ett "line_number"-fält som vi kan jämföra mot. 
+
+            # desssutom KAN varje line ha ett original_line_number-fält, i updated_invoice_data_peppol_final som,
+            # refererar till origin_line_number som KAN finnas i updated_invoice_data_peppol_final
+            # om origin_line_number återfinns ska updated_invoice_data_peppol_final också raderas på dessa linjer
             
-            # Remove deleted lines from merged_peppol_final
-            if "line_items" in merged_peppol_final and isinstance(merged_peppol_final["line_items"], list):
-                original_count = len(merged_peppol_final["line_items"])
-                logger.info(f"line_items before deletion: {[item.get('line_number') for item in merged_peppol_final['line_items']]}")
-                merged_peppol_final["line_items"] = [
-                    item for item in merged_peppol_final["line_items"]
-                    if not ("line_number" in item and 
-                            int(item["line_number"].get("v", 0) if isinstance(item["line_number"], dict) else item["line_number"]) in deleted_line_numbers)
-                ]
-                deleted_count = original_count - len(merged_peppol_final["line_items"])
-                logger.info(f"✓ Removed {deleted_count} line(s) from merged_peppol_final")
+            # vi genererar updated_invoice_data_peppol_final från invoice_data_peppol.
+            # eftesom origin_line_number kan ha raderats i tidigare sessioner måste vi spara en array
+            # med raderade linjenummer i invoice_data_user_corrected för att kunna radera korrekt i framtiden,
+            # när updated_invoice_data_peppol_final genereras på nytt från invoice_data_peppol + invoice_data_user_corrected
+            
+            print(json.dumps(updated_invoice_data_peppol_final["line_items"], indent=2))
+
+            
+            
+            for line_number in lines_to_delete_set:
+                for line_item in updated_invoice_data_peppol_final["line_items"]:
+                    v =  line_item["line_number"]["v"]
+                    print(v)
+                    print(line_number)
+                    if int(line_number) == int(v):
+                        print("match!")
+                        if "original_line_number" in line_item:
+                            orig = line_item["original_line_number"]["v"]
+                            original_line_numbers_to_delete.append(orig)
+
+            print(f"original_line_numbers_to_delete: {original_line_numbers_to_delete}")
+            print(f"lines_to_delete_set: {lines_to_delete_set}")
+
+            for line_item in updated_invoice_data_peppol_final["line_items"]:
+                if "original_line_number" in line_item:
+                    orig = line_item["original_line_number"]["v"]
+                    for orig_to_del in original_line_numbers_to_delete:
+                        if int(orig_to_del) == int(orig):
+                            print(f"Deleting line with original_line_number {orig}")
+                            if line_item in updated_invoice_data_peppol_final["line_items"]:
+                                updated_invoice_data_peppol_final["line_items"].remove(line_item)
+            
+            for line_item in updated_invoice_data_peppol_final["line_items"]:
+                if "line_number" in line_item:
+                    linte_item = line_item["line_number"]["v"]
+                    for item_to_del in lines_to_delete_set:
+                        if int(item_to_del) == int(linte_item):
+                            print(f"Deleting line with number {item_to_del}")
+                            updated_invoice_data_peppol_final["line_items"].remove(line_item)
+
+            for line_item in invoice_data_user_corrected["line_items"]:
+                if "line_number" in line_item:
+                    linte_item = line_item["line_number"]["v"]
+                    for item_to_del in lines_to_delete_set:
+                        if int(item_to_del) == int(linte_item):
+                            print(f"Deleting line with number {item_to_del} from user_corrected")
+                            invoice_data_user_corrected["line_items"].remove(line_item)
+
+            invoice_data_user_corrected["deleteted_original_line_numbers"] = original_line_numbers_to_delete
+
+            
+                            
+        print(json.dumps(invoice_data_user_corrected, indent=2))
+        print(json.dumps(updated_invoice_data_peppol_final, indent=2))
+
+        final_user_data_corrected_json = json.dumps(invoice_data_user_corrected)
+        updated_invoice_data_peppol_final_json = json.dumps(updated_invoice_data_peppol_final)
+        print("***************************************************************")
+        print(updated_invoice_data_peppol_final_json)
+        print("***************************************************************")
+
+        # return jsonify({"debug": "no update"}), 200
         
-        # Check if anything actually changed
-        if existing_user_corrected == merged_user_corrected and new_document_name == existing_doc["document_name"]:
-            logger.info(f"No changes detected, skipping database update")
-            return jsonify({
-                "message": "No changes to save",
-                "document": dict(existing_doc)
-            }), 200
-        
-        # Convert to JSON for database storage
-        user_corrected_json = json.dumps(merged_user_corrected)
-        peppol_final_json = json.dumps(merged_peppol_final)
-        
+
         # Update both fields in single UPDATE statement
         update_sql = """
             UPDATE documents
             SET document_name = %s, 
                 invoice_data_user_corrected = %s,
                 invoice_data_peppol_final = %s,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = CURRENT_TIMESTAMP      
             WHERE id = %s
             RETURNING id, company_id, uploaded_by, raw_format, raw_filename, 
                       document_name, processed_image_filename, content_type, status, 
@@ -611,9 +679,25 @@ def update_document(doc_id):
         """
         update_results, update_success = execute_sql(
             update_sql, 
-            (new_document_name or existing_doc["document_name"], user_corrected_json, peppol_final_json, str(doc_uuid))
-        )
-        
+            (new_document_name or existing_doc["document_name"], final_user_data_corrected_json, updated_invoice_data_peppol_final_json, str(doc_uuid))
+        ) 
+
+        # read invoice_data_peppol_final from DB again to verify
+        if update_success and update_results:
+            verify_sql = """
+                SELECT invoice_data_peppol_final FROM documents WHERE id = %s
+            """
+            verify_results, verify_success = fetch_all(verify_sql, (str(doc_uuid),))
+            
+            if verify_success and verify_results:
+                db_peppol_final = verify_results[0].get('invoice_data_peppol_final', '')
+                if db_peppol_final == updated_invoice_data_peppol_final_json:
+                    logger.info(f"✓ Database verification passed: invoice_data_peppol_final matches")
+                else:
+                    logger.warning(f"⚠️ Database verification warning: invoice_data_peppol_final mismatch (saved: {len(db_peppol_final)} bytes vs expected: {len(updated_invoice_data_peppol_final_json)} bytes)")
+            else:
+                logger.warning(f"⚠️ Could not verify database write")
+
         if not update_success or not update_results:
             logger.error(f"Database error: Failed to update document {doc_id}")
             return jsonify({"error": "Failed to update document"}), 500
@@ -628,8 +712,102 @@ def update_document(doc_id):
         }), 200
     
     except Exception as e:
-        logger.info(f"Error: {e}")
+        import traceback
+        logger.error(f"Error in update_document: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({"error": "Failed to update document"}), 500
+
+        
+    #     # Merge delta into existing user_corrected
+    #     # Using merge_peppol_json: delta (slave) merged into existing (master)
+    #     merged_user_corrected = merge_peppol_json(existing_user_corrected, delta_data_reshaped)
+    #     if deleted_line_numbers:
+    #         merged_user_corrected["deleted_line_numbers"] = deleted_line_numbers
+        
+        
+    #     logger.info(f"✓ Merged delta into user_corrected data") 
+        
+    #     # Merge user_corrected into peppol to create final (peppol is base, user_corrected overrides)
+        
+    #     merged_peppol_final = merge_peppol_json(existing_peppol, merged_user_corrected)
+        
+    #     print(merged_user_corrected["line_items"])
+    #     print(merged_peppol_final["line_items"])
+        
+    #     # Handle deleted line numbers if provided
+    #     if deleted_line_numbers:
+    #         logger.info(f"Processing {len(deleted_line_numbers)} deleted line(s): {deleted_line_numbers}")
+            
+    #         # Remove deleted lines from merged_user_corrected
+    #         if "line_items" in merged_user_corrected and isinstance(merged_user_corrected["line_items"], list):
+    #             # Filter out items where line_number is in deleted_line_numbers
+    #             original_count = len(merged_user_corrected["line_items"])
+    #             logger.info(f"line_items before deletion: {[item.get('line_number') for item in merged_user_corrected['line_items']]}")
+    #             merged_user_corrected["line_items"] = [
+    #                 item for item in merged_user_corrected["line_items"]
+    #                 if not ("line_number" in item and 
+    #                         int(item["line_number"].get("v", 0) if isinstance(item["line_number"], dict) else item["line_number"]) in deleted_line_numbers)
+    #             ]
+    #             deleted_count = original_count - len(merged_user_corrected["line_items"])
+    #             logger.info(f"✓ Removed {deleted_count} line(s) from merged_user_corrected")
+            
+    #         # Remove deleted lines from merged_peppol_final
+    #         if "line_items" in merged_peppol_final and isinstance(merged_peppol_final["line_items"], list):
+    #             original_count = len(merged_peppol_final["line_items"])
+    #             logger.info(f"line_items before deletion: {[item.get('line_number') for item in merged_peppol_final['line_items']]}")
+    #             merged_peppol_final["line_items"] = [
+    #                 item for item in merged_peppol_final["line_items"]
+    #                 if not ("line_number" in item and 
+    #                         int(item["line_number"].get("v", 0) if isinstance(item["line_number"], dict) else item["line_number"]) in deleted_line_numbers)
+    #             ]
+    #             deleted_count = original_count - len(merged_peppol_final["line_items"])
+    #             logger.info(f"✓ Removed {deleted_count} line(s) from merged_peppol_final")
+        
+    #     # Check if anything actually changed
+    #     if existing_user_corrected == merged_user_corrected and new_document_name == existing_doc["document_name"]:
+    #         logger.info(f"No changes detected, skipping database update")
+    #         return jsonify({
+    #             "message": "No changes to save",
+    #             "document": dict(existing_doc)
+    #         }), 200
+        
+    #     # Convert to JSON for database storage
+    #     user_corrected_json = json.dumps(merged_user_corrected)
+    #     peppol_final_json = json.dumps(merged_peppol_final)
+        
+    #     # Update both fields in single UPDATE statement
+    #     update_sql = """
+    #         UPDATE documents
+    #         SET document_name = %s, 
+    #             invoice_data_user_corrected = %s,
+    #             invoice_data_peppol_final = %s,
+    #             updated_at = CURRENT_TIMESTAMP
+    #         WHERE id = %s
+    #         RETURNING id, company_id, uploaded_by, raw_format, raw_filename, 
+    #                   document_name, processed_image_filename, content_type, status, 
+    #                   predicted_accuracy, is_training, created_at, updated_at
+    #     """
+    #     update_results, update_success = execute_sql(
+    #         update_sql, 
+    #         (new_document_name or existing_doc["document_name"], user_corrected_json, peppol_final_json, str(doc_uuid))
+    #     )
+        
+    #     if not update_success or not update_results:
+    #         logger.error(f"Database error: Failed to update document {doc_id}")
+    #         return jsonify({"error": "Failed to update document"}), 500
+        
+    #     updated_doc = update_results[0]
+        
+    #     logger.info(f"✓ Document {doc_id} saved successfully with delta merge")
+        
+    #     return jsonify({
+    #         "message": "Document updated successfully",
+    #         "document": dict(updated_doc)
+    #     }), 200
+    
+    # except Exception as e:
+    #     logger.info(f"Error: {e}")
+    #     return jsonify({"error": "Failed to update document"}), 500
 
 @blp_documents.route("/<doc_id>/preview", methods=["GET"])
 def get_document_preview(doc_id):
@@ -732,7 +910,9 @@ def get_peppol_structure():
         }), 200
     
     except Exception as e:
-        logger.info(f"Error: {e}")
+        import traceback
+        logger.error(f"Error in get_peppol_structure: {e}")
+        logger.error(traceback.format_exc())
         return jsonify({"error": "Failed to fetch PEPPOL structure"}), 500
 
 @blp_documents.route("/peppolv2", methods=["GET"])    

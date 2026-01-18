@@ -16,6 +16,7 @@ If a value is not explicitly present or cannot be confidently identified, use an
 If any data point is not present in the document, you must use an empty string as its value. Do not add any extra fields. Such value will have "p":null.
 
 You need to make a serious effort to identfy all invoice lines. Create one object in the 'line_items' array for each physical line found in the document. 
+Line number and original_line_number will starts with 1 and increases by 1.
 
 We are primarily handling regular invoices, meaning that meta.invoice_number is expected to be found on the first page of the document,
 and will not be labeled with keywords like 'VAT', 'Moms', etc.
@@ -52,6 +53,7 @@ If the result aligns with a standard rate for the country (e.g., 25, 12, or 6 fo
 Tax Scheme: Default to "VAT" for all EU/Nordic invoices. 
 If the document mentions "Moms", "MVA", or "ALV", map the scheme to "VAT".
 p values for calculated tax_rates must be lower than extracted.
+
 
 {{json_blob}}
 

@@ -64,6 +64,8 @@
     },
     "line_items": [
         {
+            "line_number": {"v":"", "p":1.0},
+            "original_line_number": {"v":"", "p":1.0},
             "quantity": {"v":"", "p":null},
             "unit": {"v":"", "p":null},
             "line_total": {"v":"", "p":null},

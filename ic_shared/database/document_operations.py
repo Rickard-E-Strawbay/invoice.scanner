@@ -166,26 +166,22 @@ def merge_peppol_json(peppol_slave: dict, peppol_master: dict) -> dict:
     """
     Merge two Peppol JSON structures.
     
-    Rules:
-    1. No elements in original structures are modified
-    2. Returns new merged structure
-    3. Merged structure contains ALL elements from peppol_slave
-    4. Merged structure contains ALL elements from peppol_master
-    5. Where "v" or "p" differs, use master value (override)
+    Rules (exakt):
+    1. Alla element i A (slave) ska finnas i det mergade resultatet
+    2. Om ett element finns i A och i B -> B skriver över A
+    3. Om ett element finns i B men inte i A -> lägg till det i resultatet
     
-    Logic:
-    - Start with deep copy of slave (preserve all slave elements)
-    - Recursively merge master into result
-    - For shared keys: master overrides where both exist
-    - For Peppol values {"v": ..., "p": ...}: replace entirely
-    - For container dicts: merge recursively
+    Special handling för line_items arrays:
+    - Behåll alla items från A
+    - För varje item i B: om line_number matchar item i A -> merge fields in i den itemen
+    - Items i B som inte matchar något i A -> lägg till i slutet
     
     Args:
-        peppol_slave (dict): Base document (all elements preserved)
-        peppol_master (dict): Override document (overrides matching keys)
+        peppol_slave (dict): Base document (A - all elements preserved)
+        peppol_master (dict): Override document (B - overrides matching, adds new)
     
     Returns:
-        dict: New merged document with all elements from both sources
+        dict: New merged document
     """
     try:
         result = copy.deepcopy(peppol_slave) if peppol_slave else {}
@@ -196,37 +192,98 @@ def merge_peppol_json(peppol_slave: dict, peppol_master: dict) -> dict:
         def is_peppol_value(obj):
             """Check if object is a Peppol value dict {"v": ..., "p": ...}"""
             if isinstance(obj, dict):
-                # Peppol values have only "v" and/or "p" keys
                 return len(obj) <= 2 and all(k in ("v", "p") for k in obj.keys())
             return False
         
+        def get_line_number(line_item):
+            """Extract line_number value from a line item"""
+            if isinstance(line_item, dict) and "line_number" in line_item:
+                line_num_obj = line_item["line_number"]
+                return line_num_obj.get("v") if isinstance(line_num_obj, dict) else line_num_obj
+            return None
+        
         def merge_recursive(target: dict, source: dict) -> dict:
-            """
-            Recursively merge source into target.
-            - All target keys are preserved
-            - Source keys are added or override target
-            - For nested dicts: recurse if both are container dicts
-            - For Peppol values: replace entirely (master wins)
-            """
+            """Recursively merge source into target according to the three rules"""
+            
             for key, source_value in source.items():
                 target_value = target.get(key)
                 
-                if isinstance(source_value, dict) and isinstance(target_value, dict):
-                    # Check if these are Peppol values ({"v": ..., "p": ...})
+                # SPECIAL CASE: line_items arrays
+                if key == "line_items" and isinstance(source_value, list) and isinstance(target_value, list):
+                    # Build map of target items by line_number för snabb lookup
+                    target_items_by_line_number = {}
+                    for idx, tgt_item in enumerate(target_value):
+                        line_num = get_line_number(tgt_item)
+                        if line_num is not None:
+                            target_items_by_line_number[line_num] = idx
+                    
+                    # Track which source items were matched (for adding new items later)
+                    matched_source_indices = set()
+                    
+                    # Rule 2: Merge fields from source items into matching target items
+                    for src_idx, src_item in enumerate(source_value):
+                        src_line_num = get_line_number(src_item)
+                        
+                        if src_line_num in target_items_by_line_number:
+                            # Item matchar - merge fields in på target item
+                            matched_source_indices.add(src_idx)
+                            target_idx = target_items_by_line_number[src_line_num]
+                            target_item = target_value[target_idx]
+                            
+                            # Merge each field from source into target item
+                            for field_key, field_value in src_item.items():
+                                target_field = target_item.get(field_key)
+                                
+                                if target_field is None:
+                                    # Field inte i target -> lägg till (Rule 3)
+                                    target_item[field_key] = copy.deepcopy(field_value)
+                                elif is_peppol_value(field_value) or is_peppol_value(target_field):
+                                    # Peppol value -> source överrider (Rule 2)
+                                    target_item[field_key] = copy.deepcopy(field_value)
+                                elif isinstance(field_value, dict) and isinstance(target_field, dict):
+                                    # Nested dict -> rekursiv merge
+                                    merge_recursive(target_field, field_value)
+                                else:
+                                    # Simple value -> source överrider (Rule 2)
+                                    target_item[field_key] = copy.deepcopy(field_value)
+                    
+                    # Rule 3: Lägg till items från source som inte matchade något i target
+                    for src_idx, src_item in enumerate(source_value):
+                        if src_idx not in matched_source_indices:
+                            target_value.append(copy.deepcopy(src_item))
+                
+                # NORMAL CASE: Container dicts (merge recursively)
+                elif isinstance(source_value, dict) and isinstance(target_value, dict):
                     if is_peppol_value(source_value) or is_peppol_value(target_value):
-                        # It's a Peppol value - replace entirely with source (master wins)
+                        # Det är Peppol values -> source överrider (Rule 2)
                         target[key] = copy.deepcopy(source_value)
                     else:
-                        # It's a container dict - merge recursively (both preserved)
-                        merge_recursive(target[key], source_value)
+                        # Det är container dict -> merge recursively (Rule 1+2+3)
+                        merge_recursive(target_value, source_value)
+                
+                # NORMAL CASE: Other values
                 else:
-                    # Simple value or source is dict but target isn't - use source
+                    # source överrider target (Rule 2), eller läggs till (Rule 3)
                     target[key] = copy.deepcopy(source_value)
             
             return target
         
         result = merge_recursive(result, peppol_master)
-        logger.info(f"✅ Successfully merged Peppol JSON (all elements from both preserved)")
+        
+        # CLEANUP: Remove empty dict placeholders {} from all line_items arrays
+        def remove_empty_line_items(obj):
+            """Recursively remove empty dicts {} from line_items arrays"""
+            if isinstance(obj, dict):
+                if "line_items" in obj and isinstance(obj["line_items"], list):
+                    obj["line_items"] = [item for item in obj["line_items"] if item != {}]
+                # Recursively clean nested dicts
+                for key, value in obj.items():
+                    if isinstance(value, dict):
+                        remove_empty_line_items(value)
+            return obj
+        
+        result = remove_empty_line_items(result)
+        logger.info(f"✅ Successfully merged Peppol JSON")
         return result
         
     except Exception as e:
