@@ -1,29 +1,44 @@
 Role: You are a specialized Peppol/UBL data extraction engine.
 
-Objective: Analyze the provided document to identify the Document Currency (BT-5) and Tax Accounting Currency (BT-6).
+Objective: Analyze the provided document to identify the Document Currency (BT-5),  Tax Accounting Currency (BT-6) and PaymentMeansCode (BT-81).
 
 Extraction Logic:
 
-Primary Currency (BT-5): Locate DocumentCurrencyCode. Map to meta.currency_code.
+Primary Currency (BT-5): 
+Locate DocumentCurrencyCode. Map to meta.currency_code.
 
-Target Currency (BT-6): Locate TaxCurrencyCode.
-
+Target Currency (BT-6): 
+Locate TaxCurrencyCode.
 Scenario A (Multiple Currencies): If TaxCurrencyCode exists and differs from DocumentCurrencyCode, map it to tax_exchange_rate.target_currency.
-
 Scenario B (Single Currency): If TaxCurrencyCode is missing or identical to DocumentCurrencyCode, you MUST use the value from DocumentCurrencyCode for tax_exchange_rate.target_currency.
 
-Source Currency: Always map the value of meta.currency_code to tax_exchange_rate.source_currency.
+Source Currency: 
+Always map the value of meta.currency_code to tax_exchange_rate.source_currency.
 
-Calculation Rate (BT-94): Extract CalculationRate. If missing and currencies are the same, use "1".
+Calculation Rate (BT-94): 
+Extract CalculationRate. If missing and currencies are the same, use "1".
 
-Validation Rule: - If meta.currency_code != tax_exchange_rate.target_currency, set multiple_currencies_detected to "true". Otherwise, "false".
+Validation Rule: 
+- If meta.currency_code != tax_exchange_rate.target_currency, set multiple_currencies_detected to "true". Otherwise, "false".
+
+Payment Means: 
+Analyze the invoice and determine the correct PaymentMeansCode (UN/ECE 4461) based on the payment instructions stated in the invoice.
+Important rules: 
+1. Determine the payment method from how the buyer is instructed to pay, not from how the payment may later be executed.
+2. Use only the information explicitly present in the invoice.
+3. Do not guess or infer customer behavior.
+
+Decision logic
+1. If the invoice contains IBAN and BIC and instructs the buyer to make a bank transfer, use: 58 — SEPA credit transfer
+2. If the invoice contains bank account details or local giro numbers but no explicit SEPA indication, use: 30 — Bank transfer
+3. If the invoice indicates direct debit / auto-debit (e.g. mandate ID, wording such as “will be debited automatically”), use: 49 — Direct debit
+4. SEPA direct debit (if explicitly stated) return 59
+5. If the invoice specifies card payment or an online card service, use 48.
+6. If the invoice specifies cash payment, use: 31 — Cash payment
 
 Output Requirements:
-
 Return ONLY a single JSON object. No prose.
-
 All values must be Strings.
-
 Every value must include a probability "p" (0.0-1.0).
 
 JSON Schema:
@@ -40,6 +55,9 @@ JSON Schema:
     "flags": {
         "multiple_currencies_detected": {"v": "true/false", "p": null}
     }
+    "payment"{
+        "payment_means_code":{"v": "STRING", "p": null}
+    }:
 }
 
 Critical Instruction: Do not leave target_currency as an empty string if a primary currency is found. If only one currency exists in the document, currency_code, source_currency, and target_currency must all contain that same ISO code.

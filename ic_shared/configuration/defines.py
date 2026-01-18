@@ -103,3 +103,33 @@ PEPPOL_DEFAULTS = {
     ]
 }
 
+PEPPOL_PAYMENT_MEANS = {
+  "1": "Cash on delivery",
+  "2": "Cash in advance",
+  "6": "Documentary credit",
+  "7": "Letter of credit",
+  "9": "Bankers draft",
+  "10": "Cash",
+  "11": "Clearing between partners",
+  "20": "Offset",
+  "21": "Compensation",
+  "30": "Bank transfer",
+  "31": "Cash payment",
+  "34": "Payment by instalment",
+  "42": "Payment to bank account",
+  "45": "Giro payment",
+  "48": "Card payment",
+  "49": "Direct debit",
+  "52": "Cheque",
+  "53": "Bank cheque",
+  "54": "Credit card",
+  "55": "Debit card",
+  "56": "Bank card",
+  "57": "Standing agreement",
+  "58": "SEPA credit transfer",
+  "59": "SEPA direct debit",
+  "60": "Promissory note",
+  "68": "Online payment service",
+  "93": "Referenced payment"
+}
+

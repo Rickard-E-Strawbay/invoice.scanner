@@ -548,39 +548,39 @@
     </cbc:ActualDeliveryDate>
         <cac:DeliveryLocation>
             <cbc:ID schemeID="0088">
-    </cbc:ID>
+            </cbc:ID>
             <cac:Address>
                 <cbc:StreetName 
                     DisplayContext="Delivery"
                     DisplayName="Street Address"
                     Obligation="optional" 
                     mapid="delivery.address.street">
-    </cbc:StreetName>
+                </cbc:StreetName>
                 <cbc:AdditionalStreetName 
                     DisplayContext="Delivery"
                     DisplayName="Additional Address"
                     Obligation="optional" 
                     mapid="delivery.address.additional_street">
-    </cbc:AdditionalStreetName>
+                </cbc:AdditionalStreetName>
                 <cbc:CityName 
                     DisplayContext="Delivery"
                     DisplayName="City"
                     Obligation="optional" 
                     mapid="delivery.address.city">
-    </cbc:CityName>
+                </cbc:CityName>
                 <cbc:PostalZone 
                     DisplayContext="Delivery"
                     DisplayName="Postal Code"
                     Obligation="optional" 
                     mapid="delivery.address.postal_code">
-    </cbc:PostalZone>
+                </cbc:PostalZone>
                 <cac:Country>
                     <cbc:IdentificationCode 
                         DisplayContext="Delivery"
                         DisplayName="Country"
                         Obligation="optional" 
                         mapid="delivery.address.country">
-    </cbc:IdentificationCode>
+                    </cbc:IdentificationCode>
                 </cac:Country>
             </cac:Address>
         </cac:DeliveryLocation>
@@ -609,7 +609,7 @@
             UBL-XPath="/Invoice/PaymentMeans/PaymentMeansCode"
             Advanced="true" 
             mapid="payment.payment_means_code">
-    </cbc:PaymentMeansCode> 
+        </cbc:PaymentMeansCode> 
         <cac:PayeeFinancialAccount>
             <cbc:ID 
                 Type="string" 

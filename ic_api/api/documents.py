@@ -523,12 +523,14 @@ def update_document(doc_id):
         # Using merge_peppol_json: delta (slave) merged into existing (master)
         merged_user_corrected = merge_peppol_json(existing_user_corrected, delta_data_reshaped)
         
-        logger.info(f"✓ Merged delta into user_corrected data")
+        logger.info(f"✓ Merged delta into user_corrected data") 
         
         # Merge user_corrected into peppol to create final (peppol is base, user_corrected overrides)
+        
         merged_peppol_final = merge_peppol_json(existing_peppol, merged_user_corrected)
         
-        logger.info(f"✓ Merged user_corrected into peppol for final document")
+        print(merged_user_corrected["line_items"])
+        print(merged_peppol_final["line_items"])
         
         # Handle deleted line numbers if provided
         if deleted_line_numbers:

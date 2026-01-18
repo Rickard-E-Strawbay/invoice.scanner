@@ -649,7 +649,7 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
   // Determine if a field should be visible based on filters
   const showField = (
     isAdvanced,
-    isRequired,
+    obligation,
     fieldValue,
     showNonMandatoryChecked,
     showAdvancedChecked,
@@ -663,7 +663,8 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
     const peppolIdRequired = companySettings?.peppol_id_required || false;
     const supplierRegistrationRequired = companySettings?.supplier_registration_required || false;
 
-    let required = isRequired;
+    // Determine if field is required (may be conditional based on settings)
+    let required = obligation === "required";
 
     if (mapid == "supplier.peppol_id" || mapid == "customer.peppol_id") {
       console.log(mapid); 
@@ -701,6 +702,11 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
 
     // Always show required fields
     if(required && value ==='') {
+      return true;
+    }
+
+    // Always show required fields
+    if(required && probability < confidence_error_threshold ) {
       return true;
     }
 
@@ -1059,7 +1065,7 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
                             const hasVisibleField = (fieldInfo, mapid = null) => {
                               return showField(
                                 fieldInfo.Advanced === true,
-                                fieldInfo.Obligation === "required",
+                                fieldInfo.Obligation,
                                 undefined, // fieldValue not needed for section visibility check
                                 showNonMandatory,
                                 showAdvanced,
@@ -1209,7 +1215,14 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
                                           overflow: "hidden",
                                           display: "flex"
                                         }}>
-                                          {completionPercent === 100 && totalMandatory > 0 ? (
+                                          {totalMandatory === 0 ? (
+                                            <div style={{
+                                              width: "100%",
+                                              height: "100%",
+                                              background: "#10b981",
+                                              transition: "width 0.3s ease"
+                                            }} />
+                                          ) : completionPercent === 100 ? (
                                             <div style={{
                                               width: "100%",
                                               height: "100%",
@@ -1330,7 +1343,14 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
                                                     overflow: "hidden",
                                                     display: "flex"
                                                   }}>
-                                                    {completionPercent === 100 && totalMandatory > 0 ? (
+                                                    {totalMandatory === 0 ? (
+                                                      <div style={{
+                                                        width: "100%",
+                                                        height: "100%",
+                                                        background: "#10b981",
+                                                        transition: "width 0.3s ease"
+                                                      }} />
+                                                    ) : completionPercent === 100 ? (
                                                       <div style={{
                                                         width: "100%",
                                                         height: "100%",
@@ -1500,7 +1520,7 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
                           .filter(([mapid, fieldInfo]) => {
                             return showField(
                               fieldInfo.Advanced === true,
-                              fieldInfo.Obligation === "required",
+                              fieldInfo.Obligation,
                               invoiceData[mapid],
                               showNonMandatory,
                               showAdvanced,
@@ -1583,7 +1603,14 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
                                         overflow: "hidden",
                                         display: "flex"
                                       }}>
-                                        {completionPercent === 100 && totalMandatory > 0 ? (
+                                        {totalMandatory === 0 ? (
+                                          <div style={{
+                                            width: "100%",
+                                            height: "100%",
+                                            background: "#10b981",
+                                            transition: "width 0.3s ease"
+                                          }} />
+                                        ) : completionPercent === 100 ? (
                                           <div style={{
                                             width: "100%",
                                             height: "100%",
@@ -2190,6 +2217,42 @@ function DocumentDetail({ document, peppolSections = "", onClose, onSave }) {
                       return formatJsonCompact(data);
                     } catch (e) {
                       return fullDocument.invoice_data_peppol || "N/A";
+                    }
+                  })()}
+                </pre>
+              </div>
+
+              {/* User Corrected Invoice Data */}
+              <div style={{
+                background: "white",
+                borderRadius: "8px",
+                padding: "1.5rem",
+                border: "1px solid #e5e7eb",
+                maxWidth: "100%",
+                overflow: "hidden",
+              }}>
+                <h3 style={{ margin: "0 0 1rem 0", fontSize: "1.125rem", color: "#1a1a1a" }}>
+                  User Corrected
+                </h3>
+                <pre style={{
+                  background: "#1a1a1a",
+                  color: "#00ff00",
+                  padding: "1rem",
+                  borderRadius: "6px",
+                  fontSize: "0.85rem",
+                  overflow: "auto",
+                  maxHeight: "300px",
+                  fontFamily: "monospace",
+                  lineHeight: "1.6",
+                }}>
+                  {(() => {
+                    try {
+                      const data = typeof fullDocument.invoice_data_user_corrected === 'string' 
+                        ? JSON.parse(fullDocument.invoice_data_user_corrected) 
+                        : fullDocument.invoice_data_user_corrected || {};
+                      return formatJsonCompact(data);
+                    } catch (e) {
+                      return fullDocument.invoice_data_user_corrected || "N/A";
                     }
                   })()}
                 </pre>
